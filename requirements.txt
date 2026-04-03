@@ -1,0 +1,15 @@
+# Music Production Analyzer - Dependencies
+# Install with: pip install -r requirements.txt
+
+librosa>=0.10.0
+numpy>=1.24.0
+scipy>=1.10.0
+matplotlib>=3.7.0
+soundfile>=0.12.0
+scikit-learn>=1.3.0
+midiutil>=1.2.1
+
+# FFmpeg required for some formats:
+# Windows: winget install ffmpeg
+# Linux: sudo apt install ffmpeg
+# macOS: brew install ffmpeg

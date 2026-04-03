@@ -1,0 +1,11 @@
+# Build outputs
+dist/
+build/
+
+# Generated outputs
+output/
+
+# Large audio/AI assets
+soundfonts/
+*.sf2
+*.zip
