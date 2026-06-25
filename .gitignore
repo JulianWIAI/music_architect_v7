@@ -4,8 +4,20 @@ build/
 
 # Generated outputs
 output/
+temp_output/
+batch_output/
+cinematic_batch/
+test_*.mid
+
+# Seed corpus (large data files — distribute separately)
+seeds/
 
 # Large audio/AI assets
 soundfonts/
 *.sf2
 *.zip
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo

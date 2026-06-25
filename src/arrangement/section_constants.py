@@ -1,0 +1,96 @@
+"""
+Static data for song structure: default section-transition matrices (per genre)
+and typical bar-count ranges for each section type.
+"""
+
+DEFAULT_TRANSITIONS = {
+    'pop': {
+        'intro':      {'verse': 0.8, 'pre_chorus': 0.2},
+        'verse':      {'pre_chorus': 0.5, 'chorus': 0.3, 'verse': 0.2},
+        'pre_chorus': {'chorus': 0.9, 'drop': 0.1},
+        'chorus':     {'verse': 0.4, 'bridge': 0.3, 'chorus': 0.2, 'outro': 0.1},
+        'bridge':     {'chorus': 0.7, 'break': 0.2, 'outro': 0.1},
+        'break':      {'chorus': 0.6, 'build': 0.4},
+        'build':      {'chorus': 0.5, 'drop': 0.5},
+        'drop':       {'verse': 0.3, 'break': 0.3, 'outro': 0.4},
+        'outro':      {},
+    },
+    'trap': {
+        'intro':  {'build': 0.6, 'verse': 0.4},
+        'verse':  {'build': 0.4, 'chorus': 0.3, 'drop': 0.3},
+        'build':  {'drop': 0.9, 'chorus': 0.1},
+        'drop':   {'verse': 0.3, 'break': 0.4, 'drop': 0.2, 'outro': 0.1},
+        'break':  {'build': 0.7, 'verse': 0.3},
+        'chorus': {'drop': 0.5, 'verse': 0.3, 'bridge': 0.2},
+        'bridge': {'drop': 0.6, 'build': 0.4},
+        'outro':  {},
+    },
+    'hiphop': {
+        'intro':  {'verse': 0.9, 'chorus': 0.1},
+        'verse':  {'chorus': 0.5, 'verse': 0.3, 'bridge': 0.2},
+        'chorus': {'verse': 0.6, 'bridge': 0.2, 'outro': 0.2},
+        'bridge': {'chorus': 0.5, 'verse': 0.3, 'outro': 0.2},
+        'break':  {'verse': 0.5, 'chorus': 0.5},
+        'outro':  {},
+    },
+    'techno': {
+        'intro':  {'build': 0.7, 'verse': 0.3},
+        'build':  {'drop': 0.9, 'climax': 0.1},
+        'drop':   {'break': 0.4, 'drop': 0.3, 'build': 0.2, 'outro': 0.1},
+        'break':  {'build': 0.8, 'drop': 0.2},
+        'verse':  {'build': 0.6, 'break': 0.4},
+        'climax': {'break': 0.5, 'outro': 0.5},
+        'outro':  {},
+    },
+    'cinematic': {
+        'intro':      {'build': 0.5, 'tension': 0.3, 'verse': 0.2},
+        'build':      {'climax': 0.7, 'tension': 0.3},
+        'tension':    {'build': 0.4, 'climax': 0.4, 'break': 0.2},
+        'climax':     {'break': 0.4, 'resolution': 0.4, 'outro': 0.2},
+        'break':      {'build': 0.5, 'tension': 0.3, 'resolution': 0.2},
+        'resolution': {'outro': 0.6, 'build': 0.4},
+        'verse':      {'tension': 0.5, 'build': 0.5},
+        'outro':      {},
+    },
+    'jpop': {
+        'intro':      {'verse': 0.8, 'pre_chorus': 0.2},
+        'verse':      {'pre_chorus': 0.6, 'chorus': 0.2, 'verse': 0.2},
+        'pre_chorus': {'chorus': 0.95, 'drop': 0.05},
+        'chorus':     {'verse': 0.4, 'bridge': 0.3, 'break': 0.2, 'outro': 0.1},
+        'bridge':     {'chorus': 0.8, 'break': 0.2},
+        'break':      {'chorus': 0.5, 'build': 0.5},
+        'build':      {'chorus': 0.7, 'drop': 0.3},
+        'drop':       {'chorus': 0.5, 'outro': 0.5},
+        'outro':      {},
+    },
+    'phonk': {
+        'intro':  {'build': 0.6, 'verse': 0.4},
+        'verse':  {'drop': 0.4, 'build': 0.4, 'chorus': 0.2},
+        'build':  {'drop': 0.9, 'chorus': 0.1},
+        'drop':   {'verse': 0.3, 'break': 0.3, 'drop': 0.3, 'outro': 0.1},
+        'break':  {'build': 0.6, 'drop': 0.4},
+        'chorus': {'drop': 0.6, 'verse': 0.4},
+        'bridge': {'drop': 0.8, 'build': 0.2},
+        'outro':  {},
+    },
+    'classical': {
+        'intro':           {'exposition': 0.8, 'verse': 0.2},
+        'exposition':      {'development': 0.6, 'bridge': 0.4},
+        'development':     {'recapitulation': 0.5, 'bridge': 0.3, 'break': 0.2},
+        'bridge':          {'development': 0.4, 'recapitulation': 0.4, 'coda': 0.2},
+        'recapitulation':  {'coda': 0.6, 'bridge': 0.4},
+        'break':           {'development': 0.5, 'recapitulation': 0.5},
+        'coda':            {'outro': 1.0},
+        'verse':           {'development': 0.5, 'exposition': 0.5},
+        'outro':           {},
+    },
+}
+
+SECTION_BAR_RANGES = {
+    'intro': (4, 8), 'verse': (8, 16), 'pre_chorus': (4, 8),
+    'chorus': (8, 16), 'drop': (8, 16), 'bridge': (4, 8),
+    'break': (2, 4), 'build': (4, 8), 'climax': (8, 16),
+    'tension': (4, 8), 'resolution': (4, 8), 'outro': (4, 8),
+    'exposition': (8, 16), 'development': (8, 16),
+    'recapitulation': (8, 16), 'coda': (4, 8), 'variation': (4, 8),
+}
