@@ -51,56 +51,199 @@ TOM_MID = 47
 TOM_HIGH = 50
 
 GENRE_DRUM_PATTERNS = {
-    'pop': {
-        'kick':  [(0, 100), (4, 80), (8, 90), (10, 60)],
-        'snare': [(4, 100), (12, 100)],
-        'hihat': [(i, 70 + (i % 2) * 15) for i in range(0, 16, 2)],
-    },
-    'hiphop': {
-        'kick':  [(0, 110), (5, 70), (8, 90), (13, 60)],
-        'snare': [(4, 100), (12, 95)],
-        'hihat': [(i, 60 + random.randint(0, 20)) for i in range(16)],
-    },
-    'trap': {
-        'kick':  [(0, 120), (3, 60), (6, 50), (10, 100), (14, 50)],
-        'snare': [(4, 110), (12, 110)],
-        'hihat': [(i, 50 + (30 if i % 3 == 0 else 0)) for i in range(16)] +
-                 [(i + 0.5, 40) for i in range(0, 16, 2)],
-    },
-    'cinematic': {
-        'kick':  [(0, 100), (8, 80)],
-        'snare': [(8, 70)],
-        'hihat': [],
-    },
-    'classical': {
-        'kick': [], 'snare': [], 'hihat': [],
-    },
-    'techno': {
-        'kick':  [(i * 4, 110) for i in range(4)],
-        'snare': [(4, 90), (12, 90)],
-        'hihat': [(i, 80 if i % 2 == 0 else 60) for i in range(16)],
-    },
-    'jpop': {
-        'kick':  [(0, 95), (6, 70), (8, 90), (14, 50)],
-        'snare': [(4, 95), (12, 100)],
-        'hihat': [(i, 65 + (i % 2) * 20) for i in range(0, 16, 2)],
-    },
-    'phonk': {
-        'kick':  [(0, 120), (4, 60), (8, 110), (11, 70), (14, 50)],
-        'snare': [(4, 115), (12, 115)],
-        'hihat': [(i, 55 + (25 if i % 2 == 0 else 0)) for i in range(16)] +
-                 [(i + 0.33, 35) for i in range(0, 16, 3)],
-    },
-    'edm': {
-        'kick':  [(i * 4, 112) for i in range(4)],
-        'snare': [(4, 100), (12, 100)],
-        'hihat': [(i, 70 + (10 if i % 4 == 0 else 0)) for i in range(16)],
-    },
-    'house': {
-        'kick':  [(i * 4, 108) for i in range(4)],
-        'snare': [(4, 95), (12, 95)],
-        'hihat': [(i * 2, 75) for i in range(8)],
-    },
+    'pop': [
+        {   # standard pop — kick on 1,2,3 with offbeat; 8th hihat
+            'kick':  [(0, 100), (4, 80), (8, 90), (10, 60)],
+            'snare': [(4, 100), (12, 100)],
+            'hihat': [(0,70),(2,85),(4,70),(6,85),(8,70),(10,85),(12,70),(14,85)],
+        },
+        {   # syncopated pop — pushed kick, ghost snare on 10
+            'kick':  [(0, 110), (3, 65), (8, 100), (11, 60)],
+            'snare': [(4, 105), (10, 70), (12, 95)],
+            'hihat': [(0,65),(2,80),(4,65),(5,45),(6,80),(8,65),(10,80),(12,65),(14,80)],
+        },
+        {   # four-on-the-floor pop — driving quarter-note kick
+            'kick':  [(0, 105), (4, 100), (8, 105), (12, 100)],
+            'snare': [(4, 100), (12, 100)],
+            'hihat': [(0,75),(2,60),(4,75),(6,60),(8,75),(10,60),(12,75),(14,60)],
+        },
+    ],
+    'hiphop': [
+        {   # classic boom bap — sparse kick, 16th hihat velocity swing
+            'kick':  [(0, 110), (8, 90)],
+            'snare': [(4, 100), (12, 95)],
+            'hihat': [(i, 65 if i % 2 == 0 else 45) for i in range(16)],
+        },
+        {   # trap-influenced hip-hop — syncopated kick, dense hihat
+            'kick':  [(0, 115), (3, 60), (10, 85)],
+            'snare': [(4, 100), (12, 95)],
+            'hihat': [(i, 60) for i in range(16)] + [(i + 0.5, 35) for i in range(0, 16, 4)],
+        },
+        {   # soulful hip-hop — loose feel, kick on 1 and "and-of-2"
+            'kick':  [(0, 110), (6, 70), (9, 75)],
+            'snare': [(4, 100), (12, 90), (13, 55)],
+            'hihat': [(0,70),(2,55),(4,70),(6,55),(8,70),(10,55),(12,70),(14,55)],
+        },
+    ],
+    'trap': [
+        {   # classic trap — sparse kick, dense 16th + 8th-triplet hihat
+            'kick':  [(0, 120), (3, 60), (6, 50), (10, 100), (14, 50)],
+            'snare': [(4, 110), (12, 110)],
+            'hihat': [(i, 50 + (30 if i % 3 == 0 else 0)) for i in range(16)] +
+                     [(i + 0.5, 40) for i in range(0, 16, 2)],
+        },
+        {   # half-time trap — snare on 3 only, machine-gun hihat
+            'kick':  [(0, 120), (6, 65)],
+            'snare': [(8, 115)],
+            'hihat': [(i, 55) for i in range(16)] + [(i + 0.33, 38) for i in range(0, 16, 2)],
+        },
+        {   # hard trap — double kick, heavy synth-snare, rolling hihat
+            'kick':  [(0, 120), (2, 55), (8, 115), (10, 55)],
+            'snare': [(4, 115), (12, 115)],
+            'hihat': [(i, 55 + (25 if i % 2 == 0 else 0)) for i in range(16)] +
+                     [(i + 0.5, 40) for i in range(0, 16, 3)],
+        },
+    ],
+    'cinematic': [
+        {   # epic impact — half-time, no hihat
+            'kick':  [(0, 100), (8, 80)],
+            'snare': [(8, 70)],
+            'hihat': [],
+        },
+        {   # tribal — triplet kick feel, no snare
+            'kick':  [(0, 110), (3, 75), (7, 65)],
+            'snare': [],
+            'hihat': [],
+        },
+        {   # tension — single kick per bar, sparse rim hits
+            'kick':  [(0, 90)],
+            'snare': [(6, 55), (12, 60)],
+            'hihat': [],
+        },
+    ],
+    'classical': [
+        {'kick': [], 'snare': [], 'hihat': []},
+        {'kick': [], 'snare': [], 'hihat': []},
+        {'kick': [], 'snare': [], 'hihat': []},
+    ],
+    'techno': [
+        {   # classic 4/4 — four-on-floor, straight 8th hihat
+            'kick':  [(i * 4, 110) for i in range(4)],
+            'snare': [(4, 90), (12, 90)],
+            'hihat': [(i, 80 if i % 2 == 0 else 60) for i in range(16)],
+        },
+        {   # industrial — double kick on 1 and 2.5, heavy hits, sparse hihat
+            'kick':  [(0, 115), (2, 70), (4, 110), (8, 115), (10, 70), (12, 110)],
+            'snare': [(4, 95), (8, 70), (12, 95)],
+            'hihat': [(i * 4, 65) for i in range(4)],
+        },
+        {   # driving techno — 4/4 kick, dense 16th hihat, rimshot snare
+            'kick':  [(i * 4, 110) for i in range(4)],
+            'snare': [(4, 85), (12, 85)],
+            'hihat': [(i, 75 if i % 4 != 0 else 90) for i in range(16)],
+        },
+    ],
+    'jpop': [
+        {   # bright jpop — offbeat kick feel, 8th hihat
+            'kick':  [(0, 95), (6, 70), (8, 90), (14, 50)],
+            'snare': [(4, 95), (12, 100)],
+            'hihat': [(i, 65 + (i % 2) * 20) for i in range(0, 16, 2)],
+        },
+        {   # energetic jpop — four-on-floor kick, ghost snare on 10, 16th hihat
+            'kick':  [(0, 100), (4, 85), (8, 100), (12, 85)],
+            'snare': [(4, 100), (10, 65), (12, 100)],
+            'hihat': [(i, 70) for i in range(0, 16, 2)] + [(5, 45), (13, 45)],
+        },
+        {   # kawaii jpop — bouncy kick, ghost 16ths, loose hihat
+            'kick':  [(0, 90), (4, 75), (8, 90)],
+            'snare': [(4, 90), (12, 95), (13, 55)],
+            'hihat': [(i, 60) for i in range(0, 16, 2)] + [(i + 1, 38) for i in range(0, 16, 4)],
+        },
+    ],
+    'phonk': [
+        {   # drift phonk — classic cowbell-snare pattern, triplet hihat
+            'kick':  [(0, 120), (4, 60), (8, 110), (11, 70), (14, 50)],
+            'snare': [(4, 115), (12, 115)],
+            'hihat': [(i, 55 + (25 if i % 2 == 0 else 0)) for i in range(16)] +
+                     [(i + 0.33, 35) for i in range(0, 16, 3)],
+        },
+        {   # memphis phonk — sparse kick, snare on 14, 16th hihat
+            'kick':  [(0, 120), (3, 70), (8, 110)],
+            'snare': [(4, 115), (14, 90)],
+            'hihat': [(i, 60) for i in range(16)],
+        },
+        {   # dark phonk — syncopated kick, heavy snare, offbeat hihat
+            'kick':  [(0, 120), (6, 65), (10, 100), (14, 55)],
+            'snare': [(4, 110), (12, 110)],
+            'hihat': [(i, 50) for i in range(0, 16, 2)] + [(i + 0.5, 35) for i in range(0, 16, 4)],
+        },
+    ],
+    'edm': [
+        {   # festival EDM — 4/4 kick, snare on 2&4, accented 16th hihat
+            'kick':  [(i * 4, 112) for i in range(4)],
+            'snare': [(4, 100), (12, 100)],
+            'hihat': [(i, 70 + (10 if i % 4 == 0 else 0)) for i in range(16)],
+        },
+        {   # progressive EDM — 4/4 kick, ghost snare on 8, dense hihat
+            'kick':  [(i * 4, 112) for i in range(4)],
+            'snare': [(4, 105), (8, 55), (12, 105)],
+            'hihat': [(i, 75) for i in range(16)],
+        },
+        {   # hard dance — double kick on 1 and 2.5, 8th hihat
+            'kick':  [(0, 115), (2, 60), (4, 112), (8, 115), (10, 60), (12, 112)],
+            'snare': [(4, 100), (12, 100)],
+            'hihat': [(i, 70) for i in range(0, 16, 2)],
+        },
+    ],
+    'house': [
+        {   # deep house — 4/4 kick, offbeat (upbeat) hihat
+            'kick':  [(i * 4, 108) for i in range(4)],
+            'snare': [(4, 95), (12, 95)],
+            'hihat': [(i * 2 + 1, 70) for i in range(8)],
+        },
+        {   # chicago house — 4/4 kick, straight 8th hihat
+            'kick':  [(i * 4, 108) for i in range(4)],
+            'snare': [(4, 90), (12, 90)],
+            'hihat': [(i * 2, 75) for i in range(8)],
+        },
+        {   # funky house — syncopated kick on 1, 2.5, 3; 8th hihat with accent swing
+            'kick':  [(0, 110), (2, 55), (4, 108), (8, 110), (10, 55), (12, 108)],
+            'snare': [(4, 95), (12, 95)],
+            'hihat': [(i * 2, 70 if i % 2 == 0 else 55) for i in range(8)],
+        },
+    ],
+    'dnb': [
+        {   # amen-style breakbeat — kick on 1, snare locked 2+4, rolling 16th hats
+            'kick':  [(0, 120), (3, 60), (9, 95), (11, 65)],
+            'snare': [(4, 125), (12, 125)],
+            'hihat': [(i, 65 if i % 4 == 0 else 50) for i in range(16)],
+        },
+        {   # liquid dnb — sparse kick, ghost snare, continuous 16th hats
+            'kick':  [(0, 118), (6, 55), (9, 90)],
+            'snare': [(4, 120), (12, 120), (10, 60)],
+            'hihat': [(i, 60 if i % 2 == 0 else 45) for i in range(16)],
+        },
+        {   # neurofunk — asymmetric kick cluster, tight 16th hats
+            'kick':  [(0, 120), (2, 55), (3, 70), (10, 95), (14, 50)],
+            'snare': [(4, 122), (12, 122)],
+            'hihat': [(i, 70 if i % 4 == 0 else 52) for i in range(16)],
+        },
+        {   # jump-up / step-drum — rolling double kick, snare push, shredding hats
+            'kick':  [(0, 122), (1, 58), (8, 120), (9, 55), (13, 75)],
+            'snare': [(4, 125), (11, 58), (12, 125)],
+            'hihat': [(i, 65 + (20 if i % 4 == 0 else 0)) for i in range(16)],
+        },
+    ],
+}
+
+# MPC-style swing percentage per genre (0.50 = straight, 0.67 = full triplet)
+GENRE_SWING: Dict[str, float] = {
+    'house':  0.56,
+    'hiphop': 0.58,
+    'trap':   0.54,
+    'phonk':  0.54,
+    'jpop':   0.52,
+    'edm':    0.52,   # subtle hi-hat swing prevents mechanical rigidity
 }
 
 GENRE_BPM = {
@@ -108,6 +251,7 @@ GENRE_BPM = {
     'cinematic': (60, 100), 'classical': (70, 140), 'techno': (125, 150),
     'jpop': (110, 145), 'phonk': (130, 160),
     'edm': (128, 145), 'house': (120, 130),
+    'dnb': (170, 175),
 }
 
 GENRE_SCALES = {
@@ -121,6 +265,7 @@ GENRE_SCALES = {
     'phonk': ['minor', 'phrygian', 'blues'],
     'edm': ['minor', 'phrygian', 'pentatonic_minor'],
     'house': ['minor', 'dorian', 'major'],
+    'dnb':   ['minor', 'dorian', 'phrygian', 'pentatonic_minor'],
 }
 
 GENRE_INSTRUMENTS = {
@@ -132,8 +277,9 @@ GENRE_INSTRUMENTS = {
     'techno': {'chords': 81, 'lead': 80, 'bass': 38, 'pad': 95, 'arp': 81},
     'jpop': {'chords': 0, 'lead': 80, 'bass': 33, 'pad': 89, 'arp': 11},
     'phonk': {'chords': 4, 'lead': 80, 'bass': 87, 'pad': 95, 'arp': 81},
-    'edm':   {'chords': 81, 'lead': 80, 'bass': 87, 'pad': 95, 'arp': 38},
-    'house': {'chords': 4,  'lead': 80, 'bass': 33, 'pad': 89, 'arp': 11},
+    'edm':   {'chords': 89, 'lead': 80, 'bass': 38, 'pad': 95, 'arp': 81},
+    'house': {'chords': 4,  'lead': 80, 'bass': 38, 'pad': 89, 'arp': 81},
+    'dnb':   {'chords': 81, 'lead': 80, 'bass': 38, 'pad': 89, 'arp': 81},
 }
 
 STRUCTURE_TEMPLATES = {
@@ -181,6 +327,11 @@ STRUCTURE_TEMPLATES = {
     'house': [
         ('intro', 8), ('verse', 16), ('build', 8), ('chorus', 16),
         ('break', 8), ('build', 8), ('chorus', 16), ('outro', 8),
+    ],
+    'dnb': [
+        ('intro', 8), ('break', 8), ('drop', 16),
+        ('break', 8), ('drop',  32),
+        ('break', 4), ('drop',  16), ('outro', 8),
     ],
 }
 

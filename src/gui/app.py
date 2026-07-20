@@ -100,7 +100,7 @@ class SeedComposerApp:
         tf.pack(fill='x', pady=(0, 6)); tf.pack_propagate(False)
         tk.Label(tf, text="SEED COMPOSER", font=S.FN_BIG,
                  fg=S.CYAN, bg=S.BG2).pack(side='left', padx=15, pady=8)
-        tk.Label(tf, text="AI-POWERED MUSIC GENERATION STUDIO v2",
+        tk.Label(tf, text="AI-POWERED MUSIC GENERATION STUDIO",
                  font=S.FN_S, fg=S.TXT_DIM, bg=S.BG2).pack(side='left', padx=10)
         self.status_label = tk.Label(tf, text="● INIT", font=S.FN_S, fg=S.YELLOW, bg=S.BG2)
         self.status_label.pack(side='right', padx=15)

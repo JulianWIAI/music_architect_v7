@@ -63,8 +63,8 @@ class DecodedParams:
 
 _GENRE_PHRASES: List[Tuple[str, str]] = [
     # compound phrases first
-    ("drum and bass",         "techno"),  ("d&b",              "techno"),
-    ("dnb",                   "techno"),
+    ("drum and bass",         "dnb"),     ("d&b",              "dnb"),
+    ("dnb",                   "dnb"),
     ("hip hop",               "hiphop"),  ("hip-hop",          "hiphop"),
     ("deep house",            "house"),   ("tech house",       "house"),
     ("progressive house",     "house"),   ("future house",     "house"),

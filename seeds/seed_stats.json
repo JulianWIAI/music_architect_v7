@@ -1,0 +1,16 @@
+{
+  "total_seeds": 129963,
+  "by_genre": {
+    "pop": 62239,
+    "classical": 41949,
+    "techno": 8739,
+    "jpop": 10820,
+    "cinematic": 4077,
+    "hiphop": 1941,
+    "trap": 198
+  },
+  "by_source": {
+    "PDMX": 129963
+  },
+  "output_dir": "C:\\Users\\julia\\Desktop\\Analysis\\Music\\Seeds-commercial_v5_old"
+}

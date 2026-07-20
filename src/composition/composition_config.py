@@ -27,3 +27,4 @@ class CompositionConfig:
     seed_value: Optional[int] = None
     structure_override: Optional[List[Tuple[str, int]]] = None
     tension_multiplier: float = 0.0
+    vocal_mask: bool = False
