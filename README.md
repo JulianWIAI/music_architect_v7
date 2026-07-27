@@ -2,7 +2,7 @@
 
 An AI-powered MIDI composition engine that generates full 10-track instrumentals using an **evolutionary fitness loop**. The system evolves beat quality across multiple generations — each generation seeds the next from the top-scoring tracks — until it produces commercially ready music.
 
-![Music Architect GUI](assets/screenshot_music_architect.png)
+![Music Architect GUI](assets/screenshots/screenshot_music_architect.png)
 
 ---
 
