@@ -141,7 +141,7 @@ class SeedComposerApp:
         tk.Label(row, text="Dataset:", font=S.FN_S, fg=S.TXT, bg=S.BG2).pack(side='left')
         self.dataset_entry = tk.Entry(row, font=S.FN_S, bg=S.BG_INPUT, fg=S.TXT,
                                        insertbackground=S.CYAN, width=30)
-        self.dataset_entry.insert(0, r"C:\Users\julia\Desktop\Analysis\Music\Research_training_data")
+        self.dataset_entry.insert(0, str(Path.home() / "Music" / "Research_training_data"))
         self.dataset_entry.pack(side='left', padx=4, fill='x', expand=True)
         self._cbtn(row, "Browse", self._browse_dataset, S.CYAN).pack(side='left', padx=2)
 
@@ -1382,14 +1382,17 @@ class SeedComposerApp:
 
 def main():
     root = tk.Tk()
-    try:
-        import ctypes
-        root.update()
-        hwnd = ctypes.windll.user32.GetParent(root.winfo_id())
-        ctypes.windll.dwmapi.DwmSetWindowAttribute(
-            hwnd, 20, ctypes.byref(ctypes.c_int(1)), ctypes.sizeof(ctypes.c_int))
-    except:
-        pass
+    # Enable dark-mode title bar on Windows 10/11 via undocumented DWM API.
+    # Skipped on macOS and Linux where this API does not exist.
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            root.update()
+            hwnd = ctypes.windll.user32.GetParent(root.winfo_id())
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                hwnd, 20, ctypes.byref(ctypes.c_int(1)), ctypes.sizeof(ctypes.c_int))
+        except Exception:
+            pass
 
     style = ttk.Style(); style.theme_use('clam')
     style.configure('TCombobox', fieldbackground=S.BG_INPUT, background=S.BG_BTN,

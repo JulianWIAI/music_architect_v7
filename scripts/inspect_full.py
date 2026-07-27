@@ -206,15 +206,16 @@ def analyse_batch(batch_path, label, sample=20):
 
 # ── Run ──────────────────────────────────────────────────────────────────────
 
-BACKUP  = r"c:\Users\julia\PycharmProjects\MUSIC_ARCHITECT_V7\generation Backup\Generation4"
-CURRENT = r"c:\Users\julia\PycharmProjects\MUSIC_ARCHITECT_V7"
+from pathlib import Path as _Path
+CURRENT = _Path(__file__).parent.parent
+BACKUP  = CURRENT / "generation Backup" / "Generation4"
 
 batches = [
-    (f"{BACKUP}\\batch_output",        "BACKUP  v4-Gen1  (batch_output)"),
-    (f"{BACKUP}\\batch_gen2",          "BACKUP  v4-Gen2  (batch_gen2)"),
-    (f"{BACKUP}\\vault\\batch_gen3",   "BACKUP  v4-Gen3  (vault/batch_gen3)"),
-    (f"{CURRENT}\\Generation3",        "CURRENT v7-Gen3  (no vocal mask)"),
-    (f"{CURRENT}\\vocals_generation_3","CURRENT v7-Gen3  (vocal mask ON)"),
+    (str(BACKUP / "batch_output"),         "BACKUP  v4-Gen1  (batch_output)"),
+    (str(BACKUP / "batch_gen2"),           "BACKUP  v4-Gen2  (batch_gen2)"),
+    (str(BACKUP / "vault" / "batch_gen3"), "BACKUP  v4-Gen3  (vault/batch_gen3)"),
+    (str(CURRENT / "Generation3"),         "CURRENT v7-Gen3  (no vocal mask)"),
+    (str(CURRENT / "vocals_generation_3"), "CURRENT v7-Gen3  (vocal mask ON)"),
 ]
 
 all_agg = []
