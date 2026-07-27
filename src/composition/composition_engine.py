@@ -124,7 +124,7 @@ class HarmonicGovernor:
         path = (
             Path(json_path)
             if json_path
-            else Path(__file__).parent.parent.parent / 'harmonic_governor.json'
+            else Path(__file__).parent.parent.parent / 'config' / 'harmonic_governor.json'
         )
         with open(path, 'r', encoding='utf-8') as fh:
             self._data = json.load(fh)
