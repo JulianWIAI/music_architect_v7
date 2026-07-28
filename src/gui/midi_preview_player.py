@@ -35,6 +35,23 @@ class MIDIPreviewPlayer:
             print(f"Play error: {e}")
             return False
 
+    def play_midi(self, midi_path):
+        """
+        Play a MIDI file directly via pygame's music module.
+        Works on macOS and Windows — no WAV rendering required.
+        """
+        if not self._init():
+            return False
+        try:
+            self.stop()
+            pygame.mixer.music.load(midi_path)
+            pygame.mixer.music.play()
+            self.is_playing = True
+            return True
+        except Exception as e:
+            print(f"MIDI play error: {e}")
+            return False
+
     def stop(self):
         if self._initialized and PYGAME_AVAILABLE:
             try:

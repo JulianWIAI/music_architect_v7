@@ -54,6 +54,8 @@ except ImportError:
 from src.gui.styles import S
 from src.gui.constants import GM_INSTRUMENTS, DRUM_KITS, ROLE_INSTRUMENTS, NOTES, QUALITIES
 from src.gui.midi_preview_player import MIDIPreviewPlayer
+from src.gui.tooltips import ToolTip, TOOLTIPS
+from src.gui.collapsible_section import CollapsibleSection
 
 try:
     from src.export.utau_bridge import export as utau_export, RawNote
@@ -144,6 +146,7 @@ class SeedComposerApp:
         self.dataset_entry.insert(0, str(Path.home() / "Music" / "Research_training_data"))
         self.dataset_entry.pack(side='left', padx=4, fill='x', expand=True)
         self._cbtn(row, "Browse", self._browse_dataset, S.CYAN).pack(side='left', padx=2)
+        self._tip(self.dataset_entry, 'dataset_entry')
 
         row2 = tk.Frame(frame, bg=S.BG2); row2.pack(fill='x', pady=2)
         tk.Label(row2, text="Seeds Dir:", font=S.FN_S, fg=S.TXT, bg=S.BG2).pack(side='left')
@@ -153,12 +156,15 @@ class SeedComposerApp:
         self.seeds_entry.insert(0, default_seeds)
         self.seeds_entry.pack(side='left', padx=4, fill='x', expand=True)
         self._cbtn(row2, "Browse", self._browse_seeds, S.CYAN).pack(side='left', padx=2)
+        self._tip(self.seeds_entry, 'seeds_entry')
 
         row3 = tk.Frame(frame, bg=S.BG2); row3.pack(fill='x', pady=4)
-        self._cbtn(row3, "BUILD SEEDS FROM CSVs", self._build_seeds,
-                   S.PINK, wide=True).pack(side='left', padx=2, fill='x', expand=True)
-        self._cbtn(row3, "LOAD SEEDS", self._load_seeds,
-                   S.GREEN, wide=True).pack(side='left', padx=2, fill='x', expand=True)
+        btn_build = self._cbtn(row3, "BUILD SEEDS FROM CSVs", self._build_seeds, S.PINK, wide=True)
+        btn_build.pack(side='left', padx=2, fill='x', expand=True)
+        btn_load = self._cbtn(row3, "LOAD SEEDS", self._load_seeds, S.GREEN, wide=True)
+        btn_load.pack(side='left', padx=2, fill='x', expand=True)
+        self._tip(btn_build, 'btn_build_seeds')
+        self._tip(btn_load, 'btn_load_seeds')
 
         self.seed_status = tk.Label(frame, text="No seeds loaded — build or load seeds, or generate without",
                                      font=S.FN_X, fg=S.TXT_DIM, bg=S.BG2, anchor='w', wraplength=480)
@@ -379,42 +385,55 @@ class SeedComposerApp:
     # ─── Parameters ───
 
     def _build_params_section(self, parent):
-        frame = self._section(parent, "PARAMETERS", S.PURPLE)
+        # Parameters section starts collapsed — click ▶ to expand
+        cs = CollapsibleSection(parent, "PARAMETERS", S.PURPLE, collapsed=True)
+        frame = cs.content_frame
 
         r = tk.Frame(frame, bg=S.BG2); r.pack(fill='x', pady=3)
         tk.Label(r, text="BPM:", font=S.FN_S, fg=S.TXT, bg=S.BG2, width=12, anchor='w').pack(side='left')
         self.bpm_auto = tk.BooleanVar(value=True)
-        tk.Checkbutton(r, text="Auto/Random", variable=self.bpm_auto, font=S.FN_X,
-                       fg=S.GREEN, bg=S.BG2, selectcolor=S.BG3,
-                       activebackground=S.BG2, command=self._toggle_bpm).pack(side='left')
+        bpm_cb = tk.Checkbutton(r, text="Auto/Random", variable=self.bpm_auto, font=S.FN_X,
+                                 fg=S.GREEN, bg=S.BG2, selectcolor=S.BG3,
+                                 activebackground=S.BG2, command=self._toggle_bpm)
+        bpm_cb.pack(side='left')
         self.bpm_scale = tk.Scale(r, from_=40, to=200, orient='horizontal',
                                    font=S.FN_X, fg=S.PURPLE, bg=S.BG2,
                                    troughcolor=S.BG_INPUT, highlightthickness=0,
                                    length=180, state='disabled')
         self.bpm_scale.set(120)
         self.bpm_scale.pack(side='left', padx=4, fill='x', expand=True)
+        self._tip(bpm_cb, 'bpm_auto')
+        self._tip(self.bpm_scale, 'bpm_scale')
 
         r2 = tk.Frame(frame, bg=S.BG2); r2.pack(fill='x', pady=3)
         tk.Label(r2, text="Key:", font=S.FN_S, fg=S.TXT, bg=S.BG2, width=12, anchor='w').pack(side='left')
         self.key_auto = tk.BooleanVar(value=True)
-        tk.Checkbutton(r2, text="Auto/Random", variable=self.key_auto, font=S.FN_X,
-                       fg=S.GREEN, bg=S.BG2, selectcolor=S.BG3,
-                       activebackground=S.BG2, command=self._toggle_key).pack(side='left')
+        key_cb = tk.Checkbutton(r2, text="Auto/Random", variable=self.key_auto, font=S.FN_X,
+                                 fg=S.GREEN, bg=S.BG2, selectcolor=S.BG3,
+                                 activebackground=S.BG2, command=self._toggle_key)
+        key_cb.pack(side='left')
         self.key_root = ttk.Combobox(r2, values=NOTES, width=4, state='disabled')
         self.key_root.set('C'); self.key_root.pack(side='left', padx=2)
         self.key_mode = ttk.Combobox(r2, values=['major', 'minor'], width=6, state='disabled')
         self.key_mode.set('major'); self.key_mode.pack(side='left', padx=2)
+        self._tip(key_cb, 'key_auto')
+        self._tip(self.key_root, 'key_root')
+        self._tip(self.key_mode, 'key_mode')
 
         r3 = tk.Frame(frame, bg=S.BG2); r3.pack(fill='x', pady=3)
         tk.Label(r3, text="Start Chord:", font=S.FN_S, fg=S.TXT, bg=S.BG2, width=12, anchor='w').pack(side='left')
         self.chord_auto = tk.BooleanVar(value=True)
-        tk.Checkbutton(r3, text="Auto/Random", variable=self.chord_auto, font=S.FN_X,
-                       fg=S.GREEN, bg=S.BG2, selectcolor=S.BG3,
-                       activebackground=S.BG2, command=self._toggle_chord).pack(side='left')
+        chord_cb = tk.Checkbutton(r3, text="Auto/Random", variable=self.chord_auto, font=S.FN_X,
+                                   fg=S.GREEN, bg=S.BG2, selectcolor=S.BG3,
+                                   activebackground=S.BG2, command=self._toggle_chord)
+        chord_cb.pack(side='left')
         self.chord_root = ttk.Combobox(r3, values=NOTES, width=4, state='disabled')
         self.chord_root.set('C'); self.chord_root.pack(side='left', padx=2)
         self.chord_quality = ttk.Combobox(r3, values=QUALITIES, width=6, state='disabled')
         self.chord_quality.set('maj7'); self.chord_quality.pack(side='left', padx=2)
+        self._tip(chord_cb, 'chord_auto')
+        self._tip(self.chord_root, 'chord_root')
+        self._tip(self.chord_quality, 'chord_quality')
 
         r4 = tk.Frame(frame, bg=S.BG2); r4.pack(fill='x', pady=3)
         tk.Label(r4, text="Complexity:", font=S.FN_S, fg=S.TXT, bg=S.BG2, width=12, anchor='w').pack(side='left')
@@ -423,6 +442,7 @@ class SeedComposerApp:
                                           troughcolor=S.BG_INPUT, highlightthickness=0, length=220)
         self.complexity_scale.set(5)
         self.complexity_scale.pack(side='left', padx=4, fill='x', expand=True)
+        self._tip(self.complexity_scale, 'complexity_scale')
 
         r5 = tk.Frame(frame, bg=S.BG2); r5.pack(fill='x', pady=3)
         tk.Label(r5, text="Humanize:", font=S.FN_S, fg=S.TXT, bg=S.BG2, width=12, anchor='w').pack(side='left')
@@ -431,6 +451,7 @@ class SeedComposerApp:
                                         troughcolor=S.BG_INPUT, highlightthickness=0, length=220)
         self.humanize_scale.set(60)
         self.humanize_scale.pack(side='left', padx=4, fill='x', expand=True)
+        self._tip(self.humanize_scale, 'humanize_scale')
 
         r_mut = tk.Frame(frame, bg=S.BG2); r_mut.pack(fill='x', pady=3)
         tk.Label(r_mut, text="Mutation:", font=S.FN_S, fg=S.TXT, bg=S.BG2, width=12, anchor='w').pack(side='left')
@@ -446,6 +467,7 @@ class SeedComposerApp:
                                         command=self._on_mutation_change)
         self.mutation_scale.set(0)
         self.mutation_scale.pack(side='left', padx=4)
+        self._tip(self.mutation_scale, 'mutation_scale')
 
         tk.Label(mut_frame, text="CHAOS", font=S.FN_XS, fg=S.RED, bg=S.BG2).pack(side='left')
 
@@ -459,16 +481,23 @@ class SeedComposerApp:
                                     insertbackground=S.CYAN, width=12)
         self.seed_entry.pack(side='left', padx=2)
         tk.Label(r6, text="(empty=random)", font=S.FN_X, fg=S.TXT_DIM, bg=S.BG2).pack(side='left', padx=4)
-        self._cbtn(r6, "Rand", self._random_seed, S.YELLOW).pack(side='left')
+        btn_rand_seed = self._cbtn(r6, "Rand", self._random_seed, S.YELLOW)
+        btn_rand_seed.pack(side='left')
+        self._tip(self.seed_entry, 'seed_entry')
+        self._tip(btn_rand_seed, 'btn_rand_seed')
 
     # ─── Tracks ───
 
     def _build_tracks_section(self, parent):
-        frame = self._section(parent, "TRACKS & INSTRUMENTS", S.GREEN)
+        # Tracks section starts collapsed — click ▶ to expand
+        cs = CollapsibleSection(parent, "TRACKS & INSTRUMENTS", S.GREEN, collapsed=True)
+        frame = cs.content_frame
 
         top_row = tk.Frame(frame, bg=S.BG2); top_row.pack(fill='x', pady=(0, 4))
-        self._cbtn(top_row, "RANDOMIZE ALL INSTRUMENTS", self._randomize_all_instruments,
-                   S.YELLOW, wide=True).pack(fill='x')
+        btn_rand_all = self._cbtn(top_row, "RANDOMIZE ALL INSTRUMENTS",
+                                  self._randomize_all_instruments, S.YELLOW, wide=True)
+        btn_rand_all.pack(fill='x')
+        self._tip(btn_rand_all, 'btn_randomize_all')
 
         tracks = ['drums', 'bass', 'chords', 'lead', 'pad', 'arp']
         for track in tracks:
@@ -476,9 +505,11 @@ class SeedComposerApp:
             row = tk.Frame(frame, bg=S.BG2); row.pack(fill='x', pady=2)
 
             enabled = tk.BooleanVar(value=(track != 'arp'))
-            tk.Checkbutton(row, text=track.upper(), variable=enabled, font=S.FN_S,
-                           fg=color, bg=S.BG2, selectcolor=S.BG3,
-                           activebackground=S.BG2, width=7, anchor='w').pack(side='left')
+            en_cb = tk.Checkbutton(row, text=track.upper(), variable=enabled, font=S.FN_S,
+                                    fg=color, bg=S.BG2, selectcolor=S.BG3,
+                                    activebackground=S.BG2, width=7, anchor='w')
+            en_cb.pack(side='left')
+            self._tip(en_cb, 'track_enabled')
 
             tk.Label(row, text="Vol:", font=S.FN_X, fg=S.TXT_DIM, bg=S.BG2).pack(side='left')
             vol = tk.Scale(row, from_=0, to=100, orient='horizontal', font=S.FN_X,
@@ -486,6 +517,7 @@ class SeedComposerApp:
                            highlightthickness=0, length=80, showvalue=0)
             vol.set(80 if track != 'arp' else 50)
             vol.pack(side='left', padx=2)
+            self._tip(vol, 'track_volume')
 
             if track == 'drums':
                 kit_values = [f"{k}: {v}" for k, v in sorted(DRUM_KITS.items())]
@@ -497,9 +529,12 @@ class SeedComposerApp:
                 default_prog = GENRE_INSTRUMENTS.get('pop', {}).get(track, 0)
                 inst.set(f"{default_prog}: {GM_INSTRUMENTS.get(default_prog, 'Piano')}")
             inst.pack(side='left', padx=4)
+            self._tip(inst, 'track_instrument')
 
-            self._cbtn(row, "Rand", lambda t=track: self._randomize_track_instrument(t),
-                       S.YELLOW).pack(side='left', padx=2)
+            rand_btn = self._cbtn(row, "Rand", lambda t=track: self._randomize_track_instrument(t),
+                                   S.YELLOW)
+            rand_btn.pack(side='left', padx=2)
+            self._tip(rand_btn, 'btn_rand_instrument')
 
             self.track_vars[track] = {'enabled': enabled, 'volume': vol, 'instrument': inst}
 
@@ -527,6 +562,7 @@ class SeedComposerApp:
         )
         self._prompt_entry.pack(side='left', fill='x', expand=True, padx=(0, 4))
         self._prompt_entry.bind('<Return>', lambda _: self._decode_and_show())
+        self._tip(self._prompt_entry, 'prompt_entry')
 
         self._cbtn(prompt_row, "✕", self._clear_prompt, S.TXT_DIM).pack(side='left')
 
@@ -550,11 +586,14 @@ class SeedComposerApp:
         self.gen_btn = self._cbtn(r, "GENERATE NEW SONG", self._generate,
                                    S.CYAN, wide=True, big=True)
         self.gen_btn.pack(fill='x', padx=4, ipady=8)
+        self._tip(self.gen_btn, 'btn_generate')
 
-        self.btn_batch = ttk.Button(
-            r, text="Generate Batch (5x)", command=self._on_generate_batch
-        )
-        self.btn_batch.pack(side=tk.LEFT, padx=5)
+        # Batch button — same width/style as GENERATE for visual alignment
+        r2 = tk.Frame(frame, bg=S.BG2); r2.pack(fill='x', pady=(0, 4))
+        self.btn_batch = self._cbtn(r2, "Generate Batch (5x)", self._on_generate_batch,
+                                     S.YELLOW, wide=True)
+        self.btn_batch.pack(fill='x', padx=4, ipady=4)
+        self._tip(self.btn_batch, 'btn_batch')
 
     # ─── Output Panel ───
 
@@ -577,13 +616,23 @@ class SeedComposerApp:
         self.progress_label.pack(fill='x')
 
         bf = tk.Frame(parent, bg=S.BG2); bf.pack(fill='x', padx=6, pady=4)
-        self._cbtn(bf, "PLAY", self._play_preview, S.GREEN, wide=True).pack(side='left', padx=2, fill='x', expand=True)
-        self._cbtn(bf, "STOP", self._stop_playback, S.RED, wide=True).pack(side='left', padx=2, fill='x', expand=True)
+        btn_play = self._cbtn(bf, "PLAY", self._play_preview, S.GREEN, wide=True)
+        btn_play.pack(side='left', padx=2, fill='x', expand=True)
+        btn_stop = self._cbtn(bf, "STOP", self._stop_playback, S.RED, wide=True)
+        btn_stop.pack(side='left', padx=2, fill='x', expand=True)
+        self._tip(btn_play, 'btn_play')
+        self._tip(btn_stop, 'btn_stop')
 
         ef = tk.Frame(parent, bg=S.BG2); ef.pack(fill='x', padx=6, pady=2)
-        self._cbtn(ef, "MIDI", self._export_midi, S.PURPLE, wide=True).pack(side='left', padx=2, fill='x', expand=True)
-        self._cbtn(ef, "WAV", self._export_wav, S.ORANGE, wide=True).pack(side='left', padx=2, fill='x', expand=True)
-        self._cbtn(ef, "JSON", self._export_json, S.BLUE, wide=True).pack(side='left', padx=2, fill='x', expand=True)
+        btn_midi = self._cbtn(ef, "MIDI", self._export_midi, S.PURPLE, wide=True)
+        btn_midi.pack(side='left', padx=2, fill='x', expand=True)
+        btn_wav = self._cbtn(ef, "WAV", self._export_wav, S.ORANGE, wide=True)
+        btn_wav.pack(side='left', padx=2, fill='x', expand=True)
+        btn_json = self._cbtn(ef, "JSON", self._export_json, S.BLUE, wide=True)
+        btn_json.pack(side='left', padx=2, fill='x', expand=True)
+        self._tip(btn_midi, 'btn_midi')
+        self._tip(btn_wav, 'btn_wav')
+        self._tip(btn_json, 'btn_json')
 
         lf = self._section(parent, "CONSOLE", S.TXT_DIM)
         self.log_text = tk.Text(lf, font=S.FN_X, bg=S.BG, fg=S.TXT_DIM,
@@ -610,6 +659,12 @@ class SeedComposerApp:
         btn.bind('<Enter>', lambda e: btn.configure(bg=S.BG_BTN_HOV))
         btn.bind('<Leave>', lambda e: btn.configure(bg=S.BG_BTN))
         return btn
+
+    def _tip(self, widget: tk.Widget, key: str):
+        """Attach a hover tooltip to a widget using a key from TOOLTIPS."""
+        text = TOOLTIPS.get(key, "")
+        if text:
+            ToolTip(widget, text)
 
     def _log(self, msg):
         self.log_text.configure(state='normal')
@@ -865,28 +920,22 @@ class SeedComposerApp:
             try:
                 self.msg_queue.put(('gen_progress', 10, "Building chord progression..."))
                 composition = self.engine.compose(config)
-                self.msg_queue.put(('gen_progress', 50, "Exporting MIDI..."))
+                self.msg_queue.put(('gen_progress', 80, "Exporting MIDI..."))
 
                 temp_dir = Path(APP_DIR) / "temp_output"
                 temp_dir.mkdir(exist_ok=True)
                 midi_path = str(temp_dir / f"preview_{gen_id}.mid")
                 self.engine.export_midi(composition, midi_path)
 
-                self.msg_queue.put(('gen_progress', 70, "Rendering preview audio..."))
-                wav_path = str(temp_dir / f"preview_{gen_id}.wav")
-                renderer = WAVRenderer()
-                renderer.render_composition_to_wav(composition, wav_path)
-
-                for old in temp_dir.glob("preview_*.wav"):
-                    if str(old) != wav_path:
-                        try: old.unlink()
-                        except: pass
+                # Clean up old temp MIDI files (keep only the latest)
                 for old in temp_dir.glob("preview_*.mid"):
                     if str(old) != midi_path:
                         try: old.unlink()
                         except: pass
 
-                self.msg_queue.put(('gen_done', composition, midi_path, wav_path))
+                # WAV is NOT rendered automatically — it would take 5-10 min via
+                # FluidSynth.  Use the WAV export button to render on demand.
+                self.msg_queue.put(('gen_done', composition, midi_path, None))
             except Exception as e:
                 self.msg_queue.put(('gen_error', str(e)))
 
@@ -959,10 +1008,15 @@ class SeedComposerApp:
     # ─────────────────────────────────────────────────────────────
 
     def _play_preview(self):
-        if not self.current_wav_path or not os.path.exists(self.current_wav_path):
+        if not self.current_midi_path or not os.path.exists(self.current_midi_path):
             messagebox.showinfo("No Preview", "Generate a song first!")
             return
-        if self.player.play_wav(self.current_wav_path):
+        # Prefer WAV if already rendered (better quality), otherwise play MIDI directly
+        if self.current_wav_path and os.path.exists(self.current_wav_path):
+            success = self.player.play_wav(self.current_wav_path)
+        else:
+            success = self.player.play_midi(self.current_midi_path)
+        if success:
             self._set_status("PLAYING", S.GREEN)
         else:
             msg = "Install pygame for playback:\npip install pygame" if not PYGAME_AVAILABLE else "Playback failed"
@@ -1047,12 +1101,12 @@ class SeedComposerApp:
             _, comp, midi, wav = msg
             self.current_composition = comp
             self.current_midi_path = midi
-            self.current_wav_path = wav
+            self.current_wav_path = wav   # None unless WAV was explicitly rendered
             self.is_generating = False
             self.progress_var.set(100)
             self.progress_label.configure(text="Done!")
             self._display_composition(comp)
-            self._set_status("READY - Hit Play or Export", S.GREEN)
+            self._set_status("READY — Play (MIDI) or export WAV/MIDI", S.GREEN)
             c = comp['config']
             self._log(f"✓ {c['genre'].upper()} | {c['bpm']} BPM | {c['key']} | "
                       f"{comp['total_bars']} bars | {comp['duration_seconds']:.1f}s")
