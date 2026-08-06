@@ -8,7 +8,9 @@ class S:
     TXT = "#d0d8f0"; TXT_DIM = "#445577"; TXT_BRT = "#ffffff"; DIM = "#445577"
     FN_XS = ("Consolas", 8)
     TRACK_CLR = {'drums': '#ff2040', 'bass': '#ff6b00', 'chords': '#00e5ff',
-                 'lead': '#a855f7', 'pad': '#00ff88', 'arp': '#ffd500'}
+                 'lead': '#a855f7', 'pad': '#00ff88', 'arp': '#ffd500',
+                 'stabs': '#ff0080', 'texture': '#4488ff', 'fx': '#00ffcc',
+                 'percussion': '#ff2040'}
     GENRE_CLR = {'pop': '#ff69b4', 'hiphop': '#ffa500', 'trap': '#ff2040',
                  'cinematic': '#4488ff', 'classical': '#a855f7', 'techno': '#00e5ff',
                  'jpop': '#ff69b4', 'phonk': '#ff6b00',

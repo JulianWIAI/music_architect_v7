@@ -56,6 +56,7 @@ from src.gui.constants import GM_INSTRUMENTS, DRUM_KITS, ROLE_INSTRUMENTS, NOTES
 from src.gui.midi_preview_player import MIDIPreviewPlayer
 from src.gui.tooltips import ToolTip, TOOLTIPS
 from src.gui.collapsible_section import CollapsibleSection
+from src.gui.track_instrument_row import TrackInstrumentRow
 
 try:
     from src.export.utau_bridge import export as utau_export, RawNote
@@ -504,7 +505,7 @@ class SeedComposerApp:
             color = S.TRACK_CLR.get(track, S.CYAN)
             row = tk.Frame(frame, bg=S.BG2); row.pack(fill='x', pady=2)
 
-            enabled = tk.BooleanVar(value=(track != 'arp'))
+            enabled = tk.BooleanVar(value=True)
             en_cb = tk.Checkbutton(row, text=track.upper(), variable=enabled, font=S.FN_S,
                                     fg=color, bg=S.BG2, selectcolor=S.BG3,
                                     activebackground=S.BG2, width=7, anchor='w')
@@ -537,6 +538,40 @@ class SeedComposerApp:
             self._tip(rand_btn, 'btn_rand_instrument')
 
             self.track_vars[track] = {'enabled': enabled, 'volume': vol, 'instrument': inst}
+
+        # ── Tracks 7-10: Stabs, Texture, FX, Percussion ─────────────────────
+        # Each row is constructed by TrackInstrumentRow, which encapsulates the
+        # checkbox, volume slider, instrument combobox, and Rand button in one
+        # reusable class.  'percussion' is mode='percussion' — it shares the drum
+        # channel (ch 9) so it has no program selector.
+        _extended_tracks = [
+            #  track key     mode          default  default  default
+            #                              enabled  volume   program
+            ('stabs',      'pitched',    True,    70,      55),   # Orchestra Hit default
+            ('texture',    'pitched',    True,    60,      88),   # New Age Pad default
+            ('fx',         'fx_sounds',  True,    50,      96),   # Rain FX default
+            ('percussion', 'percussion', True,    60,      None), # no program — drum ch
+        ]
+        for _track, _mode, _enabled, _vol, _prog in _extended_tracks:
+            _color = S.TRACK_CLR.get(_track, S.CYAN)
+            _row = TrackInstrumentRow(
+                frame,
+                track=_track,
+                mode=_mode,
+                color=_color,
+                default_enabled=_enabled,
+                default_volume=_vol,
+                default_program=_prog,
+                log_fn=self._log,
+                tip_fn=self._tip,
+            )
+            # Register in track_vars so the engine config builder and randomize
+            # functions can access them the same way as the inline rows above.
+            self.track_vars[_track] = {
+                'enabled':    _row.enabled,
+                'volume':     _row.volume,
+                'instrument': _row.instrument,  # None for percussion
+            }
 
     # ─── Generate ───
 
@@ -731,15 +766,20 @@ class SeedComposerApp:
         self.mutation_scale.config(fg=color)
 
     def _randomize_track_instrument(self, track):
+        tv = self.track_vars.get(track, {})
+        inst_widget = tv.get('instrument')
+        # percussion shares the drum channel and has no program selector
+        if inst_widget is None:
+            return
         if track == 'drums':
             kit = random.choice(list(DRUM_KITS.items()))
-            self.track_vars[track]['instrument'].set(f"{kit[0]}: {kit[1]}")
+            inst_widget.set(f"{kit[0]}: {kit[1]}")
         else:
             pool = ROLE_INSTRUMENTS.get(track, list(GM_INSTRUMENTS.keys()))
             prog = random.choice(pool)
             name = GM_INSTRUMENTS.get(prog, "Unknown")
-            self.track_vars[track]['instrument'].set(f"{prog}: {name}")
-        self._log(f"Randomized {track}: {self.track_vars[track]['instrument'].get()}")
+            inst_widget.set(f"{prog}: {name}")
+        self._log(f"Randomized {track}: {inst_widget.get()}")
 
     def _randomize_all_instruments(self):
         for track in self.track_vars:
