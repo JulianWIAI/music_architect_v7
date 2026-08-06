@@ -65,6 +65,25 @@ try:
 except ImportError:
     _intro_registry = None        # type: ignore
     _INTRO_REGISTRY_AVAILABLE = False
+
+try:
+    from src.composition.structure_generator import StructureGenerator
+    _STRUCTURE_GENERATOR_AVAILABLE = True
+except ImportError:
+    _STRUCTURE_GENERATOR_AVAILABLE = False
+
+try:
+    from src.composition.bass_architect import BassArchitect
+    _BASS_ARCHITECT_AVAILABLE = True
+except ImportError:
+    _BASS_ARCHITECT_AVAILABLE = False
+
+try:
+    from src.composition.billboard.drum_pattern_architect import DrumPatternArchitect
+    _DRUM_PATTERN_ARCHITECT_AVAILABLE = True
+except ImportError:
+    _DRUM_PATTERN_ARCHITECT_AVAILABLE = False
+
 from src.composition.edm_cipher import (
     SidechainMatrix, StochasticBuildUp, PreDropVoid,
     AntiDropFakeOut, PolyrhythmicFilterSweep,
@@ -539,27 +558,36 @@ class CompositionEngine:
 
     def generate_structure(self, config: CompositionConfig) -> List[Tuple[str, int]]:
         bpm = config.bpm or 120
-        target_bars = int(180 * bpm / 240)
+        seed_val = getattr(config, 'seed_value', 0) or 0
 
-        template = STRUCTURE_TEMPLATES.get(config.genre, STRUCTURE_TEMPLATES['pop'])
-        raw_result = []
+        # Try the procedural structure generator first — it produces unique section
+        # orders per song while staying within each genre's music-theory constraints.
+        if _STRUCTURE_GENERATOR_AVAILABLE:
+            raw_result = StructureGenerator.build(
+                genre=config.genre,
+                complexity=float(getattr(config, 'complexity', 5)),
+                seed_value=seed_val if seed_val else None,
+            )
+        else:
+            raw_result = None
 
-        for s, b in template:
-            if config.complexity < 8:
-                quantized_bars = max(4, (b // 4) * 4) if b >= 4 else (2 if b >= 2 else b)
-                # ±4-bar jitter so tracks of the same genre have different lengths
-                if quantized_bars >= 8:
-                    quantized_bars = max(4, quantized_bars + random.choice([-4, 0, 0, 0, 4]))
-                raw_result.append((s, quantized_bars))
-            else:
-                raw_result.append((s, b))
+        if raw_result is None:
+            # Fallback: fixed template with ±4-bar jitter (original behaviour).
+            template = STRUCTURE_TEMPLATES.get(config.genre, STRUCTURE_TEMPLATES['pop'])
+            raw_result = []
+            for s, b in template:
+                if config.complexity < 8:
+                    quantized_bars = max(4, (b // 4) * 4) if b >= 4 else (2 if b >= 2 else b)
+                    if quantized_bars >= 8:
+                        quantized_bars = max(4, quantized_bars + random.choice([-4, 0, 0, 0, 4]))
+                    raw_result.append((s, quantized_bars))
+                else:
+                    raw_result.append((s, b))
 
         if not raw_result:
             raw_result = [('intro', 4), ('verse', 16), ('outro', 8)]
 
         # Intro entropy injection: every 5th seed gets a non-template intro length.
-        # Ensures 20 % of tracks open with a distinctly different bar count (4/8/12/16).
-        seed_val = getattr(config, 'seed_value', 0) or 0
         if seed_val % 5 == 0:
             raw_result = [
                 (s, random.choice([4, 8, 12, 16]) if s == 'intro' else b)
@@ -567,7 +595,6 @@ class CompositionEngine:
             ]
 
         # Outro entropy injection: every 7th seed gets a non-template outro length.
-        # Primes 5 and 7 are coprime so intro and outro mutations don't always coincide.
         if seed_val % 7 == 0:
             raw_result = [
                 (s, random.choice([4, 8, 12]) if s == 'outro' else b)
@@ -575,8 +602,6 @@ class CompositionEngine:
             ]
 
         return self._apply_structural_sanity(raw_result)
-
-        return self._apply_structural_sanity(result)
 
     # ─────────────────────────────────────────────────────────────────
     #  V4 CINEMATIC DRUM TRACK GENERATION
@@ -602,13 +627,50 @@ class CompositionEngine:
         # Pick one base variant, then apply per-track groove morphing seeded by seed_value.
         # This gives every track a unique drum pattern while keeping the genre feel.
         g_pats = GENRE_DRUM_PATTERNS.get(config.genre, [{'kick': [], 'snare': [], 'hihat': []}])
-        g_pat       = random.choice(g_pats)
-        kick_steps, snare_steps, hihat_steps = self._apply_groove_variation(
-            g_pat.get('kick',  []),
-            g_pat.get('snare', []),
-            g_pat.get('hihat', []),
-            complexity, mutation, config.genre,
-        )
+
+        # ── Drum Section Plan: per-section pattern routing ────────────────────
+        # Commercial drum programming always uses different base patterns for
+        # verse vs chorus/drop — the chorus must feel fuller and more energetic.
+        # DrumPatternArchitect selects three pattern indices (verse/peak/fill)
+        # guaranteed to differ between verse and chorus, plus a snare variation
+        # level (0-3) that augments the base snare per song.
+        _drum_plan         = None
+        _cached_patterns: dict = {}
+
+        if _DRUM_PATTERN_ARCHITECT_AVAILABLE and len(g_pats) >= 2:
+            _drum_plan = DrumPatternArchitect.build(
+                genre=config.genre,
+                n_patterns=len(g_pats),
+                seed_value=getattr(config, 'seed_value', None),
+            )
+            # Pre-compute morphed (kick, snare, hihat) tuples for each role.
+            # Done BEFORE the section loop so random state inside the loop is
+            # not affected by pattern selection (same bar-level ghost probabilities
+            # as the legacy path).
+            for _role, _idx in (
+                ('verse', _drum_plan.verse_idx),
+                ('peak',  _drum_plan.peak_idx),
+                ('fill',  _drum_plan.fill_idx),
+            ):
+                _p = g_pats[_idx % len(g_pats)]
+                _cached_patterns[_role] = self._apply_groove_variation(
+                    _p.get('kick',  []),
+                    _p.get('snare', []),
+                    _p.get('hihat', []),
+                    complexity, mutation, config.genre,
+                    snare_variant=_drum_plan.snare_variant,
+                )
+            # Verse steps are the default fallback used by intro/outro paths
+            kick_steps, snare_steps, hihat_steps = _cached_patterns['verse']
+        else:
+            # Fallback: single random pattern for entire song (legacy behaviour)
+            g_pat = random.choice(g_pats)
+            kick_steps, snare_steps, hihat_steps = self._apply_groove_variation(
+                g_pat.get('kick',  []),
+                g_pat.get('snare', []),
+                g_pat.get('hihat', []),
+                complexity, mutation, config.genre,
+            )
 
         bar_offset = 0
         section_index = 0
@@ -621,23 +683,105 @@ class CompositionEngine:
             if section_type == 'verse': verse_count += 1
 
             if section_type == 'intro':
-                for bar in range(section_bars):
-                    bo = (bar_offset + bar) * 4
-                    fade = (bar + 1) / max(1, section_bars)
+                # Read the Gradual Orchestration plan attached by compose()
+                _intro_plan = getattr(config, '_intro_plan', None)
 
+                for bar in range(section_bars):
+                    bo         = (bar_offset + bar) * 4
+                    build_frac = (bar + 1) / max(1, section_bars)
+
+                    # ── Sparse tom fills: texture from bar 1 (unchanged) ──────────
                     if complexity > 4:
                         for i in range(0, 16, 4):
-                            if random.random() < fade * 0.8:
+                            if random.random() < build_frac * 0.8:
                                 notes.append((humanize(bo + i / 4, 0.01 * h_amt), 0.25,
-                                              TOM_LOW, humanize_velocity(int(60 * fade), 8)))
+                                              TOM_LOW, humanize_velocity(int(60 * build_frac), 8)))
+
+                    # ── Gradual Orchestration: kick + hi-hat ──────────────────────
+                    # Music theory: kick anchors the downbeat and creates the pulse
+                    # that listeners lock on to; hi-hat provides rhythmic density.
+                    # Both enter at their genre-specific thresholds rather than all
+                    # at once, so the listener experiences a genuine "arrival" moment.
+                    if _intro_plan is not None:
+                        # Kick drum — enters at drums_kick_entry threshold
+                        if build_frac >= _intro_plan.drums_kick_entry:
+                            bars_since = (build_frac - _intro_plan.drums_kick_entry) * section_bars
+                            v_ramp     = _intro_plan.entry_vel_ramp(bars_since)
+                            kick_vel   = humanize_velocity(int(88 * v_ramp * energy), 8)
+                            # Beat 1 kick — always present once the threshold is crossed
+                            notes.append((humanize(bo, 0.01 * h_amt), 0.35, KICK, kick_vel))
+                            # Beat 3 kick — enters one bar after beat 1 for gradual density build
+                            if build_frac >= _intro_plan.drums_kick_entry + (1.0 / max(1, section_bars)):
+                                notes.append((humanize(bo + 2.0, 0.015 * h_amt), 0.35,
+                                              KICK, humanize_velocity(int(kick_vel * 0.85), 6)))
+
+                        # Hi-hat — enters at drums_hat_entry threshold (may differ from kick)
+                        if build_frac >= _intro_plan.drums_hat_entry:
+                            bars_since = (build_frac - _intro_plan.drums_hat_entry) * section_bars
+                            v_ramp     = _intro_plan.entry_vel_ramp(bars_since)
+                            hat_vel    = humanize_velocity(int(62 * v_ramp), 6)
+                            # 8th-note hi-hat grid; density grows as build_frac increases past threshold
+                            hat_density = 0.55 + 0.45 * min(1.0, bars_since / max(1, section_bars))
+                            for step in range(8):
+                                if random.random() < hat_density:
+                                    notes.append((humanize(bo + step * 0.5, 0.012 * h_amt),
+                                                  0.20, HIHAT_CLOSED, hat_vel))
 
             elif section_type == 'outro':
+                # ── Gradual De-orchestration: genre-specific element exit order ──
+                # Elements exit in reverse order of their intro entry, implementing
+                # the arch-form Reverse Principle.  Each element fades via a two-stage
+                # velocity curve (global fade + per-element pre-exit fade) rather than
+                # the previous single kick-only linear decay.
+                _outro_plan = getattr(config, '_outro_plan', None)
+
                 for bar in range(section_bars):
-                    bo = (bar_offset + bar) * 4
-                    fade = 1.0 - (bar / max(1, section_bars))
-                    if fade > 0.2 and bar % 2 == 0:
-                        notes.append((humanize(bo, 0.01 * h_amt), 0.5,
-                                      KICK, humanize_velocity(int(100 * fade), 10)))
+                    bo         = (bar_offset + bar) * 4
+                    build_frac = bar / max(1, section_bars)
+
+                    if _outro_plan is not None:
+                        # Compute per-element velocity multipliers
+                        kick_mult = _outro_plan.velocity_mult(
+                            build_frac, _outro_plan.drums_kick_exit, section_bars)
+                        hat_mult  = _outro_plan.velocity_mult(
+                            build_frac, _outro_plan.drums_hat_exit,  section_bars)
+                    else:
+                        # Legacy linear fade: everything together
+                        legacy_fade = 1.0 - build_frac
+                        kick_mult   = legacy_fade if legacy_fade > 0.2 and bar % 2 == 0 else 0.0
+                        hat_mult    = 0.0   # legacy path never had hat in outro
+
+                    # ── Kick + snare (travel together; snare slightly softer) ──────
+                    if kick_mult > 0.0:
+                        # Beat 1 kick — always present while kick is active
+                        notes.append((
+                            humanize(bo, 0.01 * h_amt), 0.5,
+                            KICK, humanize_velocity(int(95 * kick_mult), 8),
+                        ))
+                        # Beat 3 kick — present in first half of outro, then drops
+                        if kick_mult > 0.55:
+                            notes.append((
+                                humanize(bo + 2.0, 0.015 * h_amt), 0.4,
+                                KICK, humanize_velocity(int(80 * kick_mult), 8),
+                            ))
+                        # Snare on beat 2 — exits slightly before kick for "unravelling" feel
+                        if kick_mult > 0.65:
+                            notes.append((
+                                humanize(bo + 1.0, 0.012 * h_amt), 0.25,
+                                SNARE, humanize_velocity(int(78 * kick_mult), 8),
+                            ))
+
+                    # ── Hi-hat — exits before kick per genre schedule ─────────────
+                    if hat_mult > 0.0:
+                        # Reduce hi-hat density as it fades — thins from 8ths to quarters
+                        hat_density = 0.7 * hat_mult
+                        hat_vel     = humanize_velocity(int(58 * hat_mult), 6)
+                        for step in range(8):
+                            if random.random() < hat_density:
+                                notes.append((
+                                    humanize(bo + step * 0.5, 0.012 * h_amt),
+                                    0.18, HIHAT_CLOSED, hat_vel,
+                                ))
 
             elif section_type == 'break':
                 for bar in range(section_bars):
@@ -661,6 +805,16 @@ class CompositionEngine:
                         self._add_cinematic_fill(notes, bo, complexity, 1.0, h_amt)
 
             else:
+                # ── Resolve section-specific drum pattern ─────────────────────
+                # Verse-type sections (verse, pre_chorus, tension) use a sparser
+                # base pattern; peak sections (chorus, drop, climax) use a
+                # denser, higher-energy pattern.  This creates the audible "lift"
+                # that commercial productions achieve through groove contrast, not
+                # just velocity and arrangement changes.
+                if _drum_plan is not None:
+                    _role = _drum_plan.role(section_type)
+                    kick_steps, snare_steps, hihat_steps = _cached_patterns[_role]
+
                 for bar in range(section_bars):
                     absolute_bar    = bar_offset + bar
                     bo              = absolute_bar * 4
@@ -866,7 +1020,8 @@ class CompositionEngine:
                 notes.append((t, 0.08, RIMSHOT, vel))
 
     def _apply_groove_variation(self, kick_steps, snare_steps, hihat_steps,
-                               complexity, mutation, genre: str = 'pop'):
+                               complexity, mutation, genre: str = 'pop',
+                               snare_variant: int = 0):
         """
         Morphs a base drum pattern — enforces density limits and applies hi-hat choking.
         NEVER adds kick hits; density can only stay equal or decrease.
@@ -943,7 +1098,44 @@ class CompositionEngine:
         # Inter-layer choke: remove hihats that land on kick steps
         hihat = [(s, v) for s, v in hihat if int(s) not in kick_positions]
 
-        return kick, list(snare_steps), hihat
+        # ── Snare variation ───────────────────────────────────────────────────
+        # The snare defines ~40 % of perceived groove character — arguably more
+        # than the kick in pop, hip-hop and EDM.  Four mutation levels produce
+        # distinct snare personalities per song without touching the commercial
+        # backbeat anchors (high-velocity hits ≥ 80 on beats 2 and 4).
+        snare = list(snare_steps)
+        if snare_variant > 0 and snare:
+            # Anchor steps: high-velocity hits that form the commercial backbeat.
+            # These are NEVER repositioned — moving the 2/4 snare is a mistake,
+            # not a creative choice, in pop, trap, and hip-hop.
+            _snare_anchors = frozenset(s for s, v in snare if v >= 80)
+
+            if snare_variant in (1, 3):
+                # Push: one non-anchor snare step shifts +1 step forward.
+                # In hip-hop and funk this creates the "late hit" character that
+                # makes the groove feel slightly behind the beat — a coveted feel.
+                non_anchors = [(i, s, v) for i, (s, v) in enumerate(snare)
+                               if s not in _snare_anchors]
+                if non_anchors:
+                    i_na, s_na, v_na = non_anchors[0]
+                    s_new = s_na + 1
+                    _existing = {s for s, _ in snare}
+                    if s_new < 16 and s_new not in _existing:
+                        snare[i_na] = (s_new, v_na)
+
+            if snare_variant in (2, 3):
+                # Ghost add: one low-velocity ghost snare injected into the BASE
+                # pattern (not just per-bar — it repeats every bar, filling the
+                # rhythmic pocket consistently like a session drummer would).
+                _existing = {int(s) for s, _ in snare}
+                ghost_cands = [s for s in range(1, 16)
+                               if s not in _existing and s not in (0, 4, 8, 12)]
+                if ghost_cands:
+                    gs = random.choice(ghost_cands)
+                    snare.append((gs, random.randint(28, 48)))
+                    snare.sort(key=lambda x: x[0])
+
+        return kick, snare, hihat
 
     # ─────────────────────────────────────────────────────────────────
     #  DRUM & BASS CIPHER — dedicated breakbeat + Reese bass generators
@@ -1127,6 +1319,11 @@ class CompositionEngine:
         mutation = getattr(config, 'mutation', 0.0)
         bpm = getattr(config, 'bpm', None) or 120.0
 
+        # Pull note palette from BassArchitect — gives each genre its characteristic
+        # interval colour instead of the generic root/fifth binary choice.
+        _bs      = getattr(config, '_bass_selection', None)
+        _palette = _bs[2] if _bs else None
+
         genre = config.genre
         if genre in self.bass_patterns['by_genre'] and self.bass_patterns['by_genre'][genre]:
             patterns = self.bass_patterns['by_genre'][genre]
@@ -1161,11 +1358,46 @@ class CompositionEngine:
 
                 section_energy = energy
                 if section_type == 'intro':
-                    fade = (local_bar + 1) / max(1, section_bars)
-                    section_energy *= fade
+                    # ── Gradual Orchestration: bass threshold + velocity ramp ──────
+                    # Bass now enters at its genre-specific threshold fraction rather
+                    # than playing from bar 1.  Before threshold: silence.  After
+                    # threshold: velocity ramps from 65 % to 100 % over 2 bars.
+                    # If no plan is set, fall back to legacy linear fade.
+                    _intro_plan = getattr(config, '_intro_plan', None)
+                    build_frac  = (local_bar + 1) / max(1, section_bars)
+                    if _intro_plan is not None:
+                        if build_frac < _intro_plan.bass_entry:
+                            # Bass hasn't entered yet — skip bar, keep indices in sync
+                            bar_idx   += 1
+                            chord_idx += 1
+                            continue
+                        # Apply velocity ramp from the entry bar
+                        bars_since     = (build_frac - _intro_plan.bass_entry) * section_bars
+                        section_energy *= _intro_plan.entry_vel_ramp(bars_since)
+                        # Optionally override pattern with seed bass steps during entry
+                        if _intro_plan.seed_bass_steps is not None:
+                            working_pattern = _intro_plan.seed_bass_steps
+                    else:
+                        # Legacy behavior: linear energy fade across the intro
+                        section_energy *= build_frac
                 elif section_type == 'outro':
-                    fade = 1.0 - (local_bar / max(1, section_bars))
-                    section_energy *= fade
+                    # ── Gradual De-orchestration: bass exit threshold + fade ───────
+                    # Bass exit is genre-specific (808 stays last in trap; hook stays
+                    # last in pop).  Two-stage fade: global outro fade for all bars,
+                    # pre-exit fade over the final fade_bars before bass_exit.
+                    _outro_plan = getattr(config, '_outro_plan', None)
+                    build_frac  = local_bar / max(1, section_bars)
+                    if _outro_plan is not None:
+                        vel_mult = _outro_plan.velocity_mult(
+                            build_frac, _outro_plan.bass_exit, section_bars)
+                        if vel_mult == 0.0:
+                            bar_idx   += 1
+                            chord_idx += 1
+                            continue   # bass has exited — no notes this bar
+                        section_energy *= vel_mult
+                    else:
+                        # Legacy: simple linear fade
+                        section_energy *= (1.0 - build_frac)
                 elif section_type == 'break':
                     section_energy *= 0.3
 
@@ -1173,7 +1405,13 @@ class CompositionEngine:
                     if working_pattern[step] == 1:
                         step_time = bar_time + (step / 4)
 
-                        if step == 0:
+                        anchor = (step % 4 == 0)   # downbeat steps anchor on root
+                        if _BASS_ARCHITECT_AVAILABLE and _palette:
+                            # Genre-coloured palette: pop gets thirds, hip-hop gets
+                            # minor sevenths, cinematic gets open power intervals, etc.
+                            midi_note = BassArchitect.pick_note(
+                                _palette, root_midi, anchor=anchor)
+                        elif step == 0:
                             midi_note = root_midi
                         elif step == 8:
                             midi_note = random.choice([root_midi, fifth])
@@ -1266,6 +1504,13 @@ class CompositionEngine:
         base_vel = int(90 * volume)
         bpm = getattr(config, 'bpm', None) or 120.0
 
+        # Pull archetype + palette from BassArchitect selection if available.
+        # When set, the archetype's 16-step binary pattern replaces the old
+        # hardcoded 5-note template, giving each song a unique rhythmic feel.
+        _bs        = getattr(config, '_bass_selection', None)
+        _archetype = _bs[1] if _bs else None
+        _palette   = _bs[2] if _bs else None
+
         beat_pos = 0
         chord_idx = 0
         bar_count = 0
@@ -1277,45 +1522,95 @@ class CompositionEngine:
                 if chord_idx >= len(chord_progression):
                     chord_idx = chord_idx % max(1, len(chord_progression))
 
+                # ── Gradual Orchestration: bass threshold gate (fallback path) ──
+                # Mirrors the same threshold logic in _generate_bass_from_learned so
+                # both bass generation paths honour the intro layer plan.
+                if section_type == 'intro':
+                    _intro_plan = getattr(config, '_intro_plan', None)
+                    build_frac  = (bar + 1) / max(1, section_bars)
+                    if _intro_plan is not None and build_frac < _intro_plan.bass_entry:
+                        beat_pos  += 4
+                        chord_idx += 1
+                        bar_count += 1
+                        continue  # bass hasn't entered yet — skip this bar silently
+
+                elif section_type == 'outro':
+                    # ── Gradual De-orchestration: bass exit + two-stage fade ─────
+                    _outro_plan = getattr(config, '_outro_plan', None)
+                    build_frac  = bar / max(1, section_bars)
+                    if _outro_plan is not None:
+                        vel_mult = _outro_plan.velocity_mult(
+                            build_frac, _outro_plan.bass_exit, section_bars)
+                        if vel_mult == 0.0:
+                            beat_pos  += 4
+                            chord_idx += 1
+                            bar_count += 1
+                            continue   # bass has exited — no notes this bar
+                        energy *= vel_mult
+                    else:
+                        energy *= (1.0 - build_frac)   # legacy linear fade
+
                 root, quality = parse_chord_string(chord_progression[chord_idx])
                 root_midi = note_name_to_midi(root, 2)
-
                 genre = config.genre
+
                 if energy < 0.2:
+                    # Very low energy (break/outro fade): single sustained root
                     vel = BassVelocityProfile.velocity(genre, 0, energy, is_root=True)
                     notes.append((
                         humanize(beat_pos, 0.01 * config.humanize_amount),
                         GateLengthHumanizer.apply(3.5), root_midi, vel,
                     ))
+
+                elif _archetype is not None:
+                    # ── BassArchitect archetype path ─────────────────────────
+                    # Use the 16-step binary pattern selected for this song.
+                    # Note selection uses the genre-specific palette so each
+                    # genre gets appropriately coloured intervals beyond root/fifth.
+                    for step in range(16):
+                        if _archetype[step] != 1:
+                            continue
+                        step_time = beat_pos + (step / 4.0)
+                        anchor    = (step % 4 == 0)   # downbeat = anchor on root
+
+                        if _BASS_ARCHITECT_AVAILABLE and _palette:
+                            midi_note = BassArchitect.pick_note(
+                                _palette, root_midi, anchor=anchor)
+                        else:
+                            midi_note = root_midi if anchor else (root_midi + 7)
+
+                        # Duration: sustain until the next active step in the bar
+                        next_hit = next(
+                            (s for s in range(step + 1, 16) if _archetype[s] == 1),
+                            None,
+                        )
+                        if next_hit is not None:
+                            duration = (next_hit - step) / 4.0 - 0.05
+                        else:
+                            duration = (16 - step) / 4.0 - 0.1
+                        duration = max(0.1, min(duration, 3.8))
+
+                        vel = BassVelocityProfile.velocity(
+                            genre, step, energy, is_root=(midi_note == root_midi))
+                        notes.append((
+                            humanize(step_time, 0.01 * config.humanize_amount),
+                            GateLengthHumanizer.apply(duration),
+                            midi_note, vel,
+                        ))
+
                 elif complexity <= 3:
+                    # Simple quarter-note roots for low-complexity tracks
                     for beat in range(4):
-                        s   = beat * 4   # step within bar: 0, 4, 8, 12
+                        s   = beat * 4
                         vel = BassVelocityProfile.velocity(genre, s, energy, is_root=True)
                         notes.append((
                             humanize(beat_pos + beat, 0.01 * config.humanize_amount),
                             GateLengthHumanizer.apply(0.9), root_midi, vel,
                         ))
-                elif complexity <= 6:
-                    fifth   = root_midi + 7
-                    pattern = [
-                        (0,   root_midi, 0.9),
-                        (1,   root_midi, 0.5),
-                        (2,   fifth,     0.9),
-                        (2.5, root_midi, 0.4),
-                        (3,   root_midi, 0.8),
-                    ]
-                    for offset, note, dur in pattern:
-                        s   = int(offset * 4) % 16
-                        vel = BassVelocityProfile.velocity(
-                            genre, s, energy, is_root=(note == root_midi))
-                        notes.append((
-                            humanize(beat_pos + offset, 0.01 * config.humanize_amount),
-                            GateLengthHumanizer.apply(dur), note, vel,
-                        ))
                 else:
+                    # High-complexity fallback: probabilistic 8th-note grid
                     chord_notes = get_chord_midi_notes(root, quality, 2)
                     scale = get_scale_notes(root, 'minor' if 'min' in quality else 'major', 2)
-
                     positions = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5]
                     for pos in positions:
                         if random.random() < 0.7 * energy:
@@ -1545,8 +1840,16 @@ class CompositionEngine:
                         chord_idx += 1
                         continue
 
-                    # Fade factor: 1.0 on bar 0, approaches 0.0 at last bar
-                    fade = max(0.05, 1.0 - bar / max(1, section_bars - 1))
+                    # Fade factor: use GradualDeOrchestrationProtocol plan when available
+                    # so the pad exits at its genre-specific threshold with the two-stage
+                    # velocity curve.  Falls back to simple linear fade if no plan.
+                    _outro_plan = getattr(config, '_outro_plan', None)
+                    _build_frac = bar / max(1, section_bars)
+                    if _outro_plan is not None:
+                        fade = max(0.05, _outro_plan.velocity_mult(
+                            _build_frac, _outro_plan.pad_layer_exit, section_bars))
+                    else:
+                        fade = max(0.05, 1.0 - bar / max(1, section_bars - 1))
 
                     if _archetype == 'fade_sustain':
                         # Type A — Fade Sustain: long chord, velocity decays bar-by-bar
@@ -1933,6 +2236,48 @@ class CompositionEngine:
 
                 bo = beat_pos + (bar * 4)
 
+                # ── Gradual Orchestration: gate pad entry during intro ─────────
+                # Pads start at full energy from bar 1 in the legacy system, which
+                # prevents listeners from experiencing the "new layer arriving" moment.
+                # With the plan, pads are silent until pad_layer_entry is reached,
+                # then enter with a 2-bar velocity ramp.
+                if section_type == 'intro':
+                    _intro_plan = getattr(config, '_intro_plan', None)
+                    build_frac  = (bar + 1) / max(1, section_bars)
+                    if _intro_plan is not None:
+                        if build_frac < _intro_plan.pad_layer_entry:
+                            # Pad hasn't entered yet — advance index, skip note output
+                            chord_idx += 1
+                            continue
+                        # Velocity ramp: 65 % on entry, reaches 100 % after ramp_bars
+                        bars_since    = (build_frac - _intro_plan.pad_layer_entry) * section_bars
+                        vel_ramp      = _intro_plan.entry_vel_ramp(bars_since)
+                        pad_energy_bar = pad_energy * vel_ramp
+
+                        # Secondary harmonic layer from seed progression.
+                        # Music theory: layering a second, softer chord voicing from
+                        # a different (seed-derived) progression adds harmonic richness
+                        # without muddying the main archetype voice.  The seed notes
+                        # are voiced one octave above the main pad (octave 4) to sit
+                        # in the mid-register and complement rather than clash.
+                        if _intro_plan.seed_progression:
+                            try:
+                                _seed_str = _intro_plan.seed_progression[
+                                    bar % len(_intro_plan.seed_progression)
+                                ]
+                                _s_root, _s_quality = parse_chord_string(_seed_str)
+                                _seed_notes = get_chord_midi_notes(_s_root, _s_quality, 4)
+                                _seed_vel   = humanize_velocity(int(base_vel * vel_ramp * 0.52), 5)
+                                _seed_gate  = GateLengthHumanizer.apply(3.6 + random.uniform(0, 0.4))
+                                for _sn in _seed_notes[:3]:
+                                    notes.append((humanize(bo, 0.02), _seed_gate, _sn, _seed_vel))
+                            except Exception:
+                                pass  # malformed seed chord — skip silently
+                    else:
+                        pad_energy_bar = pad_energy
+                else:
+                    pad_energy_bar = pad_energy
+
                 if has_seed and pdmx_pad:
                     pattern = pdmx_pad[bar % len(pdmx_pad)]
                     for step in range(16):
@@ -1942,12 +2287,12 @@ class CompositionEngine:
                                 final_note = note + 12 if (mutation > 0.6 and random.random() < 0.2) else note
                                 notes.append((humanize(time, 0.01),
                                               GateLengthHumanizer.apply(0.25), final_note,
-                                              humanize_velocity(int(base_vel * pad_energy * 1.2), 6)))
+                                              humanize_velocity(int(base_vel * pad_energy_bar * 1.2), 6)))
                 else:
                     if config.complexity < 4 or energy < 0.4:
                         for note in chord_notes[:3]:
                             notes.append((bo, GateLengthHumanizer.apply(3.8), note,
-                                          humanize_velocity(int(base_vel * pad_energy), 6)))
+                                          humanize_velocity(int(base_vel * pad_energy_bar), 6)))
                     else:
                         swell_pattern = [0.8, 0.9, 1.1, 1.2, 1.3, 1.1, 0.9, 0.8]
 
@@ -1957,7 +2302,7 @@ class CompositionEngine:
 
                             for i, note in enumerate(chord_notes[:3]):
                                 offset = i * 0.015
-                                vel = humanize_velocity(int(base_vel * pad_energy * swell), 8)
+                                vel = humanize_velocity(int(base_vel * pad_energy_bar * swell), 8)
                                 notes.append((time + offset, GateLengthHumanizer.apply(0.45), note, vel))
 
                 chord_idx += 1
@@ -2230,6 +2575,59 @@ class CompositionEngine:
 
         inst_map = GENRE_INSTRUMENTS.get(config.genre, {})
 
+        # ── Gradual Orchestration Protocol: compute intro layer plan ──────────
+        # Attaches a temporary IntroLayerPlan to config so track generators can
+        # read entry thresholds and seed material without changing their signatures.
+        # The plan controls WHEN each layer enters the intro (e.g. bass at 25 %,
+        # kick at 50 %) and provides real commercial harmonic/rhythm DNA from seeds.
+        _intro_bars = next((b for s, b in structure if s == 'intro'), 0)
+        config._intro_plan = None
+        if _intro_bars > 0:
+            try:
+                from src.composition.billboard.gradual_orchestration import (
+                    GradualOrchestrationProtocol,
+                )
+                config._intro_plan = GradualOrchestrationProtocol.build(
+                    genre        = config.genre,
+                    seeds        = self.seeds,
+                    genre_seeds  = dict(self.genre_seeds),
+                    section_bars = _intro_bars,
+                )
+            except Exception:
+                config._intro_plan = None  # graceful fallback: generators use legacy logic
+
+        # ── Outro de-orchestration plan ───────────────────────────────────────────
+        # Mirrors the intro GradualOrchestrationProtocol but in reverse: elements
+        # exit in the reverse order of their intro entry, implementing the arch-form
+        # Reverse Principle.  Two-stage fade (global + per-element pre-exit).
+        _outro_bars = next((b for s, b in structure if s == 'outro'), 0)
+        config._outro_plan = None
+        if _outro_bars > 0:
+            try:
+                from src.composition.billboard.gradual_de_orchestration import (
+                    GradualDeOrchestrationProtocol,
+                )
+                config._outro_plan = GradualDeOrchestrationProtocol.build(
+                    genre        = config.genre,
+                    section_bars = _outro_bars,
+                )
+            except Exception:
+                config._outro_plan = None   # generators fall back to simple linear fade
+
+        # ── Per-song bass selection (instrument + rhythmic archetype + palette) ─
+        # BassArchitect draws a random GM program from a genre-specific pool and
+        # a distinct rhythmic archetype so every song in a batch has a different
+        # bass timbre and groove feel, not the same hardcoded program/pattern.
+        config._bass_selection = None
+        if _BASS_ARCHITECT_AVAILABLE:
+            try:
+                config._bass_selection = BassArchitect.select(
+                    genre=config.genre,
+                    seed_value=getattr(config, 'seed_value', None) or None,
+                )
+            except Exception:
+                config._bass_selection = None
+
         # ── Generate core tracks ──────────────────────────────────────
         def _gen(t_name, func_name):
             if not config.tracks.get(t_name, {}).get('enabled', False):
@@ -2391,17 +2789,30 @@ class CompositionEngine:
             # Cipher 4 — Anti-Drop Fake-Out: 20% chance of minimalist drop (4 bars)
             tracks = AntiDropFakeOut.apply(tracks, structure, seed=_seed)
 
+        # Clean up temporary per-song selections so serialised configs stay uncluttered.
+        # Generators have already run above; extract the selected program before clearing.
+        config._intro_plan = None
+        config._outro_plan = None
+        _bass_prog = inst_map.get('bass', 33)   # genre default
+        if config._bass_selection:
+            _bass_prog = config._bass_selection[0]
+        # User's explicit GUI instrument choice always overrides the architect's pick
+        _user_bass = config.tracks.get('bass', {}).get('instrument')
+        if _user_bass:
+            _bass_prog = _user_bass
+        config._bass_selection = None  # clear so serialised configs stay uncluttered
+
         track_info = {
             '01_Kick':       {'channel': 9, 'program': 0},
             '02_Percussion': {'channel': 9, 'program': 0},
-            '03_Bass':       {'channel': 0, 'program': config.tracks.get('bass',   {}).get('instrument') or inst_map.get('bass',   33)},
+            '03_Bass':       {'channel': 0, 'program': _bass_prog},
             '04_Melody':     {'channel': 1, 'program': config.tracks.get('lead',   {}).get('instrument') or inst_map.get('lead',   80)},
             '05_Chords':     {'channel': 2, 'program': config.tracks.get('chords', {}).get('instrument') or inst_map.get('chords',  0)},
             '06_Pad':        {'channel': 3, 'program': config.tracks.get('pad',    {}).get('instrument') or inst_map.get('pad',    88)},
-            '07_Arp':        {'channel': 4, 'program': inst_map.get('arp', 80)},
-            '08_Stabs':      {'channel': 5, 'program': inst_map.get('chords', 0)},
-            '09_Texture':    {'channel': 6, 'program': inst_map.get('pad',   88)},
-            '10_FX':         {'channel': 7, 'program': 0},
+            '07_Arp':     {'channel': 4, 'program': config.tracks.get('arp',     {}).get('instrument') or inst_map.get('arp',    80)},
+            '08_Stabs':   {'channel': 5, 'program': config.tracks.get('stabs',   {}).get('instrument') or 55},
+            '09_Texture': {'channel': 6, 'program': config.tracks.get('texture', {}).get('instrument') or 88},
+            '10_FX':      {'channel': 7, 'program': config.tracks.get('fx',      {}).get('instrument') or 96},
         }
 
         return {

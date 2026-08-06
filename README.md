@@ -8,7 +8,7 @@ An AI-powered MIDI composition engine that generates full 10-track instrumentals
 
 ## What it does
 
-Music Architect V7 generates complete MIDI productions for **5 genres** (Trap, Hip-Hop, Pop, House, EDM) through a 3-stage pipeline:
+Music Architect V7 generates complete MIDI productions for **11 genres** (Pop, Trap, Hip-Hop, House, EDM, Cinematic, J-Pop, Phonk, Techno, DnB, Classical) through a 3-stage pipeline:
 
 1. **Generate** — Compose 10-track instrumentals (kick, bass, chords, melody, arp, pads, stabs, FX, percussion, intro) using genre-specific cipher rules and humanization.
 2. **Grade** — Score each track against a 115-point fitness function covering harmonic correctness, rhythmic density, motif variety, macro-dynamics, and polyrhythmic integrity.
@@ -24,6 +24,12 @@ After 3 generations the best tracks get a `vocal_mask=True` sibling — an ident
 |---|---|
 | **Evolutionary loop** | Gen 1 → Gen 2 → Gen 3, each seeded from top 20 % of the previous |
 | **10-track matrix** | Kick · Bass · Chords · Melody · Arp · Pads · Stabs · FX · Percussion · Intro |
+| **Procedural song structure** | `StructureGenerator` builds a randomised but music-theory-valid section sequence per genre on every render — verse-chorus arches, build-drop duality, J-pop pre-chorus law |
+| **Gradual intro orchestration** | `GradualOrchestrationProtocol` layers instruments in one by one at genre-specific thresholds with a velocity ramp — bass, then kick, then hi-hat, then pad |
+| **Gradual outro de-orchestration** | `GradualDeOrchestrationProtocol` exits elements in the reverse intro order (Reverse Principle / arch form) with a two-stage velocity fade |
+| **Section-aware drum routing** | `DrumPatternArchitect` selects different base patterns for verse vs chorus/drop — guaranteeing audible groove contrast — with a per-song snare variation level (0–3) |
+| **8–9 drum patterns per genre** | Each pattern represents a distinct production school with documented music-theory grounding (boom-bap, Dilla, west coast, drill, half-time, rage, bounce, …) |
+| **BassArchitect** | Per-song bass instrument + 16-step rhythmic archetype + note palette selection; 17–18 archetypes for Pop, Hip-Hop, Cinematic; isolated RNG per song |
 | **BillboardIntroMatrix** | 4 commercially proven intro archetypes: `pedal_point`, `syncopated_anticipation`, `four_chord_loop`, `inverted_filter_sweep` |
 | **Harmonic Governor** | Resolves dissonant notes to the nearest scale pitch; configurable per genre |
 | **Bright-scale enforcement** | Commercial pipeline locks Pop/House/EDM to Major, Lydian, Mixolydian, Pentatonic Major — zero dark modes |
@@ -51,8 +57,17 @@ music_architect_v7/
 │   ├── composition/               # Core engine — config, cipher, archetypes
 │   │   ├── composition_engine.py  # Main CompositionEngine class
 │   │   ├── composition_config.py  # CompositionConfig dataclass
-│   │   ├── genre_constants.py     # BPM, scale, instrument maps per genre
-│   │   └── billboard/             # 4 Billboard intro archetype classes
+│   │   ├── genre_constants.py     # BPM, scale, drum patterns, instrument maps (11 genres)
+│   │   ├── structure_generator.py # Procedural randomised song structure per genre
+│   │   ├── bass_architect.py      # Per-song bass archetype + palette selection
+│   │   └── billboard/             # Commercially grounded composition modules
+│   │       ├── gradual_orchestration.py      # Intro layer entry protocol
+│   │       ├── gradual_de_orchestration.py   # Outro reverse-exit protocol
+│   │       ├── drum_pattern_architect.py     # Per-section drum pattern routing
+│   │       ├── pedal_point.py
+│   │       ├── syncopated_anticipation.py
+│   │       ├── four_chord_loop.py
+│   │       └── inverted_filter_sweep.py
 │   ├── generators/                # Per-track note generators (bass, melody, …)
 │   ├── orchestration/             # Batch commander + fitness grader
 │   ├── pipeline/                  # Batch runners
