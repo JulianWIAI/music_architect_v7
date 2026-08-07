@@ -706,6 +706,10 @@ class SeedComposerApp:
             self._vr_frame, "EXPORT MIDI",
             self._export_vocal_midi, S.PINK,
         ).pack(side='left', padx=2)
+        self._cbtn(
+            self._vr_frame, "EXPORT WAV",
+            self._export_vocal_wav, S.PINK,
+        ).pack(side='left', padx=2)
         self._vr_frame.pack_forget()   # hidden until a vocal-ready MIDI is ready
 
         ef = tk.Frame(parent, bg=S.BG2); ef.pack(fill='x', padx=6, pady=2)
@@ -1215,6 +1219,18 @@ class SeedComposerApp:
             import shutil
             shutil.copy2(self.vocal_ready_midi_path, p)
             self._log(f"Vocal-Ready MIDI -> {p}"); self._set_status("VOCAL MIDI EXPORTED", S.PINK)
+
+    def _export_vocal_wav(self):
+        if not self.vocal_ready_wav_path:
+            messagebox.showinfo("", "No vocal-ready WAV available — FluidSynth may be unavailable."); return
+        genre = self.current_composition['config']['genre'] if self.current_composition else 'track'
+        p = filedialog.asksaveasfilename(
+            defaultextension=".wav", filetypes=[("WAV", "*.wav")],
+            initialfile=f"SeedComposer_{genre}_vocal_ready.wav")
+        if p:
+            import shutil
+            shutil.copy2(self.vocal_ready_wav_path, p)
+            self._log(f"Vocal-Ready WAV -> {p}"); self._set_status("VOCAL WAV EXPORTED", S.PINK)
 
     def _export_wav(self):
         if not self.current_composition: messagebox.showinfo("", "Generate first!"); return
