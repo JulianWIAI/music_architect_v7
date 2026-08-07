@@ -59,6 +59,14 @@ from src.gui.collapsible_section import CollapsibleSection
 from src.gui.track_instrument_row import TrackInstrumentRow
 
 try:
+    from src.rendering.fluidsynth_renderer import FluidSynthRenderer
+    _FLUID_RENDERER = FluidSynthRenderer()
+    FLUIDSYNTH_AVAILABLE = _FLUID_RENDERER.is_available()
+except Exception:
+    _FLUID_RENDERER     = None   # type: ignore
+    FLUIDSYNTH_AVAILABLE = False
+
+try:
     from src.export.utau_bridge import export as utau_export, RawNote
     UTAU_AVAILABLE = True
 except ImportError:
@@ -973,9 +981,26 @@ class SeedComposerApp:
                         try: old.unlink()
                         except: pass
 
-                # WAV is NOT rendered automatically — it would take 5-10 min via
-                # FluidSynth.  Use the WAV export button to render on demand.
-                self.msg_queue.put(('gen_done', composition, midi_path, None))
+                # Render WAV via FluidSynth for high-quality playback.
+                # FluidSynth runs non-realtime: a 3-minute song takes ~15-20 s,
+                # not minutes.  The genre selects the best available SF2
+                # (GeneralUser GS for bright genres, Fluid R3 for dark/bass-heavy).
+                _wav_path = None
+                if FLUIDSYNTH_AVAILABLE and _FLUID_RENDERER is not None:
+                    _genre  = getattr(config, 'genre', '')
+                    _sf_name = _FLUID_RENDERER._library.display_name(_genre)
+                    self.msg_queue.put(('gen_progress', 85,
+                                        f'Rendering audio [{_sf_name}]...'))
+                    _wav_out = str(temp_dir / f'preview_{gen_id}.wav')
+                    if _FLUID_RENDERER.render(midi_path, _wav_out, genre=_genre):
+                        _wav_path = _wav_out
+                        # Clean up old WAV previews
+                        for old in temp_dir.glob('preview_*.wav'):
+                            if str(old) != _wav_out:
+                                try: old.unlink()
+                                except: pass
+
+                self.msg_queue.put(('gen_done', composition, midi_path, _wav_path))
             except Exception as e:
                 self.msg_queue.put(('gen_error', str(e)))
 
