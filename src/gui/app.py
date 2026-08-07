@@ -85,6 +85,8 @@ class SeedComposerApp:
         self.current_composition = None
         self.current_midi_path = None
         self.current_wav_path = None
+        self.vocal_ready_midi_path = None
+        self.vocal_ready_wav_path = None
         self.player = MIDIPreviewPlayer()
         self.msg_queue = queue.Queue()
         self.is_generating = False
@@ -199,6 +201,13 @@ class SeedComposerApp:
                            command=self._on_genre_change
                            ).grid(row=i//4, column=i%4, padx=2, pady=2, sticky='ew')
             grid.columnconfigure(i%4, weight=1)
+
+        # SF2 indicator — shows which soundfont will be used for the selected genre
+        self.sf2_indicator = tk.Label(
+            frame, text='', font=S.FN_X, fg=S.TXT_DIM, bg=S.BG2, anchor='w',
+        )
+        self.sf2_indicator.pack(fill='x', padx=2, pady=(2, 0))
+        self._refresh_sf2_indicator('pop')
 
         if FUSION_AVAILABLE and FUSION_PRESETS:
             fusion_frame = tk.Frame(frame, bg=S.BG2)
@@ -624,6 +633,25 @@ class SeedComposerApp:
 
         tk.Frame(frame, bg=S.BG3, height=1).pack(fill='x', pady=(0, 4))
 
+        # ── Output mode checkboxes ────────────────────────────────────
+        # Both checked by default: every generation produces a paired set
+        # (full beat + vocal-ready with open chord voicings and cleared vocal register).
+        mode_row = tk.Frame(frame, bg=S.BG2); mode_row.pack(fill='x', pady=(0, 6))
+        self.gen_full_beat    = tk.BooleanVar(value=True)
+        self.gen_vocal_ready  = tk.BooleanVar(value=True)
+        tk.Checkbutton(
+            mode_row, text="Full Beat", variable=self.gen_full_beat,
+            font=S.FN_S, fg=S.CYAN, bg=S.BG2, selectcolor=S.BG3,
+            activebackground=S.BG2, activeforeground=S.CYAN,
+        ).pack(side='left', padx=(0, 16))
+        tk.Checkbutton(
+            mode_row, text="Vocal-Ready Beat", variable=self.gen_vocal_ready,
+            font=S.FN_S, fg=S.PINK, bg=S.BG2, selectcolor=S.BG3,
+            activebackground=S.BG2, activeforeground=S.PINK,
+        ).pack(side='left')
+        tk.Label(mode_row, text="(open voicings · vocal freq cleared)",
+                 font=S.FN_X, fg=S.TXT_DIM, bg=S.BG2).pack(side='left', padx=(8, 0))
+
         # ── Buttons ──────────────────────────────────────────────────
         r = tk.Frame(frame, bg=S.BG2); r.pack(fill='x', pady=4)
         self.gen_btn = self._cbtn(r, "GENERATE NEW SONG", self._generate,
@@ -659,12 +687,26 @@ class SeedComposerApp:
         self.progress_label.pack(fill='x')
 
         bf = tk.Frame(parent, bg=S.BG2); bf.pack(fill='x', padx=6, pady=4)
-        btn_play = self._cbtn(bf, "PLAY", self._play_preview, S.GREEN, wide=True)
+        btn_play = self._cbtn(bf, "PLAY  Full Beat", self._play_preview, S.GREEN, wide=True)
         btn_play.pack(side='left', padx=2, fill='x', expand=True)
         btn_stop = self._cbtn(bf, "STOP", self._stop_playback, S.RED, wide=True)
         btn_stop.pack(side='left', padx=2, fill='x', expand=True)
         self._tip(btn_play, 'btn_play')
         self._tip(btn_stop, 'btn_stop')
+
+        # Vocal-ready row — visible only after a vocal-ready version has been generated
+        self._vr_frame = tk.Frame(parent, bg=S.BG2)
+        self._vr_frame.pack(fill='x', padx=6, pady=(0, 2))
+        self._btn_play_vr = self._cbtn(
+            self._vr_frame, "PLAY  Vocal-Ready Beat",
+            self._play_vocal_ready, S.PINK, wide=True,
+        )
+        self._btn_play_vr.pack(side='left', padx=2, fill='x', expand=True)
+        self._cbtn(
+            self._vr_frame, "EXPORT MIDI",
+            self._export_vocal_midi, S.PINK,
+        ).pack(side='left', padx=2)
+        self._vr_frame.pack_forget()   # hidden until a vocal-ready MIDI is ready
 
         ef = tk.Frame(parent, bg=S.BG2); ef.pack(fill='x', padx=6, pady=2)
         btn_midi = self._cbtn(ef, "MIDI", self._export_midi, S.PURPLE, wide=True)
@@ -744,6 +786,15 @@ class SeedComposerApp:
         st = 'disabled' if self.chord_auto.get() else 'readonly'
         self.chord_root.configure(state=st); self.chord_quality.configure(state=st)
 
+    def _refresh_sf2_indicator(self, genre: str) -> None:
+        if not hasattr(self, 'sf2_indicator'):
+            return
+        if FLUIDSYNTH_AVAILABLE and _FLUID_RENDERER is not None:
+            sf_name = _FLUID_RENDERER._library.display_name(genre)
+            self.sf2_indicator.config(text=f'SF2: {sf_name}', fg=S.CYAN)
+        else:
+            self.sf2_indicator.config(text='SF2: not available', fg=S.TXT_DIM)
+
     def _on_genre_change(self):
         genre = self.genre_var.get()
         defaults = GENRE_INSTRUMENTS.get(genre, GENRE_INSTRUMENTS.get('pop', {}))
@@ -751,6 +802,7 @@ class SeedComposerApp:
             if track in self.track_vars and self.track_vars[track]['instrument']:
                 name = GM_INSTRUMENTS.get(prog, "Piano")
                 self.track_vars[track]['instrument'].set(f"{prog}: {name}")
+        self._refresh_sf2_indicator(genre)
         self._log(f"Genre -> {genre.upper()}")
 
     def _random_seed(self):
@@ -964,43 +1016,79 @@ class SeedComposerApp:
         config = self._build_config()
         gen_id = self.generation_counter
 
+        want_full   = self.gen_full_beat.get()
+        want_vocal  = self.gen_vocal_ready.get()
+        if not want_full and not want_vocal:
+            # Guard: at least one must be selected
+            want_full = True
+
         def _worker():
             try:
-                self.msg_queue.put(('gen_progress', 10, "Building chord progression..."))
-                composition = self.engine.compose(config)
-                self.msg_queue.put(('gen_progress', 80, "Exporting MIDI..."))
-
                 temp_dir = Path(APP_DIR) / "temp_output"
                 temp_dir.mkdir(exist_ok=True)
-                midi_path = str(temp_dir / f"preview_{gen_id}.mid")
-                self.engine.export_midi(composition, midi_path)
+                _genre = getattr(config, 'genre', '')
 
-                # Clean up old temp MIDI files (keep only the latest)
+                # ── Full Beat ──────────────────────────────────────────
+                midi_path = None
+                _wav_path = None
+                if want_full:
+                    self.msg_queue.put(('gen_progress', 10, "Composing full beat..."))
+                    config.vocal_mask = False
+                    composition = self.engine.compose(config)
+                    self.msg_queue.put(('gen_progress', 60, "Exporting full beat MIDI..."))
+                    midi_path = str(temp_dir / f"preview_{gen_id}.mid")
+                    self.engine.export_midi(composition, midi_path)
+                else:
+                    # We still need a composition object for the display
+                    self.msg_queue.put(('gen_progress', 10, "Composing..."))
+                    config.vocal_mask = False
+                    composition = self.engine.compose(config)
+
+                # ── Vocal-Ready Beat ───────────────────────────────────
+                vocal_midi_path = None
+                vocal_wav_path  = None
+                if want_vocal:
+                    self.msg_queue.put(('gen_progress', 65, "Composing vocal-ready version..."))
+                    config.vocal_mask = True
+                    vr_composition = self.engine.compose(config)
+                    config.vocal_mask = False   # restore
+                    vocal_midi_path = str(temp_dir / f"preview_{gen_id}_vocal.mid")
+                    self.engine.export_midi(vr_composition, vocal_midi_path)
+
+                # Clean up old temp MIDI files (keep only the latest pair)
                 for old in temp_dir.glob("preview_*.mid"):
-                    if str(old) != midi_path:
+                    if str(old) not in (midi_path, vocal_midi_path):
                         try: old.unlink()
                         except: pass
 
-                # Render WAV via FluidSynth for high-quality playback.
-                # FluidSynth runs non-realtime: a 3-minute song takes ~15-20 s,
-                # not minutes.  The genre selects the best available SF2
-                # (GeneralUser GS for bright genres, Fluid R3 for dark/bass-heavy).
-                _wav_path = None
+                # ── FluidSynth WAV render ──────────────────────────────
                 if FLUIDSYNTH_AVAILABLE and _FLUID_RENDERER is not None:
-                    _genre  = getattr(config, 'genre', '')
                     _sf_name = _FLUID_RENDERER._library.display_name(_genre)
-                    self.msg_queue.put(('gen_progress', 85,
-                                        f'Rendering audio [{_sf_name}]...'))
-                    _wav_out = str(temp_dir / f'preview_{gen_id}.wav')
-                    if _FLUID_RENDERER.render(midi_path, _wav_out, genre=_genre):
-                        _wav_path = _wav_out
-                        # Clean up old WAV previews
-                        for old in temp_dir.glob('preview_*.wav'):
-                            if str(old) != _wav_out:
-                                try: old.unlink()
-                                except: pass
+                    if want_full and midi_path:
+                        self.msg_queue.put(('gen_progress', 75,
+                                            f'Rendering full beat [{_sf_name}]...'))
+                        _wav_out = str(temp_dir / f'preview_{gen_id}.wav')
+                        if _FLUID_RENDERER.render(midi_path, _wav_out, genre=_genre):
+                            _wav_path = _wav_out
+                    if want_vocal and vocal_midi_path:
+                        self.msg_queue.put(('gen_progress', 90,
+                                            f'Rendering vocal-ready [{_sf_name}]...'))
+                        _vr_wav_out = str(temp_dir / f'preview_{gen_id}_vocal.wav')
+                        if _FLUID_RENDERER.render(vocal_midi_path, _vr_wav_out, genre=_genre):
+                            vocal_wav_path = _vr_wav_out
 
-                self.msg_queue.put(('gen_done', composition, midi_path, _wav_path))
+                # Clean up old WAV previews
+                keep_wavs = {_wav_path, vocal_wav_path} - {None}
+                for old in temp_dir.glob('preview_*.wav'):
+                    if str(old) not in keep_wavs:
+                        try: old.unlink()
+                        except: pass
+
+                self.msg_queue.put((
+                    'gen_done', composition,
+                    midi_path, _wav_path,
+                    vocal_midi_path, vocal_wav_path,
+                ))
             except Exception as e:
                 self.msg_queue.put(('gen_error', str(e)))
 
@@ -1087,7 +1175,23 @@ class SeedComposerApp:
             msg = "Install pygame for playback:\npip install pygame" if not PYGAME_AVAILABLE else "Playback failed"
             self._log(msg)
 
+    def _play_vocal_ready(self):
+        if not self.vocal_ready_midi_path and not self.vocal_ready_wav_path:
+            self._log("No vocal-ready version available — generate first.")
+            return
+        if self.vocal_ready_wav_path and os.path.exists(self.vocal_ready_wav_path):
+            success = self.player.play_wav(self.vocal_ready_wav_path)
+        else:
+            success = self.player.play_midi(self.vocal_ready_midi_path)
+        if success:
+            self._set_status("PLAYING  Vocal-Ready", S.PINK)
+        else:
+            self._log("Vocal-ready playback failed.")
+
     def _stop_playback(self):
+        # Cancel any in-progress FluidSynth render (kills the subprocess)
+        if FLUIDSYNTH_AVAILABLE and _FLUID_RENDERER is not None:
+            _FLUID_RENDERER.cancel()
         self.player.stop()
         self._set_status("STOPPED", S.YELLOW)
 
@@ -1099,6 +1203,18 @@ class SeedComposerApp:
         if p:
             self.engine.export_midi(self.current_composition, p)
             self._log(f"MIDI -> {p}"); self._set_status("MIDI EXPORTED", S.GREEN)
+
+    def _export_vocal_midi(self):
+        if not self.vocal_ready_midi_path:
+            messagebox.showinfo("", "No vocal-ready version generated yet."); return
+        genre = self.current_composition['config']['genre'] if self.current_composition else 'track'
+        p = filedialog.asksaveasfilename(
+            defaultextension=".mid", filetypes=[("MIDI", "*.mid")],
+            initialfile=f"SeedComposer_{genre}_vocal_ready.mid")
+        if p:
+            import shutil
+            shutil.copy2(self.vocal_ready_midi_path, p)
+            self._log(f"Vocal-Ready MIDI -> {p}"); self._set_status("VOCAL MIDI EXPORTED", S.PINK)
 
     def _export_wav(self):
         if not self.current_composition: messagebox.showinfo("", "Generate first!"); return
@@ -1163,18 +1279,29 @@ class SeedComposerApp:
             self.progress_label.configure(text=msg[2])
             self._info_add(f"  {msg[2]}\n", 'dim')
         elif t == 'gen_done':
-            _, comp, midi, wav = msg
-            self.current_composition = comp
-            self.current_midi_path = midi
-            self.current_wav_path = wav   # None unless WAV was explicitly rendered
+            _, comp, midi, wav, vocal_midi, vocal_wav = msg
+            self.current_composition  = comp
+            self.current_midi_path    = midi
+            self.current_wav_path     = wav
+            self.vocal_ready_midi_path = vocal_midi
+            self.vocal_ready_wav_path  = vocal_wav
             self.is_generating = False
             self.progress_var.set(100)
             self.progress_label.configure(text="Done!")
             self._display_composition(comp)
-            self._set_status("READY — Play (MIDI) or export WAV/MIDI", S.GREEN)
+            # Show/hide the vocal-ready play button based on whether it was generated
+            if vocal_midi:
+                self._vr_frame.pack(fill='x', padx=6, pady=(0, 2))
+            else:
+                self._vr_frame.pack_forget()
+            parts = ["Full Beat" if midi else None, "Vocal-Ready" if vocal_midi else None]
+            label = " + ".join(p for p in parts if p)
+            self._set_status(f"READY — {label} generated", S.GREEN)
             c = comp['config']
             self._log(f"✓ {c['genre'].upper()} | {c['bpm']} BPM | {c['key']} | "
                       f"{comp['total_bars']} bars | {comp['duration_seconds']:.1f}s")
+            if vocal_midi:
+                self._log(f"  Vocal-ready MIDI → {vocal_midi}")
 
             if self.bpm_auto.get():
                 self.bpm_scale.configure(state='normal')

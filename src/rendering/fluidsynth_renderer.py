@@ -8,10 +8,17 @@ SF2 selection is delegated to SoundFontLibrary, which routes each genre to the
 most appropriate installed font:
   - GeneralUser GS  → pop, j-pop, edm, house, classical  (bright, melodic)
   - Fluid R3 GM     → trap, hip-hop, cinematic, phonk, techno, dnb  (punchy, dark)
+  - Arachno SF v1.0 → cinematic, classical  (rich orchestral)
+
+The `-a null` audio driver flag is critical: without it FluidSynth opens the
+system audio device and renders in real-time (3 min song = 3 min wait + audio
+playing through speakers).  With `-a null` it writes the WAV at CPU speed
+(~15-20 s for a 3-minute song) and produces no speaker output.
 """
 
 import os
 import subprocess
+import threading
 from typing import Optional
 
 from src.rendering.soundfont_library import SoundFontLibrary
@@ -26,6 +33,9 @@ class FluidSynthRenderer:
 
     SF2 is chosen per render() call based on the genre argument, so a batch
     of songs with different genres each gets the most appropriate timbre.
+
+    The active subprocess is stored so cancel() can kill it mid-render when
+    the user clicks Stop during generation.
     """
 
     def __init__(self, soundfont_path: Optional[str] = None) -> None:
@@ -35,6 +45,8 @@ class FluidSynthRenderer:
             else None
         )
         self._library = SoundFontLibrary()
+        self._current_proc: Optional[subprocess.Popen] = None
+        self._proc_lock = threading.Lock()
 
     # ── Availability ──────────────────────────────────────────────────────────
 
@@ -55,6 +67,13 @@ class FluidSynthRenderer:
         if self._override:
             return f'Using override SF2: {self._override}'
         return self._library.summary()
+
+    def cancel(self) -> None:
+        """Kill any in-progress render subprocess immediately."""
+        with self._proc_lock:
+            if self._current_proc and self._current_proc.poll() is None:
+                self._current_proc.kill()
+                self._current_proc = None
 
     # ── Rendering ─────────────────────────────────────────────────────────────
 
@@ -78,7 +97,7 @@ class FluidSynthRenderer:
 
         Returns
         -------
-        True on success, False if FluidSynth is unavailable or rendering fails.
+        True on success, False if FluidSynth is unavailable, cancelled, or failing.
         """
         if not self.is_available():
             return False
@@ -87,16 +106,32 @@ class FluidSynthRenderer:
         if not sf2:
             return False
 
+        cmd = [
+            'fluidsynth',
+            '-ni',               # non-interactive, no MIDI input
+            '-a', 'null',        # null audio driver: no speaker output, enables non-realtime speed
+            sf2, midi_path,
+            '-F', wav_path,
+            '-r', str(sample_rate),
+            '-g', '0.8',
+        ]
+
         try:
-            cmd = [
-                'fluidsynth', '-ni',
-                sf2, midi_path,
-                '-F', wav_path,
-                '-r', str(sample_rate),
-                '-g', '0.8',
-            ]
-            result = subprocess.run(cmd, capture_output=True, timeout=120)
-            return result.returncode == 0 and os.path.exists(wav_path)
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            with self._proc_lock:
+                self._current_proc = proc
+            try:
+                proc.communicate(timeout=120)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.communicate()
+                return False
+            finally:
+                with self._proc_lock:
+                    if self._current_proc is proc:
+                        self._current_proc = None
+
+            return proc.returncode == 0 and os.path.exists(wav_path)
         except Exception as e:
             print(f'FluidSynth render error: {e}')
             return False

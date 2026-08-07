@@ -14,7 +14,7 @@ Music Architect V7 generates complete MIDI productions for **11 genres** (Pop, T
 2. **Grade** — Score each track against a 115-point fitness function covering harmonic correctness, rhythmic density, motif variety, macro-dynamics, and polyrhythmic integrity.
 3. **Evolve** — Keep the top 20 % as "golden seeds", mutate them slightly, and use them as the starting point for the next generation.
 
-After 3 generations the best tracks get a `vocal_mask=True` sibling — an identical arrangement with the melody track muted, ready for a vocalist to record over.
+After 3 generations the best tracks automatically receive a `vocal_ready` sibling — the same arrangement with open chord voicings (root + 5th + octave shell) and the vocal frequency register (C4–C6) cleared in verse, chorus, and hook sections, ready for a vocalist to record over.
 
 ---
 
@@ -24,7 +24,12 @@ After 3 generations the best tracks get a `vocal_mask=True` sibling — an ident
 |---|---|
 | **Evolutionary loop** | Gen 1 → Gen 2 → Gen 3, each seeded from top 20 % of the previous |
 | **10-track matrix** | Kick · Bass · Chords · Melody · Arp · Pads · Stabs · FX · Percussion · Intro |
-| **Procedural song structure** | `StructureGenerator` builds a randomised but music-theory-valid section sequence per genre on every render — verse-chorus arches, build-drop duality, J-pop pre-chorus law |
+| **Dual output mode** | GUI generates both a Full Beat and a Vocal-Ready Beat in a single press — independently selectable via checkboxes; same seed guarantees a perfectly paired set |
+| **Vocal-Ready processing** | `vocal_mask=True` applies open chord voicings, clears C4–C6 in melody/arp/bass/texture tracks at verse/chorus/hook sections; mathematically validated in `vocal_mask_math.py` |
+| **Multi-SF2 genre routing** | `SoundFontLibrary` auto-discovers installed SF2s and routes each genre to the optimal timbre: Fluid R3 GM (trap/hip-hop/techno/dnb/phonk), GeneralUser GS (pop/j-pop/edm/house), Arachno SF v1.0 (cinematic/classical) |
+| **Non-realtime WAV rendering** | FluidSynth renders via `-a null` driver — no speaker output during export, CPU-speed rendering (~15–20 s for a 3-minute song); subprocess is cancellable via the Stop button |
+| **SF2 indicator** | Genre selector shows the active soundfont for the current genre in real time |
+| **Procedural song structure** | `StructureGenerator` builds a randomised but music-theory-valid section sequence per genre — verse-chorus arches, build-drop duality, J-pop pre-chorus law |
 | **Gradual intro orchestration** | `GradualOrchestrationProtocol` layers instruments in one by one at genre-specific thresholds with a velocity ramp — bass, then kick, then hi-hat, then pad |
 | **Gradual outro de-orchestration** | `GradualDeOrchestrationProtocol` exits elements in the reverse intro order (Reverse Principle / arch form) with a two-stage velocity fade |
 | **Section-aware drum routing** | `DrumPatternArchitect` selects different base patterns for verse vs chorus/drop — guaranteeing audible groove contrast — with a per-song snare variation level (0–3) |
@@ -35,7 +40,7 @@ After 3 generations the best tracks get a `vocal_mask=True` sibling — an ident
 | **Bright-scale enforcement** | Commercial pipeline locks Pop/House/EDM to Major, Lydian, Mixolydian, Pentatonic Major — zero dark modes |
 | **Velocity LSB watermarking** | Hides a per-file cryptographic fingerprint in note velocities (±1 delta, inaudible) |
 | **UTAU export** | Melody track exported as `.ustx` for UTAU/OpenUtau vocal synthesis |
-| **GUI** | Tkinter interface for single-track generation with live parameter control |
+| **GUI** | Tkinter interface with AI prompt decoder, live SF2 indicator, dual beat/vocal-ready generation, and FluidSynth WAV preview |
 
 ---
 
@@ -56,7 +61,7 @@ music_architect_v7/
 ├── src/
 │   ├── composition/               # Core engine — config, cipher, archetypes
 │   │   ├── composition_engine.py  # Main CompositionEngine class
-│   │   ├── composition_config.py  # CompositionConfig dataclass
+│   │   ├── composition_config.py  # CompositionConfig dataclass (vocal_mask flag)
 │   │   ├── genre_constants.py     # BPM, scale, drum patterns, instrument maps (11 genres)
 │   │   ├── structure_generator.py # Procedural randomised song structure per genre
 │   │   ├── bass_architect.py      # Per-song bass archetype + palette selection
@@ -68,7 +73,7 @@ music_architect_v7/
 │   │       ├── syncopated_anticipation.py
 │   │       ├── four_chord_loop.py
 │   │       └── inverted_filter_sweep.py
-│   ├── generators/                # Per-track note generators (bass, melody, …)
+│   ├── generators/                # Per-track note generators (bass, melody, arp, …)
 │   ├── orchestration/             # Batch commander + fitness grader
 │   ├── pipeline/                  # Batch runners
 │   │   ├── omni_render.py         # Evolutionary pipeline (Trap / Hip-Hop)
@@ -77,10 +82,13 @@ music_architect_v7/
 │   │   └── watermark_engine.py    # Dual-layer MIDI watermarking
 │   ├── arrangement/               # Genre fusion and smart arrangement
 │   ├── rendering/                 # WAV + FluidSynth export
+│   │   ├── fluidsynth_renderer.py # Non-realtime FluidSynth renderer with cancel()
+│   │   └── soundfont_library.py   # SF2 discovery + genre-based routing (3-font split)
 │   ├── ingestion/                 # MIDI seed ingestion and analysis
 │   ├── patterns/                  # Euclidean patterns, extractors, generators
 │   ├── core/                      # Orchestrator, quantizer, context manager
 │   ├── utils/                     # Humanizer, voice-leading, polyrhythm engine
+│   │   └── vocal_mask_math.py     # Open voicing + vocal register math (C4–C6)
 │   └── gui/                       # Tkinter GUI application
 └── tests/
 ```
@@ -100,7 +108,17 @@ For audio preview inside the GUI (optional):
 pip install pygame
 ```
 
-For MIDI playback / rendering to WAV, place a SoundFont (`.sf2`) in the project root or point the renderer to your system's font.
+### SoundFonts (optional — required for WAV rendering)
+
+Install [FluidSynth](https://www.fluidsynth.org/) and place SF2 files in `C:\SoundFonts\`. The renderer auto-discovers installed fonts and routes each genre to the best available timbre:
+
+| SoundFont | Genres | License |
+|---|---|---|
+| `FluidR3_GM.sf2` | Trap · Hip-Hop · Phonk · Techno · DnB | MIT |
+| `GeneralUser GS v1.472.sf2` | Pop · J-Pop · EDM · House | Free (S. Christian Collins) |
+| `Arachno SoundFont - Version 1.0.sf2` | Cinematic · Classical | Verify before commercial use |
+
+The system falls back to whichever font is available, so partial installations still render audio.
 
 ---
 
@@ -110,6 +128,8 @@ For MIDI playback / rendering to WAV, place a SoundFont (`.sf2`) in the project 
 ```bash
 python main.py
 ```
+
+Select a genre — the SF2 indicator below the genre buttons shows which soundfont will be used. Check **Full Beat** and/or **Vocal-Ready Beat** before clicking Generate. Both are selected by default, producing a paired MIDI set from the same seed in a single generation pass.
 
 ### Evolutionary batch — Trap & Hip-Hop
 Runs a 3-generation pipeline: Gen1 (100 tracks) → Gen2 (250) → Gen3 (500), then generates `vocal_mask=True` siblings for all tracks above the fitness floor.
@@ -130,6 +150,22 @@ Applies a dual-layer watermark to every `.mid` file in the output folders and sa
 python main.py watermark
 python main.py watermark --extract Watermarked_Catalog/pop/track_001.mid
 ```
+
+---
+
+## Vocal-Ready Mode
+
+When `vocal_mask=True` is active the following changes are applied relative to the full beat:
+
+| Track | Transformation |
+|---|---|
+| Chords | Open voicing: root + 5th + octave shell (3rd dropped to clear mid-register) |
+| Melody | Notes in C4–C6 removed in verse / chorus / hook sections |
+| Arp | Notes in C4–C6 removed in verse / chorus / hook sections |
+| Bass | Upper octave excursions above C3 trimmed in vocal sections |
+| Texture / Pads | Density reduced in the vocal register |
+
+The seed is identical to the full beat, so the two files are structurally and harmonically paired — the vocal-ready version is a true instrumental backing track, not a separate composition.
 
 ---
 
@@ -169,4 +205,5 @@ python main.py watermark --extract path/to/track.mid
 - `MIDIUtil` — MIDI event generation
 - `tkinter` — GUI
 - `pygame` — optional audio preview
-- `FluidSynth` / `soundfile` — optional WAV rendering
+- `FluidSynth` — optional non-realtime WAV rendering (via `-a null` driver)
+- `soundfile` — WAV I/O
