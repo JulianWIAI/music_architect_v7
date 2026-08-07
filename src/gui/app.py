@@ -1026,6 +1026,12 @@ class SeedComposerApp:
             # Guard: at least one must be selected
             want_full = True
 
+        # Pin a shared seed so both compose() calls produce the same structure
+        # and harmonic content — the vocal-ready version is a true paired variant,
+        # not a different song with vocal_mask applied.
+        if want_vocal and config.seed_value is None:
+            config.seed_value = random.randint(1, 999999)
+
         def _worker():
             try:
                 temp_dir = Path(APP_DIR) / "temp_output"
