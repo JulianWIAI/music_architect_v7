@@ -1605,6 +1605,33 @@ class SeedComposerApp:
 
     # ── Scaffold export ───────────────────────────────────────────
 
+    @staticmethod
+    def _to_monophonic(notes: list, tolerance: float = 0.02) -> list:
+        """Collapse polyphonic note lists to a single singable lead line.
+
+        Notes that start within `tolerance` beats of each other are treated
+        as simultaneous (a chord).  From each chord only the highest-pitched
+        note is kept — that is the note a vocalist would sing.  The rest are
+        harmonic support and have no place in a lyric scaffold.
+
+        tolerance=0.02 beats ≈ 6 ms at 200 BPM — safely below any intentional
+        stagger between successive melody notes.
+        """
+        if not notes:
+            return []
+        sorted_notes = sorted(notes, key=lambda n: n[0])
+        groups: list[list] = []
+        current: list = [sorted_notes[0]]
+        for note in sorted_notes[1:]:
+            if note[0] - current[0][0] <= tolerance:
+                current.append(note)
+            else:
+                groups.append(current)
+                current = [note]
+        groups.append(current)
+        # Keep only the highest pitch from each simultaneous group
+        return [max(g, key=lambda n: n[2]) for g in groups]
+
     def _export_lyric_scaffold(self):
         # Priority: external MIDI > vocal-ready composition > full beat
         if self._external_midi_notes:
@@ -1649,8 +1676,14 @@ class SeedComposerApp:
                 "Generate a song or load an external MIDI file first.")
             return
 
+        # Reduce polyphonic melody to a single singable lead line.
+        # Simultaneous notes (chords / harmonic support) are collapsed to
+        # the highest pitch only — the note a vocalist would actually sing.
+        raw_count  = len(notes_raw)
+        notes_mono = self._to_monophonic(notes_raw)
+
         notes_out = []
-        for i, (beat_pos, dur_beats, pitch, vel) in enumerate(notes_raw):
+        for i, (beat_pos, dur_beats, pitch, vel) in enumerate(notes_mono):
             notes_out.append({
                 "note_index":     i,
                 "beat_position":  round(float(beat_pos), 4),
@@ -1688,7 +1721,8 @@ class SeedComposerApp:
         with open(p, 'w', encoding='utf-8') as f:
             json.dump(scaffold, f, indent=2, ensure_ascii=False)
 
-        self._log(f"Lyric scaffold -> {p}  ({len(notes_out)} notes)")
+        reduction = f"{raw_count} → {len(notes_out)}" if raw_count != len(notes_out) else str(len(notes_out))
+        self._log(f"Lyric scaffold -> {p}  ({reduction} notes, polyphony collapsed to lead line)")
         self._set_status("SCAFFOLD EXPORTED — fill lyrics with AI", S.CYAN)
 
     def _import_lyrics_json(self):
