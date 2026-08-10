@@ -87,6 +87,7 @@ class SeedComposerApp:
         self.current_wav_path = None
         self.vocal_ready_midi_path = None
         self.vocal_ready_wav_path = None
+        self.vocal_ready_composition = None
         self.player = MIDIPreviewPlayer()
         self.msg_queue = queue.Queue()
         self.is_generating = False
@@ -95,6 +96,9 @@ class SeedComposerApp:
         self.generation_counter = 0
         self._lyrics_json: dict = {}        # filled-out lyric scaffold from AI
         self._lyric_file_label: tk.Label   # declared; created in _build_utau_section
+        self._external_midi_path: str | None = None
+        self._external_midi_notes: list | None = None
+        self._external_midi_bpm: int = 120
         self._cipher = SemanticCipher() if PROMPT_DECODER_AVAILABLE else None
 
         self._build_gui()
@@ -1057,6 +1061,7 @@ class SeedComposerApp:
                 # ── Vocal-Ready Beat ───────────────────────────────────
                 vocal_midi_path = None
                 vocal_wav_path  = None
+                vr_composition  = None
                 if want_vocal:
                     self.msg_queue.put(('gen_progress', 65, "Composing vocal-ready version..."))
                     config.vocal_mask = True
@@ -1098,6 +1103,7 @@ class SeedComposerApp:
                     'gen_done', composition,
                     midi_path, _wav_path,
                     vocal_midi_path, vocal_wav_path,
+                    vr_composition,
                 ))
             except Exception as e:
                 self.msg_queue.put(('gen_error', str(e)))
@@ -1301,12 +1307,13 @@ class SeedComposerApp:
             self.progress_label.configure(text=msg[2])
             self._info_add(f"  {msg[2]}\n", 'dim')
         elif t == 'gen_done':
-            _, comp, midi, wav, vocal_midi, vocal_wav = msg
-            self.current_composition  = comp
-            self.current_midi_path    = midi
-            self.current_wav_path     = wav
-            self.vocal_ready_midi_path = vocal_midi
-            self.vocal_ready_wav_path  = vocal_wav
+            _, comp, midi, wav, vocal_midi, vocal_wav, vr_comp = msg
+            self.current_composition    = comp
+            self.current_midi_path      = midi
+            self.current_wav_path       = wav
+            self.vocal_ready_midi_path  = vocal_midi
+            self.vocal_ready_wav_path   = vocal_wav
+            self.vocal_ready_composition = vr_comp
             self.is_generating = False
             self.progress_var.set(100)
             self.progress_label.configure(text="Done!")
@@ -1324,6 +1331,7 @@ class SeedComposerApp:
                       f"{comp['total_bars']} bars | {comp['duration_seconds']:.1f}s")
             if vocal_midi:
                 self._log(f"  Vocal-ready MIDI → {vocal_midi}")
+            self._update_scaffold_source_label()
 
             if self.bpm_auto.get():
                 self.bpm_scale.configure(state='normal')
@@ -1430,6 +1438,24 @@ class SeedComposerApp:
         self._cbtn(r1, "EXPORT LYRIC SCAFFOLD JSON", self._export_lyric_scaffold,
                    S.CYAN, wide=True).pack(side='left', fill='x', expand=True, padx=(0, 4))
 
+        # External MIDI loader — lets the user scaffold any .mid from disk
+        ext_row = tk.Frame(frame, bg=S.BG2); ext_row.pack(fill='x', pady=(2, 0))
+        self._cbtn(ext_row, "LOAD MIDI FROM FILE", self._load_external_midi,
+                   S.ORANGE).pack(side='left', padx=(0, 6))
+        self._ext_midi_label = tk.Label(ext_row, text="No file loaded",
+                                        font=S.FN_X, fg=S.TXT_DIM, bg=S.BG2, anchor='w')
+        self._ext_midi_label.pack(side='left', fill='x', expand=True)
+        self._clear_ext_btn = self._cbtn(ext_row, "✕", self._clear_external_midi, S.TXT_DIM)
+        # hidden until a file is loaded
+        self._clear_ext_btn.pack_forget()
+
+        # Live source indicator — shows which MIDI will feed the scaffold
+        self._scaffold_source_label = tk.Label(
+            frame, text="Source: none — generate a song or load a MIDI",
+            font=S.FN_X, fg=S.TXT_DIM, bg=S.BG2, anchor='w',
+        )
+        self._scaffold_source_label.pack(fill='x', pady=(2, 4))
+
         # ── Step 2 ────────────────────────────────────────────────
         tk.Frame(frame, bg=S.BG3, height=1).pack(fill='x', pady=4)
         tk.Label(frame, text="② Upload AI-filled JSON with syllables / lyrics",
@@ -1471,50 +1497,189 @@ class SeedComposerApp:
         octave = (midi // 12) - 1
         return f"{names[midi % 12]}{octave}"
 
+    # ── External MIDI helpers ─────────────────────────────────────
+
+    @staticmethod
+    def _parse_midi_melody(path: str):
+        """Return (notes, bpm) from a MIDI file, auto-detecting the melody track.
+
+        notes: list of (beat_pos, duration_beats, pitch_midi, velocity)
+        Detection order: channel 2 (Music Architect melody) → channel with
+        most notes in the singable range (C3–C6) → channel with most notes.
+        Channel 9 (drums) is always excluded.
+        """
+        import mido
+        mid = mido.MidiFile(path)
+        tpb = mid.ticks_per_beat or 480
+
+        tempo = 500000  # 120 BPM default
+        for track in mid.tracks:
+            for msg in track:
+                if msg.type == 'set_tempo':
+                    tempo = msg.tempo
+                    break
+
+        bpm = round(60_000_000 / tempo)
+
+        notes_by_ch: dict = {}
+        for track in mid.tracks:
+            tick = 0
+            active: dict = {}
+            for msg in track:
+                tick += msg.time
+                if msg.type == 'note_on' and msg.velocity > 0:
+                    active[(msg.channel, msg.note)] = (tick, msg.velocity)
+                elif msg.type == 'note_off' or (msg.type == 'note_on' and msg.velocity == 0):
+                    key = (msg.channel, msg.note)
+                    if key in active:
+                        start, vel = active.pop(key)
+                        notes_by_ch.setdefault(msg.channel, []).append(
+                            (start, tick - start, msg.note, vel)
+                        )
+
+        notes_by_ch.pop(9, None)   # drop drums
+        if not notes_by_ch:
+            return [], bpm
+
+        if 2 in notes_by_ch and notes_by_ch[2]:
+            chosen = notes_by_ch[2]
+        else:
+            def _score(ch):
+                return sum(1 for _, _, p, _ in notes_by_ch[ch] if 48 <= p <= 84)
+            best = max(notes_by_ch, key=lambda ch: (_score(ch), len(notes_by_ch[ch])))
+            chosen = notes_by_ch[best]
+
+        notes = sorted(
+            [(s / tpb, d / tpb, p, v) for s, d, p, v in chosen],
+            key=lambda x: x[0],
+        )
+        return notes, bpm
+
+    def _load_external_midi(self):
+        p = filedialog.askopenfilename(
+            filetypes=[("MIDI files", "*.mid *.midi"), ("All files", "*.*")],
+            title="Select MIDI file for lyric scaffold",
+        )
+        if not p:
+            return
+        try:
+            notes, bpm = self._parse_midi_melody(p)
+        except Exception as e:
+            messagebox.showerror("MIDI parse error", str(e)); return
+        if not notes:
+            messagebox.showwarning("No melody found",
+                "Could not detect a melody track in this MIDI file."); return
+        self._external_midi_path  = p
+        self._external_midi_notes = notes
+        self._external_midi_bpm   = bpm
+        fname = os.path.basename(p)
+        self._ext_midi_label.configure(text=fname, fg=S.GREEN)
+        self._clear_ext_btn.pack(side='left', padx=2)
+        self._update_scaffold_source_label()
+        self._log(f"External MIDI loaded: {fname}  ({len(notes)} melody notes, {bpm} BPM)")
+
+    def _clear_external_midi(self):
+        self._external_midi_path  = None
+        self._external_midi_notes = None
+        self._external_midi_bpm   = 120
+        self._ext_midi_label.configure(text="No file loaded", fg=S.TXT_DIM)
+        self._clear_ext_btn.pack_forget()
+        self._update_scaffold_source_label()
+
+    def _update_scaffold_source_label(self):
+        if not hasattr(self, '_scaffold_source_label'):
+            return
+        if self._external_midi_notes:
+            fname = os.path.basename(self._external_midi_path)
+            self._scaffold_source_label.configure(
+                text=f"Source: {fname}  (external MIDI)", fg=S.ORANGE)
+        elif self.vocal_ready_composition:
+            self._scaffold_source_label.configure(
+                text="Source: Vocal-Ready Beat  (auto-selected)", fg=S.PINK)
+        elif self.current_composition:
+            self._scaffold_source_label.configure(
+                text="Source: Full Beat", fg=S.CYAN)
+        else:
+            self._scaffold_source_label.configure(
+                text="Source: none — generate a song or load a MIDI", fg=S.TXT_DIM)
+
+    # ── Scaffold export ───────────────────────────────────────────
+
     def _export_lyric_scaffold(self):
-        if not self.current_composition:
-            messagebox.showinfo("No composition", "Generate a song first.")
+        # Priority: external MIDI > vocal-ready composition > full beat
+        if self._external_midi_notes:
+            notes_raw = self._external_midi_notes
+            fname     = os.path.basename(self._external_midi_path)
+            song_name = os.path.splitext(fname)[0]
+            meta = {
+                'song_name':  song_name,
+                'genre':      'Unknown',
+                'bpm':        self._external_midi_bpm,
+                'key':        'Unknown',
+                'total_bars': None,
+            }
+        elif self.vocal_ready_composition:
+            comp = self.vocal_ready_composition
+            cfg  = comp['config']
+            notes_raw = sorted(comp['tracks'].get('04_Melody', []), key=lambda n: n[0])
+            if not notes_raw:
+                messagebox.showwarning("No melody", "Vocal-Ready Beat has no melody notes."); return
+            meta = {
+                'song_name':  f"SeedComposer_{cfg['genre']}_vocal_ready",
+                'genre':      cfg['genre'],
+                'bpm':        cfg['bpm'],
+                'key':        cfg['key'],
+                'total_bars': comp['total_bars'],
+            }
+        elif self.current_composition:
+            comp = self.current_composition
+            cfg  = comp['config']
+            notes_raw = sorted(comp['tracks'].get('04_Melody', []), key=lambda n: n[0])
+            if not notes_raw:
+                messagebox.showwarning("No melody", "The composition has no 04_Melody notes."); return
+            meta = {
+                'song_name':  f"SeedComposer_{cfg['genre']}",
+                'genre':      cfg['genre'],
+                'bpm':        cfg['bpm'],
+                'key':        cfg['key'],
+                'total_bars': comp['total_bars'],
+            }
+        else:
+            messagebox.showinfo("No source",
+                "Generate a song or load an external MIDI file first.")
             return
-
-        melody = self.current_composition['tracks'].get('04_Melody', [])
-        if not melody:
-            messagebox.showwarning("No melody", "The composition has no 04_Melody notes.")
-            return
-
-        comp = self.current_composition
-        cfg  = comp['config']
-        melody_sorted = sorted(melody, key=lambda n: n[0])
 
         notes_out = []
-        for i, (beat_pos, dur_beats, pitch, vel) in enumerate(melody_sorted):
+        for i, (beat_pos, dur_beats, pitch, vel) in enumerate(notes_raw):
             notes_out.append({
-                "note_index":    i,
-                "beat_position": round(float(beat_pos), 4),
+                "note_index":     i,
+                "beat_position":  round(float(beat_pos), 4),
                 "duration_beats": round(float(dur_beats), 4),
-                "pitch_midi":    int(pitch),
-                "pitch_name":    self._midi_to_note_name(int(pitch)),
-                "lyric":         "la",
+                "pitch_midi":     int(pitch),
+                "pitch_name":     self._midi_to_note_name(int(pitch)),
+                "lyric":          "la",
             })
 
         scaffold = {
-            "song_name": f"SeedComposer_{cfg['genre']}",
-            "genre":     cfg['genre'],
-            "bpm":       cfg['bpm'],
-            "key":       cfg['key'],
-            "total_bars": comp['total_bars'],
+            "song_name":    meta['song_name'],
+            "genre":        meta['genre'],
+            "bpm":          meta['bpm'],
+            "key":          meta['key'],
             "instructions": (
                 f"Fill each 'lyric' field with ONE syllable that fits the melody. "
-                f"Genre: {cfg['genre'].upper()}, Key: {cfg['key']}, BPM: {cfg['bpm']}. "
+                f"Genre: {meta['genre'].upper()}, Key: {meta['key']}, BPM: {meta['bpm']}. "
                 f"Keep syllables natural and singable. "
                 f"Do NOT change any other fields."
             ),
             "notes": notes_out,
         }
+        if meta['total_bars'] is not None:
+            scaffold["total_bars"] = meta['total_bars']
 
         p = filedialog.asksaveasfilename(
             defaultextension=".json",
             filetypes=[("JSON", "*.json")],
-            initialfile=f"lyric_scaffold_{cfg['genre']}.json",
+            initialfile=f"lyric_scaffold_{meta['song_name']}.json",
             title="Save Lyric Scaffold JSON",
         )
         if not p:
