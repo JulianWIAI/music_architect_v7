@@ -2564,7 +2564,10 @@ class CompositionEngine:
         if config.bpm is None: config.bpm = random.uniform(*GENRE_BPM.get(config.genre, (100, 130)))
         if config.genre == 'dnb':
             config.bpm = random.uniform(170, 175)  # tempo lock — always forced
-        if config.key is None: config.key = f"{random.choice(['C', 'D', 'E', 'F', 'G', 'A', 'Bb'])} {random.choice(['major', 'minor'])}"
+        if config.key is None:
+            _root  = random.choice(['C', 'D', 'E', 'F', 'G', 'A', 'Bb'])
+            _scale = random.choice(GENRE_SCALES.get(config.genre, ['major', 'minor']))
+            config.key = f"{_root} {_scale}"
 
         structure = list(config.structure_override) if config.structure_override else self.generate_structure(config)
         total_bars = sum(b for _, b in structure)
@@ -2802,17 +2805,22 @@ class CompositionEngine:
             _bass_prog = _user_bass
         config._bass_selection = None  # clear so serialised configs stay uncluttered
 
+        def _prog(key, default):
+            # Use `is not None` so program 0 (Acoustic Grand Piano) is not dropped.
+            v = config.tracks.get(key, {}).get('instrument')
+            return v if v is not None else default
+
         track_info = {
             '01_Kick':       {'channel': 9, 'program': 0},
             '02_Percussion': {'channel': 9, 'program': 0},
             '03_Bass':       {'channel': 0, 'program': _bass_prog},
-            '04_Melody':     {'channel': 1, 'program': config.tracks.get('lead',   {}).get('instrument') or inst_map.get('lead',   80)},
-            '05_Chords':     {'channel': 2, 'program': config.tracks.get('chords', {}).get('instrument') or inst_map.get('chords',  0)},
-            '06_Pad':        {'channel': 3, 'program': config.tracks.get('pad',    {}).get('instrument') or inst_map.get('pad',    88)},
-            '07_Arp':     {'channel': 4, 'program': config.tracks.get('arp',     {}).get('instrument') or inst_map.get('arp',    80)},
-            '08_Stabs':   {'channel': 5, 'program': config.tracks.get('stabs',   {}).get('instrument') or 55},
-            '09_Texture': {'channel': 6, 'program': config.tracks.get('texture', {}).get('instrument') or 88},
-            '10_FX':      {'channel': 7, 'program': config.tracks.get('fx',      {}).get('instrument') or 96},
+            '04_Melody':     {'channel': 1, 'program': _prog('lead',    inst_map.get('lead',    80))},
+            '05_Chords':     {'channel': 2, 'program': _prog('chords',  inst_map.get('chords',   0))},
+            '06_Pad':        {'channel': 3, 'program': _prog('pad',     inst_map.get('pad',     88))},
+            '07_Arp':        {'channel': 4, 'program': _prog('arp',     inst_map.get('arp',     80))},
+            '08_Stabs':      {'channel': 5, 'program': _prog('stabs',   55)},
+            '09_Texture':    {'channel': 6, 'program': _prog('texture', 88)},
+            '10_FX':         {'channel': 7, 'program': _prog('fx',      96)},
         }
 
         return {
@@ -2883,6 +2891,14 @@ class CompositionEngine:
 
             channel = info.get('channel', 0)
             is_drum = (channel == 9)
+
+            # Write program change at beat 0 so every DAW and renderer
+            # (FluidSynth, pygame, etc.) hears the correct instrument timbre.
+            # Drum channel (9) ignores program changes in GM.
+            program = info.get('program')
+            if not is_drum and program is not None:
+                midi.addProgramChange(i, channel, 0, int(program))
+
             seen_notes: set = set()
             # Track when each pitch last had a note_off, to prevent midiutil
             # deInterleaveNotes from encountering orphaned note_off events.

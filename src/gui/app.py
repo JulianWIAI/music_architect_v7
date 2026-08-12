@@ -21,7 +21,7 @@ else:
 try:
     from src.composition.composition_engine import CompositionEngine
     from src.composition.composition_config import CompositionConfig
-    from src.composition.genre_constants import GENRE_BPM, GENRE_INSTRUMENTS, STRUCTURE_TEMPLATES
+    from src.composition.genre_constants import GENRE_BPM, GENRE_INSTRUMENTS, GENRE_SCALES, GENRE_CHORD_QUALITIES, STRUCTURE_TEMPLATES
     from src.seeds.seed_builder import SeedBuilder
     from src.rendering.wav_renderer import WAVRenderer
     ENGINE_AVAILABLE = True
@@ -72,6 +72,45 @@ try:
 except ImportError:
     UTAU_AVAILABLE = False
 
+try:
+    from src.gui.instrument_builder import InstrumentBuilder
+    INSTRUMENT_BUILDER_AVAILABLE = True
+except ImportError:
+    InstrumentBuilder = None          # type: ignore
+    INSTRUMENT_BUILDER_AVAILABLE = False
+
+try:
+    from src.gui.advisor_actions import AdvisorActionsBar
+    ADVISOR_ACTIONS_AVAILABLE = True
+except ImportError:
+    AdvisorActionsBar = None          # type: ignore
+    ADVISOR_ACTIONS_AVAILABLE = False
+
+try:
+    from src.gui.advisor_query_panel import AdvisorQueryPanel
+    ADVISOR_QUERY_AVAILABLE = True
+except ImportError:
+    AdvisorQueryPanel = None          # type: ignore
+    ADVISOR_QUERY_AVAILABLE = False
+
+try:
+    from src.gui.fx_variant_panel import FxVariantPanel
+    from src.composition.fx_chain_selector import FxChainSelector
+    FX_VARIANT_AVAILABLE = True
+except ImportError:
+    FxVariantPanel = None             # type: ignore
+    FxChainSelector = None            # type: ignore
+    FX_VARIANT_AVAILABLE = False
+
+try:
+    from src.gui.soundfont_picker import SoundFontPickerWidget
+    SF_PICKER_AVAILABLE = True
+except ImportError:
+    SoundFontPickerWidget = None      # type: ignore
+    SF_PICKER_AVAILABLE = False
+
+from src.gui.instrument_description_label import InstrumentDescriptionLabel
+
 
 class SeedComposerApp:
     def __init__(self, root: tk.Tk):
@@ -85,6 +124,12 @@ class SeedComposerApp:
         self.current_composition = None
         self.current_midi_path = None
         self.current_wav_path = None
+        # FX chain variant: 'bright', 'neutral', or 'dark'.
+        # Updated from the composition seed after generation.
+        self._current_variant_id = 'neutral'
+        # Expand/collapse state: True when the left control panel is hidden
+        # and the advisor fills the full window width.
+        self._is_expanded = False
         self.vocal_ready_midi_path = None
         self.vocal_ready_wav_path = None
         self.vocal_ready_composition = None
@@ -122,11 +167,30 @@ class SeedComposerApp:
         self.status_label = tk.Label(tf, text="● INIT", font=S.FN_S, fg=S.YELLOW, bg=S.BG2)
         self.status_label.pack(side='right', padx=15)
 
+        # Expand button — packed right-to-left so it sits just left of the status label.
+        self._btn_expand = tk.Button(
+            tf,
+            text="▷  EXPAND",
+            font=S.FN_S,
+            fg=S.TXT_DIM,
+            bg=S.BG2,
+            bd=0,
+            padx=8,
+            pady=0,
+            cursor="hand2",
+            activeforeground=S.CYAN,
+            activebackground=S.BG2,
+            relief="flat",
+            command=self._toggle_expand,
+        )
+        self._btn_expand.pack(side='right', padx=(0, 6))
+
         content = tk.Frame(main, bg=S.BG)
         content.pack(fill='both', expand=True)
 
         left = tk.Frame(content, bg=S.BG2, width=540)
         left.pack(side='left', fill='y', padx=(0, 4)); left.pack_propagate(False)
+        self._left_panel = left   # reference kept for expand/collapse toggling
 
         lc = tk.Canvas(left, bg=S.BG2, highlightthickness=0)
         sb = ttk.Scrollbar(left, orient='vertical', command=lc.yview)
@@ -436,8 +500,8 @@ class SeedComposerApp:
         key_cb.pack(side='left')
         self.key_root = ttk.Combobox(r2, values=NOTES, width=4, state='disabled')
         self.key_root.set('C'); self.key_root.pack(side='left', padx=2)
-        self.key_mode = ttk.Combobox(r2, values=['major', 'minor'], width=6, state='disabled')
-        self.key_mode.set('major'); self.key_mode.pack(side='left', padx=2)
+        self.key_mode = ttk.Combobox(r2, values=GENRE_SCALES.get('pop', ['major', 'minor']), width=14, state='disabled')
+        self.key_mode.set(GENRE_SCALES.get('pop', ['major'])[0]); self.key_mode.pack(side='left', padx=2)
         self._tip(key_cb, 'key_auto')
         self._tip(self.key_root, 'key_root')
         self._tip(self.key_mode, 'key_mode')
@@ -451,8 +515,9 @@ class SeedComposerApp:
         chord_cb.pack(side='left')
         self.chord_root = ttk.Combobox(r3, values=NOTES, width=4, state='disabled')
         self.chord_root.set('C'); self.chord_root.pack(side='left', padx=2)
-        self.chord_quality = ttk.Combobox(r3, values=QUALITIES, width=6, state='disabled')
-        self.chord_quality.set('maj7'); self.chord_quality.pack(side='left', padx=2)
+        _pop_q = GENRE_CHORD_QUALITIES.get('pop', QUALITIES)
+        self.chord_quality = ttk.Combobox(r3, values=_pop_q, width=6, state='disabled')
+        self.chord_quality.set(_pop_q[0]); self.chord_quality.pack(side='left', padx=2)
         self._tip(chord_cb, 'chord_auto')
         self._tip(self.chord_root, 'chord_root')
         self._tip(self.chord_quality, 'chord_quality')
@@ -557,6 +622,13 @@ class SeedComposerApp:
                                    S.YELLOW)
             rand_btn.pack(side='left', padx=2)
             self._tip(rand_btn, 'btn_rand_instrument')
+
+            # Sound-character description — updates when the user selects
+            # a different instrument so newcomers understand the timbre.
+            if track != 'drums':
+                desc = InstrumentDescriptionLabel(row, styles=S, max_chars=55)
+                desc.pack(side='left', padx=(6, 2), fill='x', expand=True)
+                desc.attach(inst)
 
             self.track_vars[track] = {'enabled': enabled, 'volume': vol, 'instrument': inst}
 
@@ -673,22 +745,32 @@ class SeedComposerApp:
     # ─── Output Panel ───
 
     def _build_output_panel(self, parent):
-        info_frame = self._section(parent, "COMPOSITION OUTPUT", S.CYAN)
+        self._out_nb = ttk.Notebook(parent)
+        self._out_nb.pack(fill='both', expand=True, padx=4, pady=4)
 
-        self.info_text = tk.Text(info_frame, font=S.FN_S, bg=S.BG, fg=S.TXT,
+        # ── Tab 1: OUTPUT ──
+        out_tab = tk.Frame(self._out_nb, bg=S.BG2)
+        self._out_nb.add(out_tab, text=' OUTPUT ')
+
+        self.info_text = tk.Text(out_tab, font=S.FN_S, bg=S.BG, fg=S.TXT,
                                   insertbackground=S.CYAN, height=18, wrap='word',
                                   state='disabled', bd=0, highlightthickness=1,
                                   highlightbackground=S.BG3)
-        self.info_text.pack(fill='both', expand=True, pady=4)
+        self.info_text.pack(fill='both', expand=True, pady=4, padx=4)
         for tag, color in [('header', S.CYAN), ('value', S.GREEN), ('section', S.PINK),
                            ('chord', S.PURPLE), ('dim', S.TXT_DIM), ('warn', S.YELLOW)]:
             self.info_text.tag_configure(tag, foreground=color,
                                           font=S.FN_H if tag == 'header' else S.FN_S)
 
         self.progress_var = tk.DoubleVar()
-        ttk.Progressbar(info_frame, variable=self.progress_var, maximum=100).pack(fill='x', pady=2)
-        self.progress_label = tk.Label(info_frame, text="", font=S.FN_X, fg=S.TXT_DIM, bg=S.BG2)
-        self.progress_label.pack(fill='x')
+        ttk.Progressbar(out_tab, variable=self.progress_var, maximum=100).pack(fill='x', pady=2, padx=4)
+        self.progress_label = tk.Label(out_tab, text="", font=S.FN_X, fg=S.TXT_DIM, bg=S.BG2)
+        self.progress_label.pack(fill='x', padx=4)
+
+        # ── Tab 2: ADVISOR ──
+        adv_tab = tk.Frame(self._out_nb, bg=S.BG2)
+        self._out_nb.add(adv_tab, text=' ADVISOR ')
+        self._build_advisor_tab(adv_tab)
 
         bf = tk.Frame(parent, bg=S.BG2); bf.pack(fill='x', padx=6, pady=4)
         btn_play = self._cbtn(bf, "PLAY  Full Beat", self._play_preview, S.GREEN, wide=True)
@@ -780,8 +862,667 @@ class SeedComposerApp:
         self.info_text.configure(state='disabled')
 
     # ─────────────────────────────────────────────────────────────
+    #  PRODUCTION ADVISOR TAB
+    # ─────────────────────────────────────────────────────────────
+
+    def _build_advisor_tab(self, parent):
+        # ── Query Without Generation panel ─────────────────────────────────
+        # Lets the user type in genre / BPM / key of an external MIDI and get
+        # the full advisor output without needing to generate a composition.
+        if ADVISOR_QUERY_AVAILABLE:
+            self._advisor_query = AdvisorQueryPanel(
+                parent,
+                styles            = S,
+                update_advisor_fn = self._update_advisor,
+                load_palettes_fn  = self._load_palettes_for,
+                log_fn            = self._log,
+            )
+            self._advisor_query.pack(fill='x', padx=4, pady=(4, 2))
+        else:
+            self._advisor_query = None
+
+        # ── Palette selector row ──
+        pal_row = tk.Frame(parent, bg=S.BG2)
+        pal_row.pack(fill='x', padx=4, pady=(4, 2))
+        tk.Label(pal_row, text="PALETTE", font=S.FN_S, fg=S.TXT_DIM, bg=S.BG2,
+                 width=8, anchor='w').pack(side='left')
+        self._palette_var = tk.StringVar()
+        self._palette_cb  = ttk.Combobox(pal_row, textvariable=self._palette_var,
+                                          state='readonly', width=22, font=S.FN_S)
+        self._palette_cb.pack(side='left', padx=4)
+        self._branch_lbl = tk.Label(pal_row, text="", font=S.FN_X, fg=S.CYAN, bg=S.BG2)
+        self._branch_lbl.pack(side='left', padx=4)
+        self._palette_data = {}
+        self._load_palettes_for('pop')
+        self._palette_cb.bind('<<ComboboxSelected>>', lambda e: self._apply_palette_selection())
+
+        # ── FX Chain Variant selector (BRIGHT / NEUTRAL / DARK) ──
+        if FX_VARIANT_AVAILABLE:
+            self._fx_variant_panel = FxVariantPanel(
+                parent,
+                styles                    = S,
+                on_variant_change_fn      = self._on_variant_change,
+                get_genre_fn              = lambda: self.genre_var.get(),
+                get_track_instruments_fn  = self._get_track_instruments_for_advisor,
+                get_variant_id_fn         = lambda: self._current_variant_id,
+            )
+            self._fx_variant_panel.pack(fill='x', padx=4, pady=(0, 2))
+        else:
+            self._fx_variant_panel = None
+
+        # ── Instrument Builder (combinatoric selector) ──
+        if INSTRUMENT_BUILDER_AVAILABLE:
+            self._instrument_builder = InstrumentBuilder(
+                parent,
+                apply_callback=self._apply_builder,
+                gm_instruments=GM_INSTRUMENTS,
+                styles=S,
+            )
+            self._instrument_builder.pack(fill='x', padx=4, pady=(0, 2))
+        else:
+            self._instrument_builder = None
+
+        # ── SoundFont picker (choose which .sf2 to use for preview) ──
+        # Visible only when FluidSynth is available — no SF picker needed
+        # when the renderer is absent because there is nothing to render.
+        if SF_PICKER_AVAILABLE and FLUIDSYNTH_AVAILABLE:
+            self._sf_picker = SoundFontPickerWidget(
+                parent,
+                styles         = S,
+                fluid_renderer = _FLUID_RENDERER,
+                log_fn         = self._log,
+            )
+            self._sf_picker.pack(fill='x', padx=4, pady=(0, 4))
+        else:
+            self._sf_picker = None
+
+        # ── Advisor action strip (preview + save + PDF export) ──
+        if ADVISOR_ACTIONS_AVAILABLE:
+            self._advisor_actions = AdvisorActionsBar(
+                parent,
+                styles          = S,
+                get_engine_fn   = lambda: self.engine,
+                fluid_renderer  = _FLUID_RENDERER,
+                player          = self.player,
+                build_config_fn = self._build_config,
+                want_vocal_fn   = lambda: self.gen_vocal_ready.get(),
+                log_fn          = self._log,
+                status_fn       = self._set_status,
+                app_dir         = APP_DIR,
+                save_pdf_fn     = self._export_advisor_pdf,
+            )
+            self._advisor_actions.pack(fill='x', padx=4)
+        else:
+            self._advisor_actions = None
+
+        # ── Advisor text widget ──
+        self.adv_text = tk.Text(parent, font=S.FN_X, bg=S.BG, fg=S.TXT,
+                                 insertbackground=S.CYAN, height=18, wrap='none',
+                                 state='disabled', bd=0, highlightthickness=1,
+                                 highlightbackground=S.BG3)
+        sb = tk.Scrollbar(parent, command=self.adv_text.yview, bg=S.BG3,
+                          troughcolor=S.BG_INPUT, activebackground=S.BG3)
+        self.adv_text.configure(yscrollcommand=sb.set)
+        sb.pack(side='right', fill='y')
+        self.adv_text.pack(fill='both', expand=True, pady=4, padx=(4, 0))
+        for tag, color, font in [
+            ('header',  S.CYAN,    S.FN_H),
+            ('section', S.PINK,    S.FN_S),
+            ('value',   S.GREEN,   S.FN_X),
+            ('lbl',     S.TXT_DIM, S.FN_X),
+            ('title',   S.ORANGE,  S.FN_S),
+            ('warn',    S.YELLOW,  S.FN_X),
+            ('dim',     S.TXT_DIM, S.FN_X),
+            ('ok',      S.GREEN,   S.FN_X),
+        ]:
+            self.adv_text.tag_configure(tag, foreground=color, font=font)
+        self._adv_add("  Select a palette above or generate a composition.\n", 'dim')
+
+    def _load_palettes_for(self, genre):
+        import json as _j, pathlib
+        path = (pathlib.Path(__file__).parent.parent.parent
+                / 'data' / 'production_guide' / 'json' / 'instrument_palettes.json')
+        try:
+            palettes = _j.loads(path.read_text(encoding='utf-8')).get(genre, [])
+        except Exception:
+            palettes = []
+        self._palette_data = {p['name']: p for p in palettes}
+        names = list(self._palette_data.keys())
+        self._palette_cb['values'] = names
+        if names:
+            self._palette_cb.set(names[0])
+            self._update_branch_label(self._palette_data[names[0]])
+        else:
+            self._palette_cb.set('')
+            self._branch_lbl.config(text='')
+
+    def _update_branch_label(self, palette):
+        branch = palette.get('branch', '?')
+        code   = palette.get('kick_code', '')
+        self._branch_lbl.config(text=f"Branch {branch}  {code}")
+
+    def _apply_palette_selection(self):
+        name = self._palette_var.get()
+        palette = self._palette_data.get(name)
+        if not palette:
+            return
+        self._update_branch_label(palette)
+        # Palette instrument keys (lead, pad, bass, chords, arp, stabs, texture, fx)
+        # match track_vars keys exactly — no remapping needed.
+        for pal_key, inst in palette['instruments'].items():
+            tv = self.track_vars.get(pal_key, {})
+            cb = tv.get('instrument')
+            if cb:
+                cb.set(f"{inst['gm']}: {inst['name']}")
+        # Push palette into InstrumentBuilder so its dropdowns reflect the palette choice
+        if self._instrument_builder is not None:
+            self._instrument_builder.sync_from_palette(palette)
+        self._log(f"Palette → {name} (Branch {palette['branch']})")
+        if getattr(self, 'current_composition', None):
+            self._update_advisor(self.current_composition)
+        else:
+            self._show_palette_in_advisor(palette)
+
+    # ── FX variant helpers ─────────────────────────────────────────────────────
+
+    def _on_variant_change(self, variant_id: str) -> None:
+        """User clicked a variant button — store and re-render the advisor."""
+        self._current_variant_id = variant_id
+        self._log(f"FX variant → {variant_id.upper()}")
+        if getattr(self, 'current_composition', None):
+            self._update_advisor(self.current_composition)
+        if self._fx_variant_panel is not None:
+            self._fx_variant_panel.refresh()
+
+    def _export_advisor_pdf(self) -> None:
+        """
+        Assemble the current advisor state and write a production guide PDF.
+
+        Mirrors the data pipeline in _update_advisor() — loads the same JSON
+        files and computes the same merged delta — then delegates all
+        formatting to AdvisorPDFExporter so this method stays thin.
+
+        Opens a save-as dialog first; does nothing if the user cancels.
+        """
+        import json as _json
+        import pathlib
+        from tkinter import filedialog
+
+        comp = getattr(self, 'current_composition', None)
+        if not comp:
+            self._log("No composition to export — generate a song first.")
+            return
+
+        c     = comp['config']
+        genre = c.get('genre', 'unknown')
+        bpm   = c.get('bpm', 0)
+        key   = c.get('key', '')
+
+        # Load production guide JSON (same paths as _update_advisor)
+        base = pathlib.Path(__file__).parent.parent.parent / 'data' / 'production_guide' / 'json'
+        try:
+            shared = _json.loads((base / 'shared.json').read_text(encoding='utf-8'))
+        except Exception:
+            shared = {}
+        gdata = {}
+        gpath = base / f'{genre}.json'
+        if gpath.exists():
+            try:
+                gdata = _json.loads(gpath.read_text(encoding='utf-8'))
+            except Exception:
+                pass
+
+        # Resolve active palette
+        pal_name = getattr(self, '_palette_var', None)
+        pal_name = pal_name.get() if pal_name else ''
+        pal      = getattr(self, '_palette_data', {}).get(pal_name)
+        pal_delta = (pal or {}).get('chain_delta', {})
+
+        # Build three-layer merged delta
+        track_instruments = self._get_track_instruments_for_advisor()
+        if FX_VARIANT_AVAILABLE and FxChainSelector is not None:
+            merged_delta   = FxChainSelector.build_merged_delta(
+                genre, self._current_variant_id, pal_delta, track_instruments,
+            )
+            active_variant = FxChainSelector.get_variant(genre, self._current_variant_id)
+        else:
+            merged_delta   = pal_delta
+            active_variant = {}
+
+        # Default filename: pop_111bpm_D_major_advisor.pdf
+        safe_key     = key.replace(' ', '_').replace('/', '-')
+        default_name = f"{genre}_{int(bpm)}bpm_{safe_key}_advisor.pdf"
+
+        dest = filedialog.asksaveasfilename(
+            title             = "Export Production Guide",
+            defaultextension  = ".pdf",
+            filetypes         = [
+                ("PDF document", "*.pdf"),
+                ("Plain text",   "*.txt"),
+                ("All files",    "*.*"),
+            ],
+            initialfile = default_name,
+        )
+        if not dest:
+            return
+
+        from src.export.advisor_pdf import AdvisorPDFExporter
+        exporter = AdvisorPDFExporter(
+            config            = c,
+            palette           = pal,
+            genre_data        = gdata,
+            shared_data       = shared,
+            variant_id        = self._current_variant_id,
+            variant_record    = active_variant,
+            merged_delta      = merged_delta,
+            track_instruments = track_instruments,
+        )
+
+        ok = exporter.export(dest)
+        if ok:
+            self._log(f"Production guide -> {dest}")
+            self._set_status("PDF SAVED", S.GREEN)
+        else:
+            self._log("PDF export failed — check console for details.")
+            self._set_status("PDF EXPORT FAILED", S.RED)
+
+    def _get_track_instruments_for_advisor(self) -> dict:
+        """
+        Return {track_name: gm_program_int} for all track_vars entries.
+
+        Used by FxVariantPanel and FxChainSelector to detect which
+        instrument class is active on each track for instrument-aware
+        FX adjustments.
+        """
+        result = {}
+        for track_name, vd in self.track_vars.items():
+            inst_cb = vd.get('instrument')
+            if inst_cb is None:
+                continue
+            raw = inst_cb.get()
+            try:
+                result[track_name] = int(raw.split(':')[0].strip())
+            except (ValueError, IndexError):
+                pass
+        return result
+
+    def _apply_builder(self, selection: dict) -> None:
+        """Apply InstrumentBuilder APPLY selection to the left-panel track comboboxes.
+
+        `selection` has the form returned by InstrumentBuilder.current_selection():
+            {'branch': 'A', 'bass': {gm, name, code}, 'chords': {...}, ...}
+        Builder uses track-space keys (melody, pads); track_vars uses the same
+        'melody' key but 'texture' for the pad track, so only 'pads' is remapped.
+        """
+        # Builder uses 'melody' (→ track_vars 'lead') and 'pads' (→ track_vars 'pad').
+        # All other builder keys (bass, chords, arp, stabs) match track_vars directly.
+        _MAP = {'melody': 'lead', 'pads': 'pad'}
+        for builder_key, inst in selection.items():
+            if builder_key == 'branch' or not isinstance(inst, dict):
+                continue
+            left_key = _MAP.get(builder_key, builder_key)
+            tv = self.track_vars.get(left_key)
+            if tv and tv.get('instrument'):
+                gm   = inst['gm']
+                name = GM_INSTRUMENTS.get(gm, inst['name'])
+                tv['instrument'].set(f"{gm}: {name}")
+        self._log(f"Builder → applied Branch {selection.get('branch', '?')} selection")
+        # With a composition loaded: re-render the full production advisor so the
+        # new instrument choices appear in context.  Without a composition: show
+        # the standalone builder validation panel instead.
+        if getattr(self, 'current_composition', None):
+            self._update_advisor(self.current_composition)
+        elif self._instrument_builder is not None and INSTRUMENT_BUILDER_AVAILABLE:
+            val = self._instrument_builder.current_validation()
+            self._show_builder_validation(val, selection)
+
+    def _show_builder_validation(self, val, selection: dict) -> None:
+        """Render the full ValidationResult from InstrumentBuilder into the advisor text area."""
+        self._adv_clear()
+        A = self._adv_add
+        branch = selection.get('branch', '?')
+        score  = val.score
+        label  = val.label
+        # Score colour tag
+        score_tag = 'ok' if score >= 90 else ('warn' if score >= 70 else 'lbl')
+        A("═" * 52 + "\n", 'dim')
+        A(f"  INSTRUMENT BUILDER — Branch {branch}\n", 'header')
+        A("═" * 52 + "\n\n", 'dim')
+        A(f"  {'SCORE':<14}", 'lbl');  A(f"{score}/100  {label}\n", score_tag)
+        A("\n  SELECTION\n", 'section')
+        A(f"  {'TRACK':<10} {'GM':>4}  {'NAME':<22} CODE\n", 'lbl')
+        A("  " + "─" * 46 + "\n", 'dim')
+        for key, inst in selection.items():
+            if key == 'branch' or not isinstance(inst, dict):
+                continue
+            A(f"  {key.upper():<10}", 'lbl')
+            A(f" {inst['gm']:>3}  ", 'dim')
+            A(f"{inst['name']:<22}", 'value')
+            A(f" {inst.get('code', '')}\n", 'ok')
+        if val.violations:
+            A("\n  VIOLATIONS\n", 'section')
+            for v in val.violations:
+                A(f"  ✗ {v}\n", 'warn')
+        if val.warnings:
+            A("\n  WARNINGS\n", 'section')
+            for w in val.warnings:
+                A(f"  ⚠ {w}\n", 'lbl')
+        if not val.violations and not val.warnings:
+            A("\n  No psychoacoustic conflicts detected.\n", 'ok')
+        self.adv_text.see('1.0')
+
+    def _show_palette_in_advisor(self, palette):
+        self._adv_clear()
+        A = self._adv_add
+        A("═" * 52 + "\n", 'dim')
+        A(f"  PALETTE — {palette['name'].upper()}  (Branch {palette['branch']})\n", 'header')
+        A("═" * 52 + "\n\n", 'dim')
+        A(f"  KICK TYPE   ", 'lbl'); A(f"{palette['kick_code']}\n", 'value')
+        A(f"  NOTE        ", 'lbl'); A(f"{palette['kick_desc']}\n\n", 'dim')
+        A("  INSTRUMENTS\n", 'section')
+        A(f"  {'TRACK':<10} {'GM':>4}  {'NAME':<22} CODE\n", 'lbl')
+        A("  " + "─" * 46 + "\n", 'dim')
+        for track, inst in palette['instruments'].items():
+            A(f"  {track.upper():<10}", 'lbl')
+            A(f" {inst['gm']:>3}  ", 'dim')
+            A(f"{inst['name']:<22}", 'value')
+            A(f" {inst['code']}\n", 'ok')
+        A("\n  MATRIX 1 CONSTRAINTS\n", 'section')
+        A("  One D0 R0 at a time  ·  SC ratio ≥ 1.5  ·\n", 'dim')
+        A("  Attack separation ≥ 1 step (same register)\n\n", 'dim')
+
+    def _adv_clear(self):
+        self.adv_text.configure(state='normal')
+        self.adv_text.delete('1.0', 'end')
+        self.adv_text.configure(state='disabled')
+
+    def _adv_add(self, text, tag=None):
+        self.adv_text.configure(state='normal')
+        if tag:
+            self.adv_text.insert('end', text, tag)
+        else:
+            self.adv_text.insert('end', text)
+        self.adv_text.configure(state='disabled')
+
+    def _update_advisor(self, comp):
+        import json as _json, pathlib
+        self._adv_clear()
+        A = self._adv_add
+
+        c     = comp['config']
+        genre = c['genre']
+        bpm   = c['bpm']
+        key   = c['key']
+
+        base        = pathlib.Path(__file__).parent.parent.parent / 'data' / 'production_guide' / 'json'
+        shared_path = base / 'shared.json'
+        genre_path  = base / f'{genre}.json'
+
+        try:
+            shared = _json.loads(shared_path.read_text(encoding='utf-8'))
+        except Exception:
+            shared = {}
+
+        gdata, has_genre = {}, False
+        if genre_path.exists():
+            try:
+                gdata, has_genre = _json.loads(genre_path.read_text(encoding='utf-8')), True
+            except Exception:
+                pass
+
+        A("═" * 52 + "\n", 'dim')
+        A(f"  PRODUCTION ADVISOR — {genre.upper()}\n", 'header')
+        A("═" * 52 + "\n\n", 'dim')
+        A(f"  {'BPM':<14}", 'lbl');  A(f"{bpm}\n", 'value')
+        A(f"  {'KEY':<14}", 'lbl');  A(f"{key}\n", 'value')
+
+        # ── Active palette summary + instrument table ──
+        pal_name = getattr(self, '_palette_var', None)
+        pal_name = pal_name.get() if pal_name else ''
+        pal = getattr(self, '_palette_data', {}).get(pal_name)
+        if pal:
+            from src.composition.gm_descriptions import get_description as _gm_desc
+            A(f"  {'PALETTE':<14}", 'lbl')
+            A(f"{pal['name']}  Branch {pal['branch']}  {pal['kick_code']}\n", 'value')
+            A(f"  {'KICK':<14}", 'lbl'); A(f"{pal['kick_desc']}\n", 'dim')
+            A("\n  INSTRUMENTS\n", 'section')
+            A(f"  {'TRACK':<10} {'GM':>4}  {'NAME':<22} CODE\n", 'lbl')
+            A("  " + "─" * 46 + "\n", 'dim')
+            for track, inst in pal['instruments'].items():
+                A(f"  {track.upper():<10}", 'lbl')
+                A(f" {inst['gm']:>3}  ", 'dim')
+                A(f"{inst['name']:<22}", 'value')
+                A(f" {inst['code']}\n", 'ok')
+                # Pedagogical description — helps students find an equivalent
+                # instrument in their DAW when the GM name is not obvious.
+                desc = _gm_desc(inst['gm'])
+                A(f"  {'':10}  {'':3}   {desc}\n", 'dim')
+        A("\n")
+
+        if has_genre:
+            for bkt in gdata.get('bpm_buckets', []):
+                lo, hi = bkt.get('bpm_range', [0, 9999])
+                if lo <= bpm <= hi:
+                    A(f"  {'BUCKET':<14}", 'lbl')
+                    A(f"{bkt['id']} (anchor {bkt['anchor_bpm']} BPM)\n", 'value')
+                    A(f"  {'SCALES':<14}", 'lbl')
+                    A(f"{', '.join(bkt.get('key_families', []))}\n", 'value')
+                    break
+            A(f"  {'PLR TARGET':<14}", 'lbl'); A(f"{gdata.get('plr_target_db', '?')} dB\n", 'value')
+            A(f"  {'LRA':<14}", 'lbl');        A(f"{gdata.get('lra_target_lu', '?')} LU\n\n", 'value')
+        else:
+            A(f"\n  No production data for genre '{genre}'.\n\n", 'warn')
+            return
+
+        # ── Gain Staging ──
+        A("  GAIN STAGING TARGETS\n", 'section')
+        A(f"  {'TRACK':<12} {'RMS':>7} {'PEAK':>7} {'CF':>5}\n", 'lbl')
+        A("  " + "─" * 34 + "\n", 'dim')
+        delta_map = {
+            'pop':      'pop_delta',
+            'jpop':     'pop_delta',
+            'edm':      'pop_delta',
+            'house':    'pop_delta',
+            'hiphop':   'hiphop_delta',
+            'trap':     'hiphop_delta',
+            'phonk':    'hiphop_delta',
+            'techno':   'hiphop_delta',
+            'dnb':      'hiphop_delta',
+            'cinematic':'cine_delta',
+            'classical':'cine_delta',
+        }
+        dk  = delta_map.get(genre, 'pop_delta')
+        cgt = shared.get('clip_gain_targets', {})
+        for track, vals in cgt.items():
+            if track == 'note':
+                continue
+            rms  = vals.get('rms_dbfs', -18)
+            peak = vals.get('peak_ceiling_dbfs', -6)
+            cf   = vals.get('cf_db', 12)
+            rms_eff = rms + vals.get(dk, 0)
+            A(f"  {track.upper():<12}", 'lbl')
+            A(f" {rms_eff:>6.1f}", 'value')
+            A(f" {peak:>6.1f}", 'section')
+            A(f" {cf:>3}dB\n", 'dim')
+
+        # ── Effect Chains (palette + variant + instrument-class merged) ──
+        tracks_data  = gdata.get('tracks', {})
+        pal_delta    = (pal or {}).get('chain_delta', {})
+        pal_insts    = (pal or {}).get('instruments', {})
+        # palette key → genre JSON track name  (only the differing ones)
+        _PAL_TO_TRACK = {'lead': 'melody', 'pad': 'pads', 'texture': 'pads'}
+
+        # Build the three-layer merged delta (palette → variant → instrument).
+        if FX_VARIANT_AVAILABLE and FxChainSelector is not None:
+            track_instruments = self._get_track_instruments_for_advisor()
+            merged_delta = FxChainSelector.build_merged_delta(
+                genre,
+                self._current_variant_id,
+                pal_delta,
+                track_instruments,
+            )
+            # Fetch the active variant's display label and description.
+            active_variant = FxChainSelector.get_variant(genre, self._current_variant_id)
+        else:
+            merged_delta   = pal_delta
+            active_variant = {}
+
+        if tracks_data:
+            has_any_delta = bool(merged_delta)
+            hdr = "  EFFECT CHAINS"
+            if has_any_delta:
+                hdr += "  [palette-adjusted]"
+
+            # Show which timbral flavor is active.
+            v_label = active_variant.get('label', self._current_variant_id.upper())
+            v_desc  = active_variant.get('description', '')
+            A(f"\n{hdr}\n", 'section')
+            A(f"  VARIANT  {v_label}", 'title')
+            if v_desc:
+                A(f"  — {v_desc}", 'dim')
+            A("\n", 'dim')
+
+            for tname, tdata in tracks_data.items():
+                chain = tdata.get('effect_chain', [])
+                if not chain:
+                    continue
+                delta_slots = {d['slot']: d for d in merged_delta.get(tname, [])}
+                has_delta   = bool(delta_slots)
+                A(f"\n  {tname.upper()}", 'title')
+                if has_delta:
+                    # find which palette instrument maps to this track
+                    inst_key = next(
+                        (k for k, v in _PAL_TO_TRACK.items() if v == tname),
+                        tname  # bass/chords/arp/stabs/fx map directly
+                    )
+                    inst_name = pal_insts.get(inst_key, {}).get('name', '')
+                    if inst_name:
+                        A(f" [{inst_name}]", 'ok')
+                role = tdata.get('role', '')
+                A(f"  — {role}\n" if role else "\n", 'dim')
+                for slot in chain:
+                    sn = slot['slot']
+                    d  = delta_slots.get(sn)
+                    if d is None:
+                        A(f"    [{sn}] ", 'lbl')
+                        A(f"{slot['effect']:<28}", 'value')
+                        A(f"{slot.get('params', '')}\n", 'dim')
+                    elif d['action'] == 'disable':
+                        A(f"    [{sn}] ", 'lbl')
+                        A(f"{'[BYPASS]':<28}", 'dim')
+                        A(f"{d.get('note', '')}\n", 'warn')
+                    elif d['action'] == 'adjust':
+                        A(f"    [{sn}] ", 'lbl')
+                        A(f"{slot['effect']:<28}", 'value')
+                        A(f"{d.get('note', '')}\n", 'ok')
+                    elif d['action'] == 'swap':
+                        A(f"    [{sn}] ", 'lbl')
+                        A(f"{d.get('effect', slot['effect']):<28}", 'ok')
+                        A(f"{d.get('params', '')}  —  {d.get('note', '')}\n", 'ok')
+                # any 'add' entries from the merged delta (slot > max chain length)
+                for ad in merged_delta.get(tname, []):
+                    if ad['action'] == 'add':
+                        A(f"    [{ad['slot']}+] ", 'lbl')
+                        A(f"{ad.get('effect', ''):<28}", 'ok')
+                        A(f"{ad.get('params', '')}  —  {ad.get('note', '')}\n", 'ok')
+
+        # ── Frequency Allocation + Stereo Field ──
+        freq = gdata.get('frequency_allocation', {})
+        sf   = gdata.get('stereo_field', {})
+        if freq:
+            A("\n  FREQUENCY ALLOCATION\n", 'section')
+            A(f"  {'TRACK':<12} {'HPF':>5} {'LPF':>6}  {'ZONE':<26} WIDTH\n", 'lbl')
+            A("  " + "─" * 62 + "\n", 'dim')
+            for tname, fdata in freq.items():
+                hpf = str(fdata.get('hpf_hz', '—'))
+                lpf = str(fdata.get('lpf_hz', '—')) if fdata.get('lpf_hz') else '—'
+                zone = fdata.get('dominant_zone', '')[:24]
+                sdata = sf.get(tname, {})
+                width = sdata.get('width_pct', '—')
+                cls   = sdata.get('class', '')
+                width_str = f"{width}% {cls}" if cls and width != '—' else cls or str(width)
+                A(f"  {tname.upper():<12}", 'lbl')
+                A(f" {hpf:>5}", 'value')
+                A(f" {lpf:>6}", 'dim')
+                A(f"  {zone:<26}", 'dim')
+                A(f" {width_str}\n", 'ok')
+
+        # ── Parallel Compression ──
+        pc = gdata.get('parallel_compression', {})
+        if pc:
+            A("\n  PARALLEL COMPRESSION (NY)\n", 'section')
+            A(f"  {'WET BLEND':<14}", 'lbl'); A(f"{pc.get('wet_blend_pct', '?')}%\n", 'value')
+            A(f"  {'RATIO':<14}", 'lbl');     A(f"{pc.get('ratio', '?')}\n", 'value')
+            A(f"  {'THRESHOLD':<14}", 'lbl'); A(f"{pc.get('threshold_dbfs', '?')} dBFS\n", 'value')
+            A(f"  {'RELEASE':<14}", 'lbl');   A(f"{pc.get('release_formula', '?')} ms\n")
+
+        # ── M/S Mastering ──
+        ms = gdata.get('ms_mastering', {})
+        if ms:
+            A("\n  M/S MASTERING INSERT\n", 'section')
+            status = ms.get('status', 'N/A')
+            A(f"  {'STATUS':<14}", 'lbl')
+            A(f"{status}\n", 'warn' if status == 'MANDATORY' else 'dim')
+            if status in ('MANDATORY', 'OPTIONAL'):
+                A(f"  {'SIDE HPF':<14}", 'lbl')
+                A(f"{ms.get('side_hpf_hz', '?')} Hz {ms.get('side_hpf_slope', '')}\n", 'value')
+                A(f"  {'SIDE SHELF':<14}", 'lbl')
+                A(f"+{ms.get('side_shelf_db', '?')} dB @ {ms.get('side_shelf_hz', '?')} Hz\n", 'value')
+                A(f"  {'WIDTH':<14}", 'lbl')
+                A(f"{ms.get('resulting_width_pct', '?')}%\n")
+
+        # ── Export Specs ──
+        exp = gdata.get('export_specs', {})
+        if exp:
+            A("\n  EXPORT TARGETS\n", 'section')
+            for dest, d in exp.items():
+                A(f"  {dest.upper()}\n", 'title')
+                A(f"    {'LUFS-I':<12}", 'lbl'); A(f"{d.get('lufs_i', '?')} LUFS\n", 'value')
+                A(f"    {'dBTP':<12}", 'lbl');   A(f"{d.get('dbtp', '?')} dBTP\n", 'value')
+                A(f"    {'RATE':<12}", 'lbl');   A(f"{d.get('sample_rate_hz', '?')} Hz\n", 'value')
+                if 'plr_db' in d:
+                    A(f"    {'PLR':<12}", 'lbl'); A(f"{d['plr_db']} dB\n", 'value')
+
+        # ── BPM Time Values ──
+        A("\n  BPM TIME VALUES\n", 'section')
+        q = 60000 / bpm
+        for label, val in [
+            ('1/4 NOTE',   f"{q:.1f} ms"),
+            ('1/8 DOTTED', f"{q*0.75:.1f} ms"),
+            ('1/16',       f"{15000/bpm:.1f} ms"),
+            ('PRE-DELAY',  f"{3750/bpm:.1f} ms"),
+            ('SC RELEASE', f"{30000/bpm:.1f} ms"),
+            ('CMP RELEASE',f"{120000/bpm:.1f} ms"),
+        ]:
+            A(f"  {label:<14}", 'lbl'); A(f"{val}\n", 'value')
+
+        self.adv_text.see('1.0')
+
+    # ─────────────────────────────────────────────────────────────
     #  TOGGLE CALLBACKS
     # ─────────────────────────────────────────────────────────────
+
+    def _toggle_expand(self) -> None:
+        """
+        Hide or restore the left control panel to give the advisor more space.
+
+        EXPAND  — pack_forget() removes the left frame; the right panel stretches
+                  to fill the full content area instantly (no geometry recalc needed
+                  because the right frame uses fill='both', expand=True).
+        RESTORE — re-pack the left frame with its original options so the two-column
+                  layout is restored.  pack_propagate(False) is a frame property and
+                  remains set, so the 540 px width is preserved.
+        """
+        if self._is_expanded:
+            # Restore the left control panel
+            self._left_panel.pack(side='left', fill='y', padx=(0, 4))
+            self._btn_expand.config(text="▷  EXPAND", fg=S.TXT_DIM)
+            self._is_expanded = False
+        else:
+            # Hide the left panel — right fills the full window width
+            self._left_panel.pack_forget()
+            self._btn_expand.config(text="◀  RESTORE", fg=S.CYAN)
+            self._is_expanded = True
 
     def _toggle_bpm(self):
         self.bpm_scale.configure(state='disabled' if self.bpm_auto.get() else 'normal')
@@ -811,6 +1552,16 @@ class SeedComposerApp:
                 name = GM_INSTRUMENTS.get(prog, "Piano")
                 self.track_vars[track]['instrument'].set(f"{prog}: {name}")
         self._refresh_sf2_indicator(genre)
+        valid_scales = GENRE_SCALES.get(genre, ['major', 'minor'])
+        self.key_mode['values'] = valid_scales
+        if self.key_mode.get() not in valid_scales:
+            self.key_mode.set(valid_scales[0])
+        valid_qualities = GENRE_CHORD_QUALITIES.get(genre, QUALITIES)
+        self.chord_quality['values'] = valid_qualities
+        if self.chord_quality.get() not in valid_qualities:
+            self.chord_quality.set(valid_qualities[0])
+        if hasattr(self, '_palette_cb'):
+            self._load_palettes_for(genre)
         self._log(f"Genre -> {genre.upper()}")
 
     def _random_seed(self):
@@ -1030,11 +1781,13 @@ class SeedComposerApp:
             # Guard: at least one must be selected
             want_full = True
 
-        # Pin a shared seed so both compose() calls produce the same structure
-        # and harmonic content — the vocal-ready version is a true paired variant,
-        # not a different song with vocal_mask applied.
-        if want_vocal and config.seed_value is None:
+        # Always pin a seed so the composition is reproducible and the advisor
+        # preview can re-compose the same song with different instruments.
+        # Previously only pinned when want_vocal=True; now universal so that
+        # AdvisorActionsBar.set_seed() always has a value to cache.
+        if config.seed_value is None:
             config.seed_value = random.randint(1, 999999)
+        self._last_gen_seed = config.seed_value   # cached for advisor re-render
 
         def _worker():
             try:
@@ -1318,6 +2071,20 @@ class SeedComposerApp:
             self.progress_var.set(100)
             self.progress_label.configure(text="Done!")
             self._display_composition(comp)
+            # Auto-select the timbral variant deterministically from the seed
+            # so each composition gets a consistent default flavor.
+            if FX_VARIANT_AVAILABLE and FxChainSelector is not None:
+                _seed = getattr(self, '_last_gen_seed', None)
+                if _seed is not None:
+                    _genre = comp['config']['genre']
+                    self._current_variant_id = FxChainSelector.select_variant_id(_genre, _seed)
+                    if self._fx_variant_panel is not None:
+                        self._fx_variant_panel.refresh()
+            self._update_advisor(comp)
+            # Propagate the pinned seed to AdvisorActionsBar so its preview
+            # re-composes the same note structure with different instruments.
+            if self._advisor_actions is not None:
+                self._advisor_actions.set_seed(getattr(self, '_last_gen_seed', None))
             # Show/hide the vocal-ready play button based on whether it was generated
             if vocal_midi:
                 self._vr_frame.pack(fill='x', padx=6, pady=(0, 2))
@@ -1869,6 +2636,12 @@ def main():
               foreground=[('disabled', S.CYAN), ('readonly', S.TXT)],
               background=[('disabled', S.BG_BTN)])
     style.configure('TProgressbar', troughcolor=S.BG_INPUT, background=S.CYAN)
+    style.configure('TNotebook', background=S.BG2, borderwidth=0)
+    style.configure('TNotebook.Tab', background=S.BG3, foreground=S.TXT_DIM,
+                    padding=[8, 3], font=S.FN_S)
+    style.map('TNotebook.Tab',
+              background=[('selected', S.BG_BTN)],
+              foreground=[('selected', S.CYAN)])
 
     app = SeedComposerApp(root)
     root.protocol("WM_DELETE_WINDOW", lambda: (app.cleanup(), root.destroy()))

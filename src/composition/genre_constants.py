@@ -583,6 +583,20 @@ GENRE_SCALES = {
     'dnb':   ['minor', 'dorian', 'phrygian', 'pentatonic_minor'],
 }
 
+GENRE_CHORD_QUALITIES = {
+    'pop':       ['maj7', '7', 'major', 'sus4', 'sus2'],
+    'hiphop':    ['min7', '7', 'minor', 'sus4', 'sus2'],
+    'trap':      ['min7', 'minor', 'dim7', 'sus4'],
+    'cinematic': ['maj7', 'min7', 'major', 'minor', 'dim7', 'aug', 'sus4'],
+    'classical': ['maj7', 'min7', '7', 'major', 'minor', 'sus4', 'sus2'],
+    'techno':    ['min7', '7', 'minor', 'sus4'],
+    'jpop':      ['maj7', 'major', 'sus4', 'sus2'],
+    'phonk':     ['min7', '7', 'minor', 'dim7', 'sus4'],
+    'edm':       ['min7', 'minor', 'dim7', 'sus4'],
+    'house':     ['min7', '7', 'major', 'minor', 'sus4', 'sus2'],
+    'dnb':       ['min7', 'minor', 'dim7', 'sus4'],
+}
+
 GENRE_INSTRUMENTS = {
     'pop': {'chords': 0, 'lead': 80, 'bass': 33, 'pad': 88, 'arp': 80},
     'hiphop': {'chords': 4, 'lead': 80, 'bass': 38, 'pad': 89, 'arp': 81},

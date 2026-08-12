@@ -51,12 +51,16 @@ class FluidSynthRenderer:
     # ── Availability ──────────────────────────────────────────────────────────
 
     def is_available(self) -> bool:
-        """Return True if FluidSynth is on PATH and at least one SF2 was found."""
+        """Return True if FluidSynth is on PATH and at least one SF2 is accessible."""
         try:
             result = subprocess.run(
                 ['fluidsynth', '--version'],
                 capture_output=True, timeout=5,
             )
+            # Count an override as available even before the path is existence-
+            # checked — render() will fall back to the library if the file is
+            # missing.  This keeps is_available() consistent with set_override()
+            # which now stores the path unconditionally.
             has_sf2 = self._override is not None or self._library.any_available
             return result.returncode == 0 and has_sf2
         except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -67,6 +71,30 @@ class FluidSynthRenderer:
         if self._override:
             return f'Using override SF2: {self._override}'
         return self._library.summary()
+
+    def set_override(self, path: Optional[str]) -> None:
+        """
+        Change the SF2 override at runtime without recreating the renderer.
+
+        Pass a valid .sf2 path to force every render to use that font.
+        Pass None to revert to the SoundFontLibrary's genre-routing logic.
+
+        The existence check is intentionally omitted here: Tkinter's
+        filedialog returns forward-slash paths on Windows which os.path.exists
+        may evaluate inconsistently across threads.  The path is validated
+        inside render() immediately before the FluidSynth subprocess is built.
+        """
+        self._override = path if path else None
+
+    def active_sf2(self, genre: str = '') -> Optional[str]:
+        """
+        Return the SF2 path that render() would use for *genre*.
+
+        Used by the log panel to show which font is active without
+        starting a render.  Returns None if no SF2 is available at all.
+        """
+        sf2 = os.path.normpath(self._override) if self._override else self._library.select(genre)
+        return sf2 if sf2 and os.path.exists(sf2) else self._library.select(genre)
 
     def cancel(self) -> None:
         """Kill any in-progress render subprocess immediately."""
@@ -102,18 +130,34 @@ class FluidSynthRenderer:
         if not self.is_available():
             return False
 
-        sf2 = self._override or self._library.select(genre)
+        # Resolve SF2: override takes priority over genre routing.
+        # Normalize the path before the existence check: Tkinter's filedialog
+        # on Windows returns forward-slash paths (C:/Users/…) that os.path.exists
+        # can mishandle on some configurations.  normpath converts them to the
+        # OS-native separator (C:\Users\…) so the check and the subprocess both
+        # receive a consistent path.
+        sf2 = os.path.normpath(self._override) if self._override else None
+        if sf2 and not os.path.exists(sf2):
+            print(f'[FluidSynthRenderer] Override SF2 not found: {sf2} — falling back to genre routing')
+            sf2 = None
+        if sf2 is None:
+            sf2 = self._library.select(genre)
         if not sf2:
             return False
 
+        # FluidSynth requires ALL option flags before positional arguments.
+        # Placing -F / -r / -g after sf2 / midi_path causes FluidSynth to
+        # ignore those flags, produce no WAV output, and exit non-zero —
+        # which silently triggers the MIDI-playback fallback in the caller.
         cmd = [
             'fluidsynth',
-            '-ni',               # non-interactive, no MIDI input
-            '-a', 'null',        # null audio driver: no speaker output, enables non-realtime speed
-            sf2, midi_path,
-            '-F', wav_path,
-            '-r', str(sample_rate),
-            '-g', '0.8',
+            '-ni',                   # non-interactive, no MIDI input
+            '-a', 'null',            # null audio driver — fast, no speaker output
+            '-F', wav_path,          # output WAV file  (must come before positional args)
+            '-r', str(sample_rate),  # sample rate
+            '-g', '0.8',             # master gain: 0.8 linear ≈ -1.9 dB; headroom against clipping on hot full-velocity MIDI patches
+            sf2,                     # positional: SoundFont
+            midi_path,               # positional: MIDI file
         ]
 
         try:

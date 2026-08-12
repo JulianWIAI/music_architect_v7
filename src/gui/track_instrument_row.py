@@ -36,6 +36,7 @@ from typing import Callable, Optional
 from src.gui.styles import S
 from src.gui.constants import GM_INSTRUMENTS, DRUM_KITS, ROLE_INSTRUMENTS
 from src.gui.tooltips import ToolTip, TOOLTIPS
+from src.gui.instrument_description_label import InstrumentDescriptionLabel
 
 
 # ---------------------------------------------------------------------------
@@ -187,6 +188,13 @@ class TrackInstrumentRow:
         rand_btn = self._make_button(row, "Rand", self.randomize, self._color)
         rand_btn.pack(side='left', padx=2)
         self._attach_tip(rand_btn, 'btn_rand_instrument')
+
+        # ── Sound-character description label ─────────────────────────
+        # Shows a live one-liner (colour + character) for the selected
+        # GM instrument so newcomers can understand the timbral choice.
+        self._desc = InstrumentDescriptionLabel(row, styles=S, max_chars=55)
+        self._desc.pack(side='left', padx=(6, 4), fill='x', expand=True)
+        self._desc.attach(self.instrument)
 
     # ------------------------------------------------------------------
     # Combobox helpers

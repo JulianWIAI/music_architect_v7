@@ -16,6 +16,8 @@ Music Architect V7 generates complete MIDI productions for **11 genres** (Pop, T
 
 After 3 generations the best tracks automatically receive a `vocal_ready` sibling — the same arrangement with open chord voicings (root + 5th + octave shell) and the vocal frequency register (C4–C6) cleared in verse, chorus, and hook sections, ready for a vocalist to record over.
 
+The **Production Advisor** tab (new in V7) closes the creative loop: after generating, the user can select instruments from a psychoacoustic compatibility matrix, audition the full beat in a different SoundFont, choose a timbral variant (BRIGHT / NEUTRAL / DARK), and export a printable 10-section PDF production guide — all without leaving the app.
+
 ---
 
 ## Key Features
@@ -39,8 +41,15 @@ After 3 generations the best tracks automatically receive a `vocal_ready` siblin
 | **Harmonic Governor** | Resolves dissonant notes to the nearest scale pitch; configurable per genre |
 | **Bright-scale enforcement** | Commercial pipeline locks Pop/House/EDM to Major, Lydian, Mixolydian, Pentatonic Major — zero dark modes |
 | **Velocity LSB watermarking** | Hides a per-file cryptographic fingerprint in note velocities (±1 delta, inaudible) |
-| **UTAU export** | Melody track exported as `.ustx` for UTAU/OpenUtau vocal synthesis |
-| **GUI** | Tkinter interface with AI prompt decoder, live SF2 indicator, dual beat/vocal-ready generation, and FluidSynth WAV preview |
+| **UTAU export** | Melody track exported as `.ustx` for UTAU/OpenUtau vocal synthesis; auto-selects the vocal-ready MIDI as the scaffold source |
+| **Vocal-Ready WAV export** | Dedicated SAVE WAV button for the vocal-ready beat — renders the instrumental scaffold via FluidSynth so producers can send a high-quality audio reference to their vocalist |
+| **Production Advisor tab** | Full post-generation advisor: instrument picker, FX variant selector, preview player, and one-click PDF export — see [Production Advisor](#production-advisor) |
+| **BDRA psychoacoustic scoring** | `BDRARules` scores any instrument combination 0-100 across four timbral axes (Brightness · Density · Attack · Register) and five spectral principles (P1-P5); drives the InstrumentBuilder comboboxes |
+| **FX variant system** | `FxChainSelector` merges three independent delta layers — palette_delta → variant_delta → instrument_delta — to produce a final per-track effect chain without modifying the source JSON |
+| **Custom SoundFont picker** | `SoundFontPickerWidget` lets the user browse to any `.sf2` on disk; selection persists across sessions via `data/user_sf_override.json`; falls back to genre-routing if the file is moved |
+| **PDF production guide** | `AdvisorPDFExporter` generates a 10-section printable A4 PDF: palette, instruments (GM table), BPM targets, gain staging, effect chains, frequency allocation, parallel compression, M/S mastering; falls back to UTF-8 TXT if fpdf2 is absent |
+| **GM sound descriptions** | `gm_descriptions.py` supplies one-line sound-character strings for all 128 General MIDI programs; shown in the PDF instrument table and the InstrumentBuilder tooltip |
+| **GUI** | Tkinter interface with AI prompt decoder, live SF2 indicator, dual beat/vocal-ready generation, FluidSynth WAV preview, and full Production Advisor tab |
 
 ---
 
@@ -65,6 +74,9 @@ music_architect_v7/
 │   │   ├── genre_constants.py     # BPM, scale, drum patterns, instrument maps (11 genres)
 │   │   ├── structure_generator.py # Procedural randomised song structure per genre
 │   │   ├── bass_architect.py      # Per-song bass archetype + palette selection
+│   │   ├── bdra_rules.py          # BDRA 4-axis psychoacoustic scoring + P1-P5 validation
+│   │   ├── fx_chain_selector.py   # 3-layer FX delta merger (palette → variant → instrument)
+│   │   ├── gm_descriptions.py     # Sound-character strings for all 128 GM programs
 │   │   └── billboard/             # Commercially grounded composition modules
 │   │       ├── gradual_orchestration.py      # Intro layer entry protocol
 │   │       ├── gradual_de_orchestration.py   # Outro reverse-exit protocol
@@ -81,6 +93,9 @@ music_architect_v7/
 │   ├── tools/
 │   │   └── watermark_engine.py    # Dual-layer MIDI watermarking
 │   ├── arrangement/               # Genre fusion and smart arrangement
+│   ├── export/
+│   │   ├── advisor_pdf.py         # 10-section A4 PDF / TXT production guide
+│   │   └── utau_bridge.py         # UTAU/OpenUtau .ustx scaffold export
 │   ├── rendering/                 # WAV + FluidSynth export
 │   │   ├── fluidsynth_renderer.py # Non-realtime FluidSynth renderer with cancel()
 │   │   └── soundfont_library.py   # SF2 discovery + genre-based routing (3-font split)
@@ -90,6 +105,15 @@ music_architect_v7/
 │   ├── utils/                     # Humanizer, voice-leading, polyrhythm engine
 │   │   └── vocal_mask_math.py     # Open voicing + vocal register math (C4–C6)
 │   └── gui/                       # Tkinter GUI application
+│       ├── app.py                 # Main application window
+│       ├── advisor_actions.py     # Advisor action strip (preview / save WAV / MIDI / PDF)
+│       ├── advisor_query_panel.py # Query panel: load advisor for external MIDI by genre/BPM/key
+│       ├── instrument_builder.py  # InstrumentBuilder — BDRA-filtered combinatoric picker
+│       ├── fx_variant_panel.py    # BRIGHT / NEUTRAL / DARK variant switcher
+│       ├── soundfont_picker.py    # Custom SF2 file picker with session persistence
+│       ├── midi_preview_player.py # WAV + MIDI playback (pygame)
+│       ├── collapsible_section.py # Reusable collapsible panel widget
+│       └── styles.py              # App-wide colour and font constants
 └── tests/
 ```
 
@@ -169,6 +193,82 @@ The seed is identical to the full beat, so the two files are structurally and ha
 
 ---
 
+## Production Advisor
+
+The **ADVISOR** tab is a self-contained production assistant that works both with songs you generate inside the app and with any external MIDI file (just enter genre, BPM, and key).
+
+### Panels
+
+| Panel | Purpose |
+|---|---|
+| **Advisor Query** | Enter genre / BPM / key for an external MIDI and load the full advisor recommendations without running the composition engine |
+| **InstrumentBuilder** | Combinatoric picker for all 10 tracks; comboboxes are filtered live to only show instruments that are branch-compliant with the selected kick drum |
+| **FxVariantPanel** | Toggle between BRIGHT / NEUTRAL / DARK timbral flavours; genre-specific names (e.g. Pop → POLISHED / NATURAL / UNDERGROUND) |
+| **SoundFontPicker** | Browse to any `.sf2` on disk; label turns green when the file is found, orange when it is missing; last choice is restored on next startup |
+
+### BDRA Compatibility Score
+
+Every instrument selection is scored 0-100 by `BDRARules` using four timbral axes:
+
+| Axis | Range | Meaning |
+|---|---|---|
+| **B** — Brightness | 0-3 | Spectral centroid proxy (0 = sub/dark, 3 = sparkle / air shelf) |
+| **D** — Density | 0-3 | Voice count / texture thickness (0 = single sine, 3 = dense ensemble) |
+| **A** — Attack | 0-3 | Envelope onset (0 = click/pluck <5 ms, 3 = slow swell >100 ms) |
+| **R** — Register | 0-3 | Fundamental pitch range (0 = sub bass, 3 = treble/air) |
+
+Five psychoacoustic principles (P1-P5) validate the combination:
+- **P1** Sub-bass exclusivity — at most one track may sit in the critical band below 80 Hz
+- **P2** Register monotonicity — successive roles must occupy ascending spectral layers
+- **P3** Attack contrast — adjacent voices require envelope differentiation
+- **P4** Density headroom — total simultaneous voice density must not exceed perceptual masking threshold
+- **P5** Timbral complementarity — kick and bass branch must share a compatible harmonic profile
+
+### FX Delta Layers
+
+`FxChainSelector` builds the final effect chain by merging three independent layers in order:
+
+```
+palette_delta   (palette JSON — base genre-level adjustments)
+    ↓
+variant_delta   (BRIGHT / NEUTRAL / DARK — e.g. +air shelf, +tape saturation)
+    ↓
+instrument_delta (GM program-aware — e.g. electric piano → tube saturation, choir → mono delay)
+    ↓
+final per-track effect chain shown in advisor + PDF
+```
+
+### Action Strip
+
+After adjusting instruments and variant, the action strip provides four one-click exports:
+
+| Button | Enabled | Produces |
+|---|---|---|
+| **▶ PREVIEW WITH INSTRUMENTS** | Always (once a song is loaded) | Re-composes with pinned seed, renders WAV via FluidSynth using the selected SF2, auto-plays |
+| **⬇ SAVE WAV** | After successful FluidSynth render | WAV of the full beat rendered with the chosen SoundFont and BDRA instruments |
+| **⬇ STANDARD MIDI** | As soon as MIDI is written (before WAV render) | Full-beat MIDI with all program_change events for the selected instruments embedded |
+| **⬇ VOCAL MIDI** | When "Vocal-Ready" checkbox is on | Vocal-ready scaffold with `vocal_mask=True` and the selected instruments |
+| **⬇ EXPORT PDF** | Always | 10-section A4 production guide (see below) |
+
+### PDF Production Guide
+
+`AdvisorPDFExporter` writes a printable A4 PDF with ten sections:
+
+1. **Title block** — genre, BPM, key, date
+2. **Palette & FX Variant** — active palette name, branch, kick code, variant label
+3. **Instruments** — GM table with program number, sound name, BDRA code, and sound-character description
+4. **BPM Targets** — bucket, anchor BPM, allowed key families, PLR target, LRA
+5. **Gain Staging** — per-track RMS / peak / crest factor targets (genre-adjusted delta)
+6. **Effect Chains** — base chain with merged variant + instrument deltas annotated (adjust / bypass / swap / add)
+7. **Frequency Allocation** — HPF / LPF / dominant zone / stereo width per track
+8. **Parallel Compression** — New York compression wet blend, ratio, threshold, release
+9. **M/S Mastering** — side HPF, side shelf, resulting width
+10. Page footer on every page
+
+If `fpdf2` is not installed the exporter falls back to a UTF-8 formatted `.txt` file automatically — the workflow is never blocked.
+
+---
+
 ## Fitness Scoring (0 – 115 pts)
 
 | Component | Max pts | What is measured |
@@ -207,3 +307,4 @@ python main.py watermark --extract path/to/track.mid
 - `pygame` — optional audio preview
 - `FluidSynth` — optional non-realtime WAV rendering (via `-a null` driver)
 - `soundfile` — WAV I/O
+- `fpdf2` — optional PDF export for the production guide (falls back to `.txt` if absent)
