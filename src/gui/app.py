@@ -589,7 +589,12 @@ class SeedComposerApp:
         tracks = ['drums', 'bass', 'chords', 'lead', 'pad', 'arp']
         for track in tracks:
             color = S.TRACK_CLR.get(track, S.CYAN)
-            row = tk.Frame(frame, bg=S.BG2); row.pack(fill='x', pady=2)
+
+            # Container holds two sub-rows: controls on row1, description on row2.
+            container = tk.Frame(frame, bg=S.BG2)
+            container.pack(fill='x', pady=2)
+            row = tk.Frame(container, bg=S.BG2)
+            row.pack(fill='x')
 
             enabled = tk.BooleanVar(value=True)
             en_cb = tk.Checkbutton(row, text=track.upper(), variable=enabled, font=S.FN_S,
@@ -623,11 +628,14 @@ class SeedComposerApp:
             rand_btn.pack(side='left', padx=2)
             self._tip(rand_btn, 'btn_rand_instrument')
 
-            # Sound-character description — updates when the user selects
-            # a different instrument so newcomers understand the timbre.
+            # Row 2: sound-character description below the controls.
+            # Indent spacer aligns text under the instrument area (past the track label).
             if track != 'drums':
-                desc = InstrumentDescriptionLabel(row, styles=S, max_chars=55)
-                desc.pack(side='left', padx=(6, 2), fill='x', expand=True)
+                row2 = tk.Frame(container, bg=S.BG2)
+                row2.pack(fill='x')
+                tk.Label(row2, text="", bg=S.BG2, width=10, font=S.FN_X).pack(side='left')
+                desc = InstrumentDescriptionLabel(row2, styles=S, max_chars=120)
+                desc.pack(side='left', fill='x', expand=True, padx=(2, 4))
                 desc.attach(inst)
 
             self.track_vars[track] = {'enabled': enabled, 'volume': vol, 'instrument': inst}
@@ -890,6 +898,7 @@ class SeedComposerApp:
         self._palette_cb  = ttk.Combobox(pal_row, textvariable=self._palette_var,
                                           state='readonly', width=22, font=S.FN_S)
         self._palette_cb.pack(side='left', padx=4)
+        self._tip(self._palette_cb, 'advisor_palette')
         self._branch_lbl = tk.Label(pal_row, text="", font=S.FN_X, fg=S.CYAN, bg=S.BG2)
         self._branch_lbl.pack(side='left', padx=4)
         self._palette_data = {}

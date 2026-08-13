@@ -185,6 +185,14 @@ TOOLTIPS: dict[str, str] = {
         "Includes all notes, structure, chord progressions and metadata."
     ),
 
+    # ── Production Advisor — Palette selector ─────────────────────────────
+    'advisor_palette': (
+        "Active instrument palette — a curated set of instruments and effect\n"
+        "chain adjustments for this genre.  Switching palettes changes the\n"
+        "kick description, BDRA branch, instrument defaults in the builder,\n"
+        "and the base chain_delta shown in the advisor and PDF guide."
+    ),
+
     # ── Production Advisor — Query panel ──────────────────────────────────
     'advisor_genre': (
         "Genre to look up.\n"

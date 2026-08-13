@@ -114,9 +114,16 @@ class InstrumentBuilder(tk.Frame):
         self._build_ui()
         # Initialise combobox contents with Branch A defaults
         self._on_kick_change()
-        # Show the first track's description immediately so INFO is not blank
-        first_track = _TRACKS[0][0]
-        self._refresh_desc(first_track)
+        # Pre-populate every combobox tooltip so hovering any track immediately
+        # shows its description rather than an empty popup.
+        for track_key, _, _ in _TRACKS:
+            inst = self._inst(track_key)
+            if inst:
+                tip = self._track_tips.get(track_key)
+                if tip:
+                    tip.text = _gm_desc(inst.get('gm', 0))
+        # Show the first track's description in the INFO strip
+        self._refresh_desc(_TRACKS[0][0])
 
     # ─────────────────────────────────────────────────────────────────────
     #  UI construction  (called once from __init__)
