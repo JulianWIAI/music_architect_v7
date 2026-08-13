@@ -197,6 +197,10 @@ The seed is identical to the full beat, so the two files are structurally and ha
 
 The **ADVISOR** tab is a self-contained production assistant that works both with songs you generate inside the app and with any external MIDI file (just enter genre, BPM, and key).
 
+![Instrument Builder & FX Variant panel](assets/screenshots/screenshot_instrument_builder.png)
+
+![Production Advisor recommendations](assets/screenshots/screenshot_set_up_advice.png)
+
 ### Panels
 
 | Panel | Purpose |

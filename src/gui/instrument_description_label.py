@@ -77,6 +77,14 @@ class InstrumentDescriptionLabel:
             fg=styles.TXT_DIM,
             bg=styles.BG2,
             anchor="w",
+            justify="left",
+        )
+        # Wrap text to exactly the width allocated by the geometry manager.
+        # Without this, tk.Label renders on a single line and is visually
+        # clipped when the panel is narrower than the text.
+        self._label.bind(
+            "<Configure>",
+            lambda e: self._label.configure(wraplength=e.width) if e.width > 1 else None,
         )
         # Tooltip starts empty; updated dynamically in _refresh().
         self._tooltip = ToolTip(self._label, "")

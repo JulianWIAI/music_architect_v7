@@ -192,7 +192,7 @@ class TrackInstrumentRow:
         # ── Sound-character description label ─────────────────────────
         # Shows a live one-liner (colour + character) for the selected
         # GM instrument so newcomers can understand the timbral choice.
-        self._desc = InstrumentDescriptionLabel(row, styles=S, max_chars=55)
+        self._desc = InstrumentDescriptionLabel(row, styles=S, max_chars=120)
         self._desc.pack(side='left', padx=(6, 4), fill='x', expand=True)
         self._desc.attach(self.instrument)
 
