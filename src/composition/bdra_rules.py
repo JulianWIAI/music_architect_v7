@@ -275,20 +275,33 @@ def validate_selection(branch: str, selection: Dict[str, str]) -> ValidationResu
 
 # ── Data loader ───────────────────────────────────────────────────────────────
 
-def best_selection(branch: str, catalogue: Dict[str, List[dict]]) -> Dict[str, dict]:
+def best_selection(
+    branch: str,
+    catalogue: Dict[str, List[dict]],
+    seed: Optional[Dict[str, dict]] = None,
+) -> Dict[str, dict]:
     """
     Return the {track: instrument_dict} combination that maximises the BDRA
     validation score for *branch*.
 
+    Parameters
+    ----------
+    branch    : 'A', 'B', or 'C'
+    catalogue : full instrument catalogue {track: [inst_dict, …]}
+    seed      : optional starting instruments {track: inst_dict}.
+                Seeded instruments are placed first in each track's candidate
+                list so the optimizer tries to keep them where possible — it
+                only replaces a seeded pick when a swap raises the score.
+                Instruments not in the catalogue are included as candidates so
+                palette picks outside bdra_instruments.json are still evaluated.
+
     Algorithm: coordinate descent.
-      1. Seed every track with its first valid instrument.
-      2. For each track, try every valid alternative; keep whichever raises
-         the overall score most.  Repeat until a full pass changes nothing.
+      1. Start every track from its seeded instrument (or first valid catalogue
+         entry when no seed is supplied).
+      2. For each track, try every candidate; keep whichever raises the overall
+         score most.  Repeat until a full pass changes nothing.
 
-    Typically converges to 100/100 in one or two passes because the six
-    branch rules and five psychoacoustic principles form a sparse constraint
-    graph — improving one track rarely conflicts with an already-improved one.
-
+    Typically converges to 100/100 in one or two passes.
     Returns {} if the catalogue has no valid instruments for any track.
     """
     valid: Dict[str, List[dict]] = {
@@ -296,9 +309,22 @@ def best_selection(branch: str, catalogue: Dict[str, List[dict]]) -> Dict[str, d
         for track in BRANCH_RULES.get(branch, {})
     }
 
-    # Seed with first valid instrument per track
+    # Build candidate lists: seeded instrument first, then catalogue alternatives.
+    # Including the seed even when it is not in the catalogue lets the optimizer
+    # evaluate palette-specific instruments that live outside bdra_instruments.json.
+    candidates: Dict[str, List[dict]] = {}
+    for track, insts in valid.items():
+        if seed and track in seed:
+            seed_inst = seed[track]
+            already_present = any(i['code'] == seed_inst['code'] for i in insts)
+            # Prepend seed so it is the first candidate tried (= default start)
+            candidates[track] = ([seed_inst] if not already_present else []) + insts
+        else:
+            candidates[track] = insts
+
+    # Start from first candidate per track (= seed if supplied, else catalogue[0])
     selection: Dict[str, dict] = {
-        track: insts[0] for track, insts in valid.items() if insts
+        track: cands[0] for track, cands in candidates.items() if cands
     }
     if not selection:
         return selection
@@ -308,14 +334,14 @@ def best_selection(branch: str, catalogue: Dict[str, List[dict]]) -> Dict[str, d
 
     for _ in range(4):      # 4 passes is always enough; usually converges in ≤ 2
         improved = False
-        for track, insts in valid.items():
-            if not insts or track not in selection:
+        for track, cands in candidates.items():
+            if not cands or track not in selection:
                 continue
             best_inst  = selection[track]
             best_score = _score(selection)
             if best_score == 100:
                 break       # already perfect — skip remaining tracks in pass
-            for inst in insts:
+            for inst in cands:
                 trial = {**selection, track: inst}
                 s = _score(trial)
                 if s > best_score:

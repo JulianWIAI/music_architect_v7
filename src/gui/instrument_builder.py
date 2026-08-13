@@ -526,6 +526,30 @@ class InstrumentBuilder(tk.Frame):
                         cb.set(opt)
                         break
 
+        # ── Optimize around palette picks ─────────────────────────────────
+        # Run coordinate descent with the palette instruments as the seed so
+        # the score reaches 100/100 where possible.  Only swaps a palette pick
+        # when doing so raises the overall BDRA score — genre character is
+        # preserved for instruments that don't cause psychoacoustic violations.
+        branch = self._branch()
+        seed   = {t: self._inst(t) for t in self._track_cbs if self._inst(t)}
+        best   = _br.best_selection(branch, self._catalogue, seed=seed)
+
+        self._busy = True
+        try:
+            for track, inst in best.items():
+                cb = self._track_cbs.get(track)
+                if cb is None:
+                    continue
+                target = _fmt(inst)
+                if target not in cb['values']:
+                    # Instrument optimised to a catalogue entry not yet listed
+                    # (shouldn't happen, but guard anyway)
+                    cb['values'] = list(cb['values']) + [target]
+                cb.set(target)
+        finally:
+            self._busy = False
+
         self._refresh_labels()
         self._refresh_score()
 
