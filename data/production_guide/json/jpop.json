@@ -1,0 +1,337 @@
+{
+  "_meta": {
+    "source": "Music Architect V7 — Production Guide Rev 1.0",
+    "sections": ["A", "B", "D", "E", "F", "G", "H"],
+    "genre": "jpop"
+  },
+  "genre": "jpop",
+  "bpm_range": [110, 145],
+  "valid_scales": ["major", "lydian", "japanese_pentatonic", "pentatonic_major"],
+  "plr_target_db": "7-9",
+  "lra_target_lu": "5-9",
+  "drum_bus_cf_after_parallel_db": "13-15",
+  "bpm_buckets": [
+    {
+      "id": "JP1", "bpm_range": [110, 125], "anchor_bpm": 117.5,
+      "key_families": ["major", "lydian", "japanese_pentatonic"],
+      "character": "Mid-tempo J-Pop / City Pop / ballad; quarter note = 510.6 ms; lush reverb and wide harmonic bed"
+    },
+    {
+      "id": "JP2", "bpm_range": [125, 140], "anchor_bpm": 132.5,
+      "key_families": ["major", "lydian", "pentatonic_major"],
+      "character": "Up-tempo idol pop; quarter note = 452.8 ms; bright, energetic chorus; strings + vocal synergy"
+    },
+    {
+      "id": "JP3", "bpm_range": [140, 145], "anchor_bpm": 142.5,
+      "key_families": ["major", "pentatonic_major"],
+      "character": "Fast J-Pop; 1/16 = 105.3 ms; crisp acoustic-hybrid drums; keep pads shorter to prevent wash"
+    }
+  ],
+  "tracks": {
+    "kick": {
+      "track_no": 1, "name": "Kick",
+      "owns": "Sub 20-80 Hz + click 3-5 kHz (acoustic-electronic hybrid)",
+      "role": "Temporal grid — soft, vocal-forward kick",
+      "fundamental_hz": "50-70",
+      "gain_staging": {
+        "clip_gain_rms_dbfs": -19.0, "output_fader_db": -3.5, "peak_ceiling_dbfs": -7.0, "lufs_s": -18.0, "headroom_to_master_db": 7
+      },
+      "effect_chain": [
+        {"slot": 1, "effect": "High-pass filter",       "params": "18 Hz, 12 dB/oct Butterworth — removes sub-sonic content, preserves sub fundamental"},
+        {"slot": 2, "effect": "Transient shaper",       "params": "Attack +2 dB, Sustain -1 dB — gentle definition matching acoustic-hybrid kit"},
+        {"slot": 3, "effect": "Compressor (VCA)",       "params": "Ratio 4:1, Thr -12 dBFS, Attack 8 ms, Release 941.2 ms (=2×qn@127.5BPM), Knee 3 dB, GR 3-4 dB"},
+        {"slot": 4, "effect": "Saturation (tape)",      "params": "Drive +1-2 dB, Mix 25%, tape model, THD 2-3%, low distortion preserves clean sub under busy vocal arrangement — pre-compressor"},
+        {"slot": 5, "effect": "EQ (surgical)",          "params": "Bell -3 dB @300-400 Hz Q=1.4 (boxy removal); higher click content +1.5 dB @4 kHz for small-speaker translation"},
+        {"slot": 6, "effect": "Limiter (track safety)", "params": "Ceiling -7.0 dBFS true peak, Lookahead 1 ms"}
+      ]
+    },
+    "bass": {
+      "track_no": 2, "name": "Bass",
+      "owns": "Sub 20-80 Hz + Bass 80-250 Hz (melodic sine/tri or fingered electric)",
+      "role": "Melodic harmonic root — live-band or melodic synth bass",
+      "fundamental_hz": "55-110",
+      "gain_staging": {
+        "clip_gain_rms_dbfs": -20.0, "output_fader_db": -5.0, "peak_ceiling_dbfs": -8.0, "lufs_s": -19.0, "headroom_to_master_db": 7
+      },
+      "effect_chain": [
+        {"slot": 1, "effect": "High-pass filter",               "params": "24-30 Hz, 12 dB/oct — preserves full sub-bass weight without infrasonic waste"},
+        {"slot": 2, "effect": "EQ (fundamental shaping)",       "params": "Bell +2 dB @fundamental Q=1.2; triangle-derived odd-harmonic bass keeps melodic un-masked under vocal chords"},
+        {"slot": 3, "effect": "Sidechain compressor (key=Kick)","params": "Ratio 6:1, Thr -20 dBFS, Attack 1-2 ms, Release 235.3 ms (=1/8÷2@127.5BPM), GR 3-5 dB"},
+        {"slot": 4, "effect": "Saturation (tube)",              "params": "Drive +2-4 dB, Mix 35%, tube model, THD 3-5%, post-EQ — harmonic content for small speakers"},
+        {"slot": 5, "effect": "Stereo imager (mono-maker)",     "params": "Mono below 120 Hz; gentle width above 120 Hz (100%)"},
+        {"slot": 6, "effect": "Limiter (track safety)",         "params": "Ceiling -8.0 dBFS true peak, Lookahead 1.5 ms, Release 100 ms"}
+      ]
+    },
+    "chords": {
+      "track_no": 3, "name": "Chords",
+      "owns": "Low-mid 250-500 Hz + Mid 500 Hz-2 kHz (piano, strings, warm pad)",
+      "role": "Lush harmonic bed — vocal accompaniment",
+      "gain_staging": {
+        "clip_gain_rms_dbfs": -19.0, "output_fader_db": -7.0, "peak_ceiling_dbfs": -7.0, "lufs_s": -18.0, "headroom_to_master_db": 7
+      },
+      "effect_chain": [
+        {"slot": 1, "effect": "High-pass filter",    "params": "150-200 Hz, 12 dB/oct"},
+        {"slot": 2, "effect": "EQ (carve)",          "params": "Bell -2 dB @800-1200 Hz Q=1.0 (melody/vocal pocket); moderate low-pass 5 kHz keeps brightness below melody centroid"},
+        {"slot": 3, "effect": "Compressor (opto)",   "params": "Ratio 3:1, Thr -18 dBFS, Attack 15 ms, Release 470.6 ms (=qn@127.5BPM), GR 2-4 dB"},
+        {"slot": 4, "effect": "Chorus/ensemble",     "params": "Rate 0.35 Hz, Depth 15-25%, Mix 18%, 2-3 voices, Spread 60%"},
+        {"slot": 5, "effect": "Reverb (send)",       "params": "Decay 1.5 s, Pre-delay 29.4 ms (=1/16 frac@127.5BPM), HPF 300 Hz, LPF 7 kHz, Mix 14%"},
+        {"slot": 6, "effect": "Saturation (tape)",   "params": "Drive +1.5 dB, Mix 20%, tape model, THD 2-4%, post-comp — warm without harsh"}
+      ]
+    },
+    "melody": {
+      "track_no": 4, "name": "Melody",
+      "owns": "Mid 500 Hz-2 kHz + High-mid 2-6 kHz (vocal-style synth / strings lead)",
+      "role": "Focal voice — vocal-mimicking melodic lead",
+      "pitch_range_hz": "262-880",
+      "gain_staging": {
+        "clip_gain_rms_dbfs": -17.0, "output_fader_db": -5.0, "peak_ceiling_dbfs": -5.0, "lufs_s": -15.0, "headroom_to_master_db": 5
+      },
+      "effect_chain": [
+        {"slot": 1, "effect": "High-pass filter",         "params": "250-300 Hz, 12 dB/oct"},
+        {"slot": 2, "effect": "EQ (presence + formant)",  "params": "Shelf +2-3 dB @3 kHz, 6 dB/oct; formant-shaped envelope centered 800 Hz-3 kHz mirrors vocal presence"},
+        {"slot": 3, "effect": "Compressor (FET)",         "params": "Ratio 2.5:1, Thr -16 dBFS, Attack 10 ms, Release 313.7 ms (=half-qn@127.5BPM), Knee 6 dB, GR 4-6 dB — preserves melodic dynamics"},
+        {"slot": 4, "effect": "Saturation (tape)",        "params": "Drive +2 dB, Mix 25%, HF roll-off 12 kHz — smooth brightness"},
+        {"slot": 5, "effect": "Stereo delay (send)",      "params": "Time 352.9 ms (dotted-8th@127.5BPM), Feedback 20-28%, HPF 400 Hz, LPF 5 kHz, ping-pong"},
+        {"slot": 6, "effect": "Reverb (send)",            "params": "Decay 1.3 s, Pre-delay 29.4 ms, HPF 400 Hz, LPF 8 kHz, Mix 12%"},
+        {"slot": 7, "effect": "Limiter + air shelf",      "params": "+2 dB high shelf @10 kHz (bright J-Pop air); Ceiling -5 dBFS true peak"}
+      ]
+    },
+    "arp": {
+      "track_no": 5, "name": "Arp",
+      "owns": "High-mid 2-6 kHz (music-box / koto pluck arp)",
+      "role": "Bright inharmonic arp sparkle — rhythmic subdivision",
+      "rhythm_grid": "1/16 = 117.6 ms @127.5BPM",
+      "gain_staging": {
+        "clip_gain_rms_dbfs": -19.0, "output_fader_db": -9.0, "peak_ceiling_dbfs": -7.0, "lufs_s": -18.0, "headroom_to_master_db": 7
+      },
+      "effect_chain": [
+        {"slot": 1, "effect": "High-pass filter",            "params": "300-400 Hz, 12 dB/oct"},
+        {"slot": 2, "effect": "EQ (clarity + sparkle)",      "params": "Bell +1.5 dB @4-6 kHz Q=1.2 (bright inharmonic partials); Bell -3 dB @2.9 kHz Q=4 (melody carve)"},
+        {"slot": 3, "effect": "Compressor",                  "params": "Ratio 3:1, Attack 3 ms, Release 117.6 ms (=1/16@127.5BPM), GR 3-5 dB — articulate under vocal-style Melody"},
+        {"slot": 4, "effect": "Stereo delay (send, synced)", "params": "Time 352.9 ms (dotted-8th@127.5BPM), Feedback 22%, HPF 600 Hz"},
+        {"slot": 5, "effect": "Reverb (send, short)",        "params": "Decay 0.6 s (≈0.4× Chords RT60), Pre-delay 14.7 ms, HPF 700 Hz, Mix 10%"},
+        {"slot": 6, "effect": "Stereo widener + limiter",    "params": "Width 40-60% above 500 Hz; Ceiling -7 dBFS true peak"}
+      ]
+    },
+    "pads": {
+      "track_no": 6, "name": "Pads",
+      "owns": "Sides, 200 Hz-8 kHz (warm strings / soft choir pad)",
+      "role": "Orchestral-pop warmth — lush spatial sustain",
+      "reverb_decay_s": 3.5,
+      "gain_staging": {
+        "clip_gain_rms_dbfs": -22.0, "output_fader_db": -12.0, "peak_ceiling_dbfs": -10.0, "lufs_s": -22.0, "headroom_to_master_db": 8
+      },
+      "effect_chain": [
+        {"slot": 1, "effect": "HPF + LPF (band-limit)",  "params": "HPF 200-250 Hz 12 dB/oct; LPF 9 kHz 12 dB/oct (gentle, not too bright)"},
+        {"slot": 2, "effect": "EQ (gentle scoop)",        "params": "Bell -2 dB @1-2 kHz Q=0.8 (vocal-range space); slow attack 500 ms-1 s sits unobtrusively behind Melody"},
+        {"slot": 3, "effect": "Compressor (slow)",        "params": "Ratio 2:1, Thr -22 dBFS, Attack 30 ms, Release 1882.4 ms (=4×qn@127.5BPM), GR 2-3 dB"},
+        {"slot": 4, "effect": "Chorus/ensemble",          "params": "Rate 0.2-0.4 Hz, Depth 30-50%, Mix 40%, Spread 100%, 3 voices"},
+        {"slot": 5, "effect": "Sidechain comp (key=Kick)","params": "Ratio 3:1, Thr -24 dBFS, Attack 5 ms, Release 941.2 ms (=2×qn@127.5BPM), GR 2-3 dB"},
+        {"slot": 6, "effect": "Reverb (send, long hall)", "params": "Decay 3.5 s (longest of all tracks), Pre-delay 58.8 ms, HPF 350 Hz, Mix 30%"},
+        {"slot": 7, "effect": "Stereo widener",           "params": "Width 50-80% above 200 Hz, Correlation floor +0.2, Output limiter -10 dBFS"}
+      ]
+    },
+    "stabs": {
+      "track_no": 7, "name": "Stabs",
+      "owns": "Mid 500 Hz-6 kHz transients (brass / piano stab)",
+      "role": "Bright orchestral chorus-hit accent",
+      "duty_cycle_max_pct": 15,
+      "gain_staging": {
+        "clip_gain_rms_dbfs": -18.0, "output_fader_db": -7.0, "peak_ceiling_dbfs": -6.0, "lufs_s": -17.0, "headroom_to_master_db": 6
+      },
+      "effect_chain": [
+        {"slot": 1, "effect": "High-pass filter",       "params": "150-200 Hz, 12 dB/oct"},
+        {"slot": 2, "effect": "Transient shaper",       "params": "Attack +5 dB, Sustain -6 dB — sharp hammer transient 2-4 ms for clean rhythmic accents"},
+        {"slot": 3, "effect": "EQ (impact + brightness)","params": "Bell +2 dB @2-3 kHz Q=1.0; +1 dB HF shelf @8 kHz for J-Pop bright character"},
+        {"slot": 4, "effect": "Compressor (fast FET)",  "params": "Ratio 4:1, Thr -14 dBFS, Attack 2 ms, Release 235.3 ms (=1/8@127.5BPM), GR 5-8 dB"},
+        {"slot": 5, "effect": "Reverb (send, short)",   "params": "Decay 0.15-0.4 s, Pre-delay 14.7 ms, HPF 400 Hz, Mix 22%"},
+        {"slot": 6, "effect": "Stereo spread + limiter","params": "Haas spread 12 ms side only, Width 120%; Ceiling -6 dBFS"}
+      ]
+    },
+    "fx": {
+      "track_no": 8, "name": "FX",
+      "owns": "Air 2 kHz-20 kHz + atmospheric wind textures",
+      "role": "Sparkle/shimmer riser + cinematic atmosphere / vocal breath",
+      "gain_staging": {
+        "clip_gain_rms_dbfs": -25.0, "output_fader_db": -10.0, "peak_ceiling_dbfs": -11.0, "lufs_s": -25.0, "headroom_to_master_db": 10
+      },
+      "effect_chain": [
+        {"slot": 1, "effect": "HPF / LPF (automated sweep)","params": "Bright bell-like sweep upward for J-Pop optimistic build; wind/atmosphere: slow LPF filter; sweep 200 Hz→8 kHz"},
+        {"slot": 2, "effect": "EQ (carve for coexistence)", "params": "Bell -3 dB where overlapping Melody/Lead, Q=1.5"},
+        {"slot": 3, "effect": "Compressor (glue)",          "params": "Ratio 2.5:1, Thr -28 dBFS, Attack 10 ms, Release 941.2 ms (=2×qn@127.5BPM), GR 2-4 dB"},
+        {"slot": 4, "effect": "Reverb/Delay (send, large)", "params": "Decay ≥3.5 s (≥Pads RT60), Pre-delay 29.4 ms, HPF 500 Hz, Mix 45% — lush cinematic space"},
+        {"slot": 5, "effect": "Stereo widener",             "params": "Width 60-80% (mid-side); enveloping but not as wide as EDM — intimate J-Pop scale"},
+        {"slot": 6, "effect": "Limiter + LPF",              "params": "Ceiling -11 dBFS; LPF 16 kHz 12 dB/oct"}
+      ]
+    },
+    "percussion": {
+      "track_no": 9, "name": "Percussion",
+      "owns": "High-mid 2-6 kHz (acoustic hats/tambourine) + 250-500 Hz (brighter snare)",
+      "role": "Natural-sounding hat/tambourine + bright acoustic snare",
+      "micro_timing_ms": "±8-18",
+      "gain_staging": {
+        "clip_gain_rms_dbfs": -19.0, "output_fader_db": -8.0, "peak_ceiling_dbfs": -6.0, "lufs_s": -18.0, "headroom_to_master_db": 6
+      },
+      "effect_chain": [
+        {"slot": 1, "effect": "High-pass filter",           "params": "300-500 Hz, 12 dB/oct (hats); 200 Hz for tambourine; brighter tuning 200-250 Hz snare fundamental"},
+        {"slot": 2, "effect": "Transient shaper",           "params": "Attack +3 dB, Sustain -2 dB — light, natural acoustic-hybrid character"},
+        {"slot": 3, "effect": "Compressor (parallel-ready)","params": "Ratio 4:1, Attack 1 ms, Release 117.6 ms (=1/16@127.5BPM), GR 2-3 dB"},
+        {"slot": 4, "effect": "EQ (air + sparkle)",         "params": "Shelf +2 dB @8 kHz, 6 dB/oct (J-Pop bright shimmer 4-8 kHz); Bell -2 dB @900 Hz Q=1.2"},
+        {"slot": 5, "effect": "Reverb (send, short)",       "params": "Decay 0.15-0.3 s, Pre-delay 14.7 ms, HPF 800 Hz, Mix 12%"},
+        {"slot": 6, "effect": "Width + tape saturation",    "params": "Width 30-50% above 800 Hz, Pan spread ±30-50%; Drive +1 dB, Mix 20%, tape — gentle natural tone"}
+      ]
+    },
+    "intro": {
+      "track_no": 10, "name": "Intro",
+      "owns": "First 4-8 bars, piano/strings sparse or vocal a cappella",
+      "role": "Melodic ballad-style establishing statement",
+      "max_simultaneous_elements": 3,
+      "section_contrast_target_lu": "4-6",
+      "gain_staging": {
+        "clip_gain_rms_dbfs": -22.0, "output_fader_db": -6.0, "peak_ceiling_dbfs": -9.0, "lufs_s": -22.0, "headroom_to_master_db": 8
+      },
+      "effect_chain": [
+        {"slot": 1, "effect": "HPF (automated sweep)",          "params": "Sweeps from 400 Hz→20 Hz over 4 bars (7.53 s at 127.5 BPM); gentle LPF close 20 kHz→3 kHz in pre-chorus; 12 dB/oct"},
+        {"slot": 2, "effect": "EQ (carve for combined elements)","params": "Bell -2 dB where borrowed tracks overlap, Q=1.0"},
+        {"slot": 3, "effect": "Compressor (glue)",              "params": "Ratio 2:1, Thr -22 dBFS, Attack 20 ms, Release 941.2 ms (=2×qn@127.5BPM), GR 2-3 dB"},
+        {"slot": 4, "effect": "Reverb (send, large, auto wet%)","params": "Decay 3.5 s, Pre-delay 58.8 ms, wet% ramps down as intro progresses — 'arriving' depth cue"},
+        {"slot": 5, "effect": "Limiter (track safety)",         "params": "Ceiling -9 dBFS true peak"}
+      ]
+    }
+  },
+  "bus_inserts": {
+    "drum":   {"chain": "EQ (HPF 30 Hz) -> Comp (3:1, 15 ms attack, gentle) -> Saturation (tape, 2-3% THD)", "comp_ratio": "3:1", "comp_threshold_dbfs": -18, "comp_gr_db": 2, "comp_release_formula": "941.2"},
+    "bass":   {"chain": "EQ (mono-below-120) -> Comp (3.5:1) -> Saturation (tube, 3-5% THD)", "comp_ratio": "3.5:1", "comp_threshold_dbfs": -18, "comp_gr_db": 2, "comp_release_formula": "235.3"},
+    "synth":  {"chain": "EQ (broad, vocal-clearing carve at 1-3 kHz) -> Comp (2:1, glue) -> Stereo Widener (moderate)", "comp_ratio": "2:1", "comp_threshold_dbfs": -20, "comp_gr_db": 2, "comp_release_formula": "470.6"},
+    "fx":     {"chain": "EQ (carve) -> Reverb Return (lush) -> Limiter (-9 dBFS)", "comp_ratio": "2:1"},
+    "master": {"chain": "EQ (gentle) -> Bus Comp (1.8:1, 25 ms attack, 1.5-2.5 dB max GR) -> Saturation (0.5% THD) -> Limiter (True Peak -1.0 dBTP)", "comp_ratio": "1.8:1", "comp_threshold_dbfs": -22, "comp_gr_db": "1.5-2.5", "comp_release_formula": "auto"}
+  },
+  "sidechain_routing": [
+    {"trigger": "Kick",    "target": "Bass",       "ratio": "6:1",  "attack_ms": 1,  "release_formula": "235.3 ms (=sc_release@127.5BPM)", "gr_db": 4},
+    {"trigger": "Kick",    "target": "Pads",       "ratio": "3:1",  "attack_ms": 5,  "release_formula": "941.2 ms (=comp_release@127.5BPM)", "gr_db": 2.5},
+    {"trigger": "Kick",    "target": "Chords",     "ratio": "2.5:1","attack_ms": 5,  "release_formula": "470.6 ms (=qn@127.5BPM)", "gr_db": 2},
+    {"trigger": "Percussion (Snare/Clap)", "target": "Melody", "ratio": "2:1", "attack_ms": 3, "release_formula": "235.3 ms (=e8@127.5BPM)", "gr_db": 1.5}
+  ],
+  "parallel_compression": {
+    "wet_blend_pct": "20-30 (target 25)",
+    "ratio": "8:1",
+    "threshold_dbfs": -30,
+    "gr_wet_db": "8-12",
+    "attack_ms": 5,
+    "release_formula": "60-100 ms (moderate, preserves live-band dynamics)",
+    "wet_path_hpf_hz": 120,
+    "wet_path_lpf_hz": 12000,
+    "net_level_rise_db": 1.5,
+    "cf_reduction_db": "2-3",
+    "lra_target_lu": "5-9",
+    "reasoning": "Conservative 20-30% wet blend preserves J-Pop's dynamic range and transient punch; moderate release (60-100 ms) respects natural acoustic-hybrid kit decay without squashing live-band feel."
+  },
+  "transient_shaping": {
+    "kick":       {"attack_db": 2,  "sustain_db": -1},
+    "snare":      {"attack_db": 3,  "sustain_db": -2},
+    "bass":       {"attack_db": 1,  "sustain_db": -1}
+  },
+  "stereo_field": {
+    "kick":       {"class": "MONO",          "width_pct": 0,           "correlation_target": "r>=+0.98"},
+    "bass":       {"class": "MONO<120Hz",    "width_pct": "0/100 above","correlation_target": "r>=+0.9"},
+    "chords":     {"class": "NARROW",        "width_pct": 120,         "correlation_target": "+0.5 to +0.8"},
+    "melody":     {"class": "CENTRE",        "width_pct": 105,         "correlation_target": "+0.9 to +1.0"},
+    "arp":        {"class": "MODERATE",      "width_pct": "40-60",     "correlation_target": "+0.3 to +0.6"},
+    "pads":       {"class": "WIDE",          "width_pct": "50-80",     "correlation_target": "+0.3 to +0.6"},
+    "stabs":      {"class": "NARROW",        "width_pct": 120,         "correlation_target": "+0.5 to +0.8"},
+    "fx":         {"class": "MODERATE-WIDE", "width_pct": "60-80",     "correlation_target": "+0.1 to +0.4"},
+    "percussion": {"class": "NARROW pan",    "pan_spread_pct": "±30-50","correlation_target": "+0.5 to +0.7"},
+    "intro":      {"class": "AUTOMATED",     "width_pct": "follows borrowed track","correlation_target": "+0.9->+0.5"}
+  },
+  "frequency_allocation": {
+    "kick":       {"dominant_zone": "Sub 20-80 Hz + click 3-5 kHz",         "bark_z": "0.5-2",  "hpf_hz": 18,  "lpf_hz": null, "exclusive_claim": "Higher click content 3-5 kHz for small-speaker translation. Sub fundamental clean, THD<3%."},
+    "bass":       {"dominant_zone": "Sub 20-80 Hz + Bass 80-250 Hz",        "bark_z": "1-5",    "hpf_hz": 24,  "lpf_hz": 6000, "exclusive_claim": "Triangle/sine harmonic rolloff; resonant peak at 1.2x fundamental; stays below 250 Hz Chords boundary."},
+    "chords":     {"dominant_zone": "Low-mid 250-500 Hz + Mid 500-2 kHz",   "bark_z": "3-14",   "hpf_hz": 150, "lpf_hz": 12000,"exclusive_claim": "Wide dynamic range natural inharmonicity; vocal accompaniment band. LP at 5 kHz."},
+    "melody":     {"dominant_zone": "Mid 500 Hz-2 kHz + High-mid 2-6 kHz", "bark_z": "7-19",   "hpf_hz": 250, "lpf_hz": 16000,"exclusive_claim": "Formant-shaped 800 Hz-3 kHz vocal-mimicking centroid; bright J-Pop sparkle to 6 kHz."},
+    "arp":        {"dominant_zone": "High-mid 2-6 kHz (bright inharmonic)", "bark_z": "14-19",  "hpf_hz": 300, "lpf_hz": 16000,"exclusive_claim": "Music-box / koto inharmonic partials; -3 dB notch at melody presence peak."},
+    "pads":       {"dominant_zone": "Sides 200 Hz-9 kHz (warm strings)",    "bark_z": "3-21",   "hpf_hz": 200, "lpf_hz": 9000, "exclusive_claim": "Side channel only; mid scooped -2 dB at 1-2 kHz; warm low-pass 5 kHz."},
+    "stabs":      {"dominant_zone": "Mid 500 Hz-6 kHz bright transients",   "bark_z": "7-19",   "hpf_hz": 150, "lpf_hz": 14000,"exclusive_claim": "Time-sliced: <15% duty cycle per bar; bright orchestral accent."},
+    "fx":         {"dominant_zone": "Air 2 kHz-20 kHz (sparkle + breath)",  "bark_z": "14-24",  "hpf_hz": 150, "lpf_hz": 16000,"exclusive_claim": "Bright bell sparkle sweep; vocal breath/ad-lib -35 dBFS ambient; never masks melody."},
+    "percussion": {"dominant_zone": "High-mid 2-6 kHz + brighter snare",    "bark_z": "3-24",  "hpf_hz": 300, "lpf_hz": 18000,"exclusive_claim": "Tambourine shimmer 4-8 kHz; snare 200-250 Hz fundamental brighter than typical."},
+    "intro":      {"dominant_zone": "Mid, ballad-filtered or a cappella",    "bark_z": "8-18",   "hpf_hz": "400->20", "lpf_hz": "3k->18k","exclusive_claim": "Melodic ballad piano/strings opening; a cappella vocal allowed; muted after first verse."}
+  },
+  "ms_mastering": {
+    "status": "MANDATORY",
+    "side_hpf_hz": 200,
+    "side_hpf_slope": "12 dB/oct",
+    "side_shelf_db": 2.0,
+    "side_shelf_hz": 8000,
+    "mid_shelf_db": 0,
+    "resulting_width_pct": "108-118",
+    "correlation_floor": 0.45
+  },
+  "export_specs": {
+    "streaming": {
+      "lufs_i": -14.0, "dbtp": -1.0, "plr_db": 13.0,
+      "sample_rate_hz": 44100, "bit_depth": 24, "stereo": "Interleaved",
+      "lra_lu": "5-9",
+      "notes": "Platform-normalised on ingest. M/S mastering mandatory: side HPF 200 Hz, side shelf +1.5-2.5 dB @8 kHz. Stem naming: jpop_gen{N}_seed_{id}_{track}_v{ver}.wav"
+    },
+    "broadcast": {
+      "lufs_i": -23.0, "lufs_i_tolerance": 0.5, "dbtp": -3.0, "plr_db": 20.0,
+      "sample_rate_hz": 48000, "bit_depth": 24, "stereo": "Interleaved",
+      "lra_lu": "<=10",
+      "notes": "EBU R128 ±0.5 LU tolerance; anything outside is rejected at ingest."
+    },
+    "sync_licensing": {
+      "lufs_i": "-16.0 to -18.0", "dbtp": -1.0, "plr_db": "15.0-17.0",
+      "sample_rate_hz": 48000, "bit_depth": 24, "stereo": "Interleaved",
+      "lra_lu": "6-10",
+      "notes": "Stems mandatory. Vocal stem critical — J-Pop vocal layer must be delivered separately. M/S insert per Section H J-Pop spec."
+    }
+  },
+  "bdra_matrix": {
+    "default_codes": {
+      "kick":       "B1 D1 A0 R0",
+      "bass":       "B1 D1 A1 R1",
+      "chords":     "B1 D2 A2 R2",
+      "melody":     "B2 D1 A1 R2",
+      "arp":        "B3 D1 A0 R3",
+      "pads":       "B1 D1 A3 R2",
+      "stabs":      "B2 D2 A0 R2",
+      "fx":         "B2 D2 A2 R3",
+      "percussion": "B3 D1 A0 R3",
+      "intro":      "B1 D1 A3 R2"
+    },
+    "branches": [
+      {
+        "branch": "A",
+        "kick_code": "B0 D0 A0 R0",
+        "kick_desc": "Pure sine sub kick — minimal acoustic-adjacent J-Pop variant",
+        "valid": {
+          "bass":   {"codes": "B0-B1, D0-D1, A0-A1, R0-R1", "avoid": "R2+ (would duplicate Chords register)"},
+          "chords": {"codes": "B1-B3, D1-D3, any A, R1-R2",  "avoid": "R0 (masks Kick fundamental)"},
+          "melody": {"codes": "B2-B3, D0-D2, A0-A1, R2-R3",  "avoid": ""},
+          "arp":    {"codes": "B2-B3, any D, A0, R2-R3",      "avoid": "R0-R1 (competes with Bass, not Kick)"}
+        }
+      },
+      {
+        "branch": "B",
+        "kick_code": "B1 D1 A0 R0",
+        "kick_desc": "Bright acoustic-electronic hybrid kick — primary J-Pop default (B1 = warm centroid 800-2 kHz)",
+        "valid": {
+          "bass":   {"codes": "B0-B1, D0-D1, A0-A2, R0-R1 preferred", "avoid": "D2-D3 at R1 (intermodulation risk)"},
+          "chords": {"codes": "B1-B2, D1-D2, any A, R2",              "avoid": "D3 (third dense-partial source risks IMD)"},
+          "melody": {"codes": "B2-B3, D0-D2, A0-A1, R2-R3",           "avoid": ""},
+          "arp":    {"codes": "B2-B3, D0-D1, A0, R2-R3",              "avoid": "D2-D3 (fourth dense layer risks IMD product density)"}
+        }
+      },
+      {
+        "branch": "C",
+        "kick_code": "B0 D1 A3 R0",
+        "kick_desc": "Dark slow-attack sub kick — J-Pop ballad / cinematic bridge variant",
+        "valid": {
+          "bass":   {"codes": "B0-B2, D0-D2, A0-A1 preferred", "avoid": "A2-A3 (two slow-attack low elements erase transient anchor)"},
+          "chords": {"codes": "B1-B3, any D, any A, R1-R2",    "avoid": ""},
+          "melody": {"codes": "B2-B3, any D, A0-A2, R2-R3",    "avoid": ""},
+          "arp":    {"codes": "B2-B3, D0-D2, A0, R2-R3",       "avoid": "A2-A3 (slow arp defeats rhythmic sparkle purpose in J-Pop)"}
+        }
+      }
+    ]
+  }
+}

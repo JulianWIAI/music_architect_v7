@@ -1,0 +1,149 @@
+{
+  "_meta": {
+    "source": "Music Architect Production Guide Rev 1.0",
+    "sections": ["C", "G", "H", "I"],
+    "standard": "ITU-R BS.1770-4"
+  },
+  "global_constants": {
+    "sample_rate_hz": 48000,
+    "nyquist_hz": 24000,
+    "bit_depth": 24,
+    "snr_db": 146.2,
+    "alignment_level_dbfs": -18.0,
+    "alignment_level_vu": 0,
+    "alignment_level_dbu": 4.0,
+    "mix_bus_true_peak_dbfs": -6.0,
+    "mix_bus_lufs_i_streaming": -14.0,
+    "mix_bus_lufs_i_broadcast": -23.0,
+    "speed_of_sound_m_per_s": 343
+  },
+  "bpm_time_formulas": {
+    "quarter_note_ms":       "60000 / BPM",
+    "eighth_dotted_ms":      "60000 / BPM * 0.75",
+    "reverb_pre_delay_ms":   "60000 / BPM / 16",
+    "compressor_release_ms": "60000 / BPM * 2",
+    "sidechain_release_ms":  "60000 / BPM / 2",
+    "sixteenth_note_ms":     "15000 / BPM",
+    "half_note_ms":          "120000 / BPM",
+    "one_bar_ms":            "240000 / BPM",
+    "four_bars_ms":          "960000 / BPM"
+  },
+  "plr_formula": {
+    "definition": "PLR (dB) = dBTP - LUFS-I",
+    "standard": "True peak per ITU-R BS.1770-4 Annex 2; integrated loudness per BS.1770-4 with -10 LU relative gating",
+    "psr_note": "PSR = short-term peak - LUFS-S (per-moment). LRA = 95th - 10th percentile of gated LUFS-S (distribution)."
+  },
+  "summation_math": {
+    "correlated":   {"formula": "L_sum = L_i + 20*log10(N)", "N2": 6.02, "N4": 12.04, "N6": 15.56, "N10": 20.0},
+    "incoherent":   {"formula": "L_sum = L_i + 10*log10(N)", "N2": 3.01, "N4": 6.02,  "N6": 7.78,  "N10": 10.0},
+    "crest_factor": {"formula": "CF = L_peak - L_RMS", "drum_bus_db": "12-14", "bass_bus_db": "8-10", "synth_bus_db": "10-12", "full_mix_db": "9-12"}
+  },
+  "haas_thresholds": {
+    "fusion":     {"window_ms": "<1",    "path_m": "<0.34",   "result": "Summing localisation + comb filtering", "use": "FORBIDDEN"},
+    "precedence": {"window_ms": "1-30",  "path_m": "0.34-10.3","result": "Image follows first arrival; adds width", "use": "stab spread 12ms, pad chorus 6-9ms, perc micro-timing ±8-18ms"},
+    "ambiguous":  {"window_ms": "30-50", "path_m": "10.3-17", "result": "Transients flam, sustains fuse",         "use": "AVOID"},
+    "echo":       {"window_ms": ">50",   "path_m": ">17",     "result": "Discrete repeat",                        "use": "Tempo-synced delays only: 1/16 = 15000/BPM upward"}
+  },
+  "bark_scale": {
+    "formula": "z = 13*arctan(0.00076*f) + 3.5*arctan((f/7500)^2) [Bark]",
+    "critical_bw": "BW(f) = 25 + 75*(1 + 1.4*(f/1000)^2)^0.69 [Hz]",
+    "examples": {"100hz": 103, "1khz": 160, "5khz": 700, "10khz": 1550}
+  },
+  "clip_gain_law": {
+    "rules": [
+      "Clip gain normalises every track to -18.0 dBFS RMS before insert 1",
+      "Faders stay at unity (0.0 dB)",
+      "Bus trim compensates downstream (-3 to -12 dB)",
+      "Peak ceiling per track <= -6.0 dBFS"
+    ],
+    "signal_flow": "clip gain -> insert 1..n -> fader (unity) -> pan -> bus trim -> bus inserts -> master trim -> master inserts -> limiter"
+  },
+  "clip_gain_targets": {
+    "note": "RMS measured over sustained portion, 300ms window. CF = crest factor = peak - RMS. Genre deltas apply to RMS column only; peak ceilings are absolute.",
+    "kick":       {"class": "Transient", "rms_dbfs": -18.0, "peak_ceiling_dbfs": -6.0,  "cf_db": 12, "pop_delta": 0, "hiphop_delta":  2, "cine_delta": -2},
+    "bass":       {"class": "Sustained", "rms_dbfs": -18.0, "peak_ceiling_dbfs": -8.0,  "cf_db": 10, "pop_delta": 0, "hiphop_delta":  2, "cine_delta": -2},
+    "chords":     {"class": "Sustained", "rms_dbfs": -20.0, "peak_ceiling_dbfs": -9.0,  "cf_db": 11, "pop_delta": 0, "hiphop_delta": -2, "cine_delta":  0},
+    "melody":     {"class": "Focal",     "rms_dbfs": -18.0, "peak_ceiling_dbfs": -7.0,  "cf_db": 11, "pop_delta": 0, "hiphop_delta":  0, "cine_delta":  0},
+    "arp":        {"class": "Transient", "rms_dbfs": -20.0, "peak_ceiling_dbfs": -8.0,  "cf_db": 12, "pop_delta": 0, "hiphop_delta": -1, "cine_delta": -1},
+    "pads":       {"class": "Sustained", "rms_dbfs": -22.0, "peak_ceiling_dbfs": -12.0, "cf_db": 10, "pop_delta": 0, "hiphop_delta": -2, "cine_delta":  3},
+    "stabs":      {"class": "Transient", "rms_dbfs": -20.0, "peak_ceiling_dbfs": -6.0,  "cf_db": 14, "pop_delta": 0, "hiphop_delta":  1, "cine_delta":  2},
+    "fx":         {"class": "Broadband", "rms_dbfs": -22.0, "peak_ceiling_dbfs": -10.0, "cf_db": 12, "pop_delta": 0, "hiphop_delta": -1, "cine_delta":  4},
+    "percussion": {"class": "Transient", "rms_dbfs": -20.0, "peak_ceiling_dbfs": -6.0,  "cf_db": 14, "pop_delta": 0, "hiphop_delta":  2, "cine_delta":  0},
+    "intro":      {"class": "Mixed",     "rms_dbfs": -20.0, "peak_ceiling_dbfs": -8.0,  "cf_db": 12, "pop_delta": 0, "hiphop_delta":  0, "cine_delta": -4}
+  },
+  "bus_routing": {
+    "drum_bus":   {"tracks": ["kick", "percussion"],                          "n": 2, "sum_penalty_db": 3.01},
+    "bass_bus":   {"tracks": ["bass"],                                        "n": 1, "sum_penalty_db": 0},
+    "synth_bus":  {"tracks": ["chords", "melody", "arp", "pads", "stabs"],   "n": 5, "sum_penalty_db": 6.99},
+    "fx_bus":     {"tracks": ["fx", "intro"],                                 "n": 2, "sum_penalty_db": 3.01},
+    "master_bus": {"buses": ["drum_bus", "bass_bus", "synth_bus", "fx_bus"], "n_buses": 4, "sum_penalty_db": 6.02}
+  },
+  "bus_headroom_ladder": [
+    {"stage": 1, "node": "Track pre-insert",   "rms_dbfs": -18.0, "peak_dbfs": -6.0, "trim": "clip gain"},
+    {"stage": 2, "node": "Track post-insert",  "rms_dbfs": -18.0, "peak_dbfs": -6.0, "trim": "make-up = GR"},
+    {"stage": 3, "node": "Drum Bus (N=2)",     "rms_dbfs": -15.0, "peak_dbfs": -4.0, "trim_db": -3.0},
+    {"stage": 4, "node": "Bass Bus (N=1)",     "rms_dbfs": -18.0, "peak_dbfs": -8.0, "trim_db":  0.0},
+    {"stage": 5, "node": "Synth Bus (N=5)",    "rms_dbfs": -13.0, "peak_dbfs": -3.0, "trim_db": -7.0},
+    {"stage": 6, "node": "FX Bus (N=2)",       "rms_dbfs": -19.0, "peak_dbfs": -9.0, "trim_db": -3.0},
+    {"stage": 7, "node": "Master pre-limiter", "rms_dbfs": -18.0, "peak_dbfs": -6.0, "trim_db": "-4 to -8", "headroom_required_db": "6-8"},
+    {"stage": 8, "node": "Limiter output",     "rms_dbfs": null,  "peak_dbfs": -1.0, "trim_db": "+4 to +8", "note": "Only stage permitted to raise level without matching trim."}
+  ],
+  "stem_naming": {
+    "pattern": "{genre}_gen{N}_seed_{seed_id}_{track_name}_v{version}.wav",
+    "example": "pop_gen7_seed_a3f91c08_kick_v03.wav",
+    "rules": "lowercase, underscore separators only, no spaces/hyphens/parentheses, ASCII only, max 96 chars",
+    "track_names": ["kick","bass","chords","melody","arp","pads","stabs","fx","percussion","intro"],
+    "bus_names": ["drumbus","bassbus","synthbus","fxbus"]
+  },
+  "export_format_rules": {
+    "container":     "WAV (RIFF) or BWF",
+    "bit_depth_ext": "24-bit fixed",
+    "bit_depth_int": "32-bit float (in-DAW stem bounces only)",
+    "stereo_layout": "Interleaved",
+    "sample_rate":   "44.1 kHz music/streaming; 48 kHz broadcast and sync",
+    "dither":        "TPDF 2 LSB no noise shaping; apply only on final 32-bit float to 24-bit reduction, and only once",
+    "fades":         "10 ms head, 100 ms tail minimum",
+    "export_chain_order": [
+      "Master bus EQ (±2 dB max, corrective only)",
+      "M/S insert per genre table (before limiter)",
+      "Limiter (ceiling per H.1, 4x oversampling)",
+      "Dither (TPDF, once, to 24-bit)",
+      "Render then re-measure (LUFS-I, dBTP, LRA, PLR)"
+    ]
+  },
+  "mono_compatibility_pass": {
+    "stereo_minus_mono_below_300hz_max_db": 2.0,
+    "stereo_minus_mono_fullband_max_db": 3.0,
+    "master_correlation_floor": 0.3,
+    "genre_correlation_floors": {"pop": 0.4, "hiphop": 0.5, "cinematic": 0.3}
+  },
+  "qc_checklist": {
+    "order_note": "Run Tier 1 before Tier 2. A mono-compatibility fault changes the fold-down spectrum; Tier 2 judgements made before Tier 1 passes are made on the wrong signal.",
+    "single_fail_blocks_export": true,
+    "tier_1_mono_compatibility": [
+      {"id": "1.1", "check": "Stereo-to-mono sum",      "pass": "<=3.0 dB loss on any sustained element",           "fail_fix": "Sweep bands with mono-maker; usual culprit: widened pad below 300 Hz or chorus with modulation depth crossing zero."},
+      {"id": "1.2", "check": "Kick/bass/snare character","pass": "No timbral change; level within 1.0 dB",           "fail_fix": "Fix at the track, never with a master-bus mono-maker."},
+      {"id": "1.3", "check": "Phase correlation",        "pass": "r >= +0.5 average; transient dips to 0 permitted", "fail_fix": "Reduce master width to 110% and re-check; if r stays low, a track is polarity-inverted."},
+      {"id": "1.4", "check": "Low-end mono law",         "pass": "<=1.0 dB dip in mono at 30-120 Hz",              "fail_fix": "Enforce H.3 side-channel HPF and re-render."},
+      {"id": "1.5", "check": "Polarity sweep",           "pass": "Inverted version clearly thinner",                "fail_fix": "If inverting makes little difference, check M/S insert is engaged."}
+    ],
+    "tier_2_translation": [
+      {"id": "2.1", "check": "Headphone width",   "pass": "No element outside the head; no discrete echo",    "fail_fix": "Any offset >50 ms heard as discrete repeat; narrow or tempo-sync."},
+      {"id": "2.2", "check": "Small-speaker test","pass": "All melodic elements audible; kick and snare punch", "fail_fix": "If kick vanishes, add 3-5 kHz click at the track, not master EQ."},
+      {"id": "2.3", "check": "Car/mid-bass check","pass": "No masking of vocal or lead after +6 dB @ 80-160 Hz","fail_fix": "250-500 Hz too dense; revisit chord track cut."},
+      {"id": "2.4", "check": "Phone speaker",     "pass": "Groove and melody survive at HPF 500 Hz mono",      "fail_fix": "Kick needs more 3-4 kHz; bass needs 800 Hz definition partials."},
+      {"id": "2.5", "check": "Reference A/B",     "pass": "Within ±0.5 LUFS-I of reference",                  "fail_fix": "Match loudness before comparing. Compare spectrum balance and PLR."},
+      {"id": "2.6", "check": "Low-SPL check",     "pass": "Arrangement legible at ~50 dB SPL",                 "fail_fix": "Mix only works loud: too much information in the frequency extremes."}
+    ],
+    "tier_3_technical_compliance": [
+      {"id": "3.1", "check": "True peak",        "pass": "<= H.1 ceiling for destination",     "note": "Sample-peak vs true-peak can differ 1-3 dB on a limited master."},
+      {"id": "3.2", "check": "Inter-sample peaks","pass": "No reading above target dBTP after SRC/codec", "note": "AAC 128 kbit/s can add up to +1.5 dB."},
+      {"id": "3.3", "check": "Integrated loudness","pass": "Within ±0.5 LU of target",         "note": "Gated: absolute -70 LUFS, relative -10 LU."},
+      {"id": "3.4", "check": "LRA and PLR",      "pass": "Within genre window (G.4, H.1)",     "note": "Record both values in the manifest."},
+      {"id": "3.5", "check": "File conformance", "pass": "24-bit, interleaved, correct sample rate", "note": "Confirm no stray 32-bit float or split-mono files."},
+      {"id": "3.6", "check": "Head and tail",    "pass": "10 ms head fade, 100 ms tail, no DC step", "note": "DC offset across whole file: <=0.1% of full scale."},
+      {"id": "3.7", "check": "Stem naming",      "pass": "All stems share one seed_id; versions match", "note": "Mismatched seed means stem came from a different generation."},
+      {"id": "3.8", "check": "Checksums",        "pass": "Manifest SHA-256 list matches delivered files", "note": "Only check that proves delivered bytes are the rendered bytes."}
+    ]
+  }
+}

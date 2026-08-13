@@ -36,7 +36,7 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Optional
 
-from src.composition.gm_descriptions import get_description
+from src.composition.gm_descriptions import get_description, get_drum_description
 from src.gui.tooltips import ToolTip
 
 
@@ -66,8 +66,11 @@ class InstrumentDescriptionLabel:
         parent: tk.Frame,
         styles,
         max_chars: int = 28,
+        description_fn=None,
     ) -> None:
         self._max = max_chars
+        # Caller can supply get_drum_description (or any int→str fn) for non-melodic tracks.
+        self._desc_fn = description_fn if description_fn is not None else get_description
         self._full_text = ""          # always the complete, unclipped text
 
         self._label = tk.Label(
@@ -127,7 +130,7 @@ class InstrumentDescriptionLabel:
 
     def update_from_program(self, program: int) -> None:
         """Manually set the description for a specific GM *program* (0-127)."""
-        self._full_text = get_description(program)
+        self._full_text = self._desc_fn(program)
         self._apply(self._full_text)
 
     # ------------------------------------------------------------------
@@ -138,7 +141,7 @@ class InstrumentDescriptionLabel:
         """Read the current combobox value, update label and both tooltips."""
         raw = combobox.get()
         program = self._parse_program(raw)
-        full = get_description(program) if program is not None else ""
+        full = self._desc_fn(program) if program is not None else ""
         self._full_text = full
         self._apply(full)
 

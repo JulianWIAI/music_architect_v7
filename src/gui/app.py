@@ -110,6 +110,7 @@ except ImportError:
     SF_PICKER_AVAILABLE = False
 
 from src.gui.instrument_description_label import InstrumentDescriptionLabel
+from src.composition.gm_descriptions import get_drum_description
 
 
 class SeedComposerApp:
@@ -630,13 +631,14 @@ class SeedComposerApp:
 
             # Row 2: sound-character description below the controls.
             # Indent spacer aligns text under the instrument area (past the track label).
-            if track != 'drums':
-                row2 = tk.Frame(container, bg=S.BG2)
-                row2.pack(fill='x')
-                tk.Label(row2, text="", bg=S.BG2, width=10, font=S.FN_X).pack(side='left')
-                desc = InstrumentDescriptionLabel(row2, styles=S, max_chars=120)
-                desc.pack(side='left', fill='x', expand=True, padx=(2, 4))
-                desc.attach(inst)
+            row2 = tk.Frame(container, bg=S.BG2)
+            row2.pack(fill='x')
+            tk.Label(row2, text="", bg=S.BG2, width=10, font=S.FN_X).pack(side='left')
+            desc_fn = get_drum_description if track == 'drums' else None
+            desc = InstrumentDescriptionLabel(row2, styles=S, max_chars=120,
+                                              description_fn=desc_fn)
+            desc.pack(side='left', fill='x', expand=True, padx=(2, 4))
+            desc.attach(inst)
 
             self.track_vars[track] = {'enabled': enabled, 'volume': vol, 'instrument': inst}
 
@@ -1038,6 +1040,8 @@ class SeedComposerApp:
         """User clicked a variant button — store and re-render the advisor."""
         self._current_variant_id = variant_id
         self._log(f"FX variant → {variant_id.upper()}")
+        if _FLUID_RENDERER is not None:
+            _FLUID_RENDERER.set_variant(variant_id)
         if getattr(self, 'current_composition', None):
             self._update_advisor(self.current_composition)
         if self._fx_variant_panel is not None:
@@ -2204,7 +2208,7 @@ class SeedComposerApp:
     # ─────────────────────────────────────────────────────────────
 
     def _build_utau_section(self, parent):
-        frame = self._section(parent, "UTAU / VOCAL SYNTH", S.ORANGE)
+        frame = self._section(parent, "VOCAL SYNTH", S.ORANGE)
 
         # ── Step 1 ────────────────────────────────────────────────
         tk.Label(frame, text="① Export note scaffold  →  paste into AI  →  fill syllables",

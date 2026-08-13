@@ -1,0 +1,1885 @@
+{
+  "_meta": {
+    "source": "Music Architect Production Guide Rev 1.0 — Section B, Matrix 1",
+    "note": "Each palette is pre-validated against the Matrix 1 decision tree. Branch A/B/C refers to the kick type (Track 1 code). BDRA codes: B=Brightness(0-3), D=Density(0-3), A=Attack(0-3), R=Register(0-3)."
+  },
+  "pop": [
+    {
+      "id": "pop_electronic",
+      "name": "Electronic",
+      "branch": "A",
+      "kick_code": "B0 D0 A0 R0",
+      "kick_desc": "Pure sine / 808 — leaves full spectrum open above 80 Hz",
+      "instruments": {
+        "bass": {
+          "gm": 38,
+          "name": "Synth Bass 1",
+          "code": "B1 D1 A0 R1"
+        },
+        "chords": {
+          "gm": 4,
+          "name": "Electric Piano 1",
+          "code": "B1 D1 A1 R2"
+        },
+        "lead": {
+          "gm": 81,
+          "name": "Sawtooth Lead",
+          "code": "B2 D2 A1 R2"
+        },
+        "pad": {
+          "gm": 89,
+          "name": "Warm Pad",
+          "code": "B1 D1 A3 R2"
+        },
+        "arp": {
+          "gm": 98,
+          "name": "Crystal (FX)",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 61,
+          "name": "Brass Section",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 95,
+          "name": "Sweep Pad",
+          "code": "B1 D3 A3 R2"
+        },
+        "fx": {
+          "gm": 96,
+          "name": "Rain (FX)",
+          "code": "B3 D3 A3 R3"
+        }
+      }
+    },
+    {
+      "id": "pop_acoustic",
+      "name": "Acoustic",
+      "branch": "B",
+      "kick_code": "B1 D2 A0 R1",
+      "kick_desc": "Acoustic / layered kick — rich overtones free bass to be pure",
+      "instruments": {
+        "bass": {
+          "gm": 32,
+          "name": "Acoustic Bass",
+          "code": "B1 D1 A1 R1"
+        },
+        "chords": {
+          "gm": 0,
+          "name": "Acoustic Grand Piano",
+          "code": "B2 D1 A1 R2"
+        },
+        "lead": {
+          "gm": 40,
+          "name": "Violin",
+          "code": "B2 D2 A2 R2"
+        },
+        "pad": {
+          "gm": 48,
+          "name": "String Ensemble 1",
+          "code": "B1 D2 A3 R2"
+        },
+        "arp": {
+          "gm": 9,
+          "name": "Glockenspiel",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 55,
+          "name": "Orchestra Hit",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 89,
+          "name": "Warm Pad",
+          "code": "B1 D1 A3 R2"
+        },
+        "fx": {
+          "gm": 97,
+          "name": "Soundtrack (FX)",
+          "code": "B3 D3 A3 R3"
+        }
+      },
+      "chain_delta": {
+        "bass": [
+          {
+            "slot": 3,
+            "action": "adjust",
+            "note": "Release → BPM×45 ms — Acoustic Bass decays slower; default release chokes the natural sustain"
+          },
+          {
+            "slot": 5,
+            "action": "disable",
+            "note": "Acoustic Bass has natural HF harmonics; HF saturation destroys organic tone and bow-hair texture"
+          }
+        ],
+        "melody": [
+          {
+            "slot": 2,
+            "action": "adjust",
+            "note": "De-harsh center → 2.8 kHz (Violin bow-scratch peak vs. 3.2 kHz for synth lead)"
+          },
+          {
+            "slot": 4,
+            "action": "swap",
+            "effect": "Compressor (opto)",
+            "params": "Ratio 2:1, Attack 15 ms, Release 120 ms, GR 2-3 dB",
+            "note": "Violin has natural overtones; tape saturation distorts the bow-string harmonic balance"
+          }
+        ],
+        "chords": [
+          {
+            "slot": 4,
+            "action": "disable",
+            "note": "Grand Piano has natural sympathetic resonance; chorus causes phase-beating on octave overtones"
+          }
+        ],
+        "pads": [
+          {
+            "slot": 3,
+            "action": "adjust",
+            "note": "Rate 0.12 Hz, Depth 3 ms, Mix 8% — String Ensemble 1 already has natural detuning; heavy chorus creates comb filtering"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pop_hybrid",
+      "name": "Hybrid",
+      "branch": "B",
+      "kick_code": "B1 D2 A0 R1",
+      "kick_desc": "Layered kick — synth bass kept pure, Rhodes warms mid",
+      "instruments": {
+        "bass": {
+          "gm": 38,
+          "name": "Synth Bass 1",
+          "code": "B1 D1 A0 R1"
+        },
+        "chords": {
+          "gm": 4,
+          "name": "Electric Piano 1",
+          "code": "B1 D1 A1 R2"
+        },
+        "lead": {
+          "gm": 80,
+          "name": "Square Lead",
+          "code": "B2 D1 A1 R2"
+        },
+        "pad": {
+          "gm": 94,
+          "name": "Halo Pad",
+          "code": "B1 D2 A3 R2"
+        },
+        "arp": {
+          "gm": 98,
+          "name": "Crystal (FX)",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 62,
+          "name": "Synth Brass 1",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 90,
+          "name": "Polysynth Pad",
+          "code": "B2 D2 A3 R2"
+        },
+        "fx": {
+          "gm": 96,
+          "name": "Rain (FX)",
+          "code": "B3 D3 A3 R3"
+        }
+      },
+      "chain_delta": {
+        "melody": [
+          {
+            "slot": 4,
+            "action": "adjust",
+            "note": "Drive +5 dB — Square Lead has flat harmonic spectrum; needs more drive to bloom vs. Sawtooth Lead"
+          }
+        ],
+        "pads": [
+          {
+            "slot": 3,
+            "action": "adjust",
+            "note": "Depth 12 ms, Mix 55% — Halo Pad is designed for heavy modulation; push further than Warm Pad default"
+          }
+        ]
+      }
+    }
+  ],
+  "hiphop": [
+    {
+      "id": "hiphop_trap808",
+      "name": "Trap 808",
+      "branch": "A",
+      "kick_code": "B0 D0 A0 R0",
+      "kick_desc": "808 as kick — bass IS same source (one D0 R0 rule applies)",
+      "instruments": {
+        "bass": {
+          "gm": 39,
+          "name": "Synth Bass 2",
+          "code": "B0 D0 A0 R0"
+        },
+        "chords": {
+          "gm": 4,
+          "name": "Electric Piano 1",
+          "code": "B1 D1 A1 R2"
+        },
+        "lead": {
+          "gm": 80,
+          "name": "Square Lead",
+          "code": "B2 D1 A0 R2"
+        },
+        "pad": {
+          "gm": 94,
+          "name": "Halo Pad",
+          "code": "B1 D2 A3 R2"
+        },
+        "arp": {
+          "gm": 98,
+          "name": "Crystal (FX)",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 62,
+          "name": "Synth Brass 1",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 95,
+          "name": "Sweep Pad",
+          "code": "B1 D3 A3 R2"
+        },
+        "fx": {
+          "gm": 100,
+          "name": "Brightness (FX)",
+          "code": "B3 D3 A3 R3"
+        }
+      },
+      "chain_delta": {
+        "bass": [
+          {
+            "slot": 2,
+            "action": "adjust",
+            "note": "Extend mono lock to 200 Hz — 808 pitch-tail climbs into 100-200 Hz range as it decays"
+          },
+          {
+            "slot": 3,
+            "action": "disable",
+            "note": "808 IS the kick source — sidechaining from itself pumps the sub tail against its own envelope"
+          }
+        ]
+      }
+    },
+    {
+      "id": "hiphop_boombap",
+      "name": "Boom Bap",
+      "branch": "B",
+      "kick_code": "B1 D2 A0 R1",
+      "kick_desc": "Acoustic / layered kick — sub bass notched at kick fundamental",
+      "instruments": {
+        "bass": {
+          "gm": 38,
+          "name": "Synth Bass 1",
+          "code": "B0 D1 A0 R0"
+        },
+        "chords": {
+          "gm": 4,
+          "name": "Electric Piano 1",
+          "code": "B1 D1 A1 R2"
+        },
+        "lead": {
+          "gm": 80,
+          "name": "Square Lead",
+          "code": "B2 D1 A0 R2"
+        },
+        "pad": {
+          "gm": 89,
+          "name": "Warm Pad",
+          "code": "B1 D1 A3 R2"
+        },
+        "arp": {
+          "gm": 9,
+          "name": "Glockenspiel",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 61,
+          "name": "Brass Section",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 51,
+          "name": "Synth Strings 2",
+          "code": "B1 D2 A3 R2"
+        },
+        "fx": {
+          "gm": 96,
+          "name": "Rain (FX)",
+          "code": "B3 D3 A3 R3"
+        }
+      }
+    },
+    {
+      "id": "hiphop_lofi",
+      "name": "Lo-Fi",
+      "branch": "C",
+      "kick_code": "B0 D1 A3 R0",
+      "kick_desc": "Sub-boom slow attack — fast bass (A0) restores temporal grid",
+      "instruments": {
+        "bass": {
+          "gm": 38,
+          "name": "Synth Bass 1",
+          "code": "B0 D1 A0 R0"
+        },
+        "chords": {
+          "gm": 4,
+          "name": "Electric Piano 1",
+          "code": "B1 D1 A1 R2"
+        },
+        "lead": {
+          "gm": 11,
+          "name": "Vibraphone",
+          "code": "B3 D1 A1 R3"
+        },
+        "pad": {
+          "gm": 89,
+          "name": "Warm Pad",
+          "code": "B1 D1 A3 R2"
+        },
+        "arp": {
+          "gm": 9,
+          "name": "Glockenspiel",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 28,
+          "name": "Muted Guitar",
+          "code": "B1 D1 A0 R2"
+        },
+        "texture": {
+          "gm": 94,
+          "name": "Halo Pad",
+          "code": "B1 D2 A3 R2"
+        },
+        "fx": {
+          "gm": 99,
+          "name": "Atmosphere (FX)",
+          "code": "B1 D3 A3 R2"
+        }
+      },
+      "chain_delta": {
+        "melody": [
+          {
+            "slot": 2,
+            "action": "adjust",
+            "note": "De-harsh center → 5.5 kHz (Vibraphone tine ring vs. 3.2 kHz Square Lead presence peak)"
+          },
+          {
+            "slot": 4,
+            "action": "disable",
+            "note": "Vibraphone's metallic attack transient is destroyed by tape saturation; the 'ping' must stay clean"
+          }
+        ]
+      }
+    }
+  ],
+  "cinematic": [
+    {
+      "id": "cine_orchestral",
+      "name": "Orchestral",
+      "branch": "C",
+      "kick_code": "B0 D1 A3 R0",
+      "kick_desc": "Sub-boom / soft taiko — D3 chords permitted; arp must be A0 (only one)",
+      "instruments": {
+        "bass": {
+          "gm": 43,
+          "name": "Contrabass",
+          "code": "B0 D2 A2 R1"
+        },
+        "chords": {
+          "gm": 48,
+          "name": "String Ensemble 1",
+          "code": "B1 D2 A3 R2"
+        },
+        "lead": {
+          "gm": 68,
+          "name": "Oboe",
+          "code": "B2 D2 A2 R2"
+        },
+        "pad": {
+          "gm": 92,
+          "name": "Bowed Pad",
+          "code": "B1 D2 A3 R2"
+        },
+        "arp": {
+          "gm": 9,
+          "name": "Glockenspiel",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 61,
+          "name": "Brass Section",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 94,
+          "name": "Halo Pad",
+          "code": "B1 D2 A3 R2"
+        },
+        "fx": {
+          "gm": 96,
+          "name": "Rain (FX)",
+          "code": "B3 D3 A3 R3"
+        }
+      },
+      "chain_delta": {
+        "bass": [
+          {
+            "slot": 3,
+            "action": "adjust",
+            "note": "Release → 90000/BPM ms — Orchestral phrases are slower; pump recovery needs twice the time vs. pop bass"
+          },
+          {
+            "slot": 5,
+            "action": "disable",
+            "note": "Contrabass is acoustic; HF saturation destroys bow hair noise, which is part of the timbral identity"
+          }
+        ],
+        "melody": [
+          {
+            "slot": 2,
+            "action": "adjust",
+            "note": "De-harsh center → 2.1 kHz Q=4 (Oboe nasal honk peak vs. 3.2 kHz for synth lead)"
+          },
+          {
+            "slot": 4,
+            "action": "disable",
+            "note": "Oboe double-reed overtones are fragile; tape saturation destroys the nasal formant that defines oboe character"
+          }
+        ],
+        "pads": [
+          {
+            "slot": 3,
+            "action": "adjust",
+            "note": "Rate 0.1 Hz, Depth 4 ms, Mix 12% — Bowed Pad already has natural slow modulation from the bow stroke"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cine_electronic",
+      "name": "Electronic-Cine",
+      "branch": "B",
+      "kick_code": "B1 D2 A0 R1",
+      "kick_desc": "Layered kick — centroid rule forces chords above SC × 1.5",
+      "instruments": {
+        "bass": {
+          "gm": 42,
+          "name": "Cello",
+          "code": "B1 D2 A2 R1"
+        },
+        "chords": {
+          "gm": 60,
+          "name": "French Horn",
+          "code": "B1 D2 A2 R2"
+        },
+        "lead": {
+          "gm": 40,
+          "name": "Violin",
+          "code": "B2 D2 A2 R2"
+        },
+        "pad": {
+          "gm": 92,
+          "name": "Bowed Pad",
+          "code": "B1 D2 A3 R2"
+        },
+        "arp": {
+          "gm": 46,
+          "name": "Orchestral Harp",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 55,
+          "name": "Orchestra Hit",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 94,
+          "name": "Halo Pad",
+          "code": "B1 D2 A3 R2"
+        },
+        "fx": {
+          "gm": 103,
+          "name": "Sci-Fi (FX)",
+          "code": "B3 D3 A3 R3"
+        }
+      }
+    },
+    {
+      "id": "cine_dark",
+      "name": "Dark Hybrid",
+      "branch": "C",
+      "kick_code": "B0 D1 A3 R0",
+      "kick_desc": "Sub-boom — D3 choir chords allowed; tuba sub; mandatory A0 arp",
+      "instruments": {
+        "bass": {
+          "gm": 58,
+          "name": "Tuba",
+          "code": "B0 D2 A2 R0"
+        },
+        "chords": {
+          "gm": 52,
+          "name": "Choir Aahs",
+          "code": "B1 D3 A3 R2"
+        },
+        "lead": {
+          "gm": 60,
+          "name": "French Horn",
+          "code": "B2 D2 A2 R2"
+        },
+        "pad": {
+          "gm": 51,
+          "name": "Synth Strings 2",
+          "code": "B1 D2 A3 R2"
+        },
+        "arp": {
+          "gm": 9,
+          "name": "Glockenspiel",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 57,
+          "name": "Trombone",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 94,
+          "name": "Halo Pad",
+          "code": "B1 D2 A3 R2"
+        },
+        "fx": {
+          "gm": 102,
+          "name": "Echoes (FX)",
+          "code": "B3 D3 A3 R3"
+        }
+      },
+      "chain_delta": {
+        "bass": [
+          {
+            "slot": 3,
+            "action": "adjust",
+            "note": "Release → 90000/BPM ms, Ratio 2:1 — Tuba low-end mass requires extended pump recovery time"
+          },
+          {
+            "slot": 5,
+            "action": "adjust",
+            "note": "Drive +3 dB — Tuba is B0 R0; needs harmonic generation to cut through the D3 Choir Aahs chords above it"
+          }
+        ],
+        "chords": [
+          {
+            "slot": 2,
+            "action": "adjust",
+            "note": "Add notch -4 dB @1.3 kHz Q=3 — Choir 'Aah' vowel nasal formant; not present in default synth EQ curve"
+          },
+          {
+            "slot": 4,
+            "action": "disable",
+            "note": "Choir Aahs already has natural formant spread between voices; chorus adds unnatural tremolo on vowel sustain"
+          }
+        ],
+        "melody": [
+          {
+            "slot": 4,
+            "action": "disable",
+            "note": "French Horn brass shimmer is natural; tape saturation muddies the stopped-horn attack transient"
+          }
+        ]
+      }
+    }
+  ],
+  "trap": [
+    {
+      "id": "trap_808_classic",
+      "name": "808 Classic",
+      "branch": "A",
+      "kick_code": "B0 D0 A0 R0",
+      "kick_desc": "808 sine kick — bass IS same source, D0 R0 floor rule",
+      "instruments": {
+        "bass": {
+          "gm": 39,
+          "name": "Synth Bass 2",
+          "code": "B0 D0 A0 R0"
+        },
+        "chords": {
+          "gm": 4,
+          "name": "Electric Piano 1",
+          "code": "B1 D1 A1 R2"
+        },
+        "lead": {
+          "gm": 80,
+          "name": "Square Lead",
+          "code": "B2 D1 A0 R2"
+        },
+        "pad": {
+          "gm": 94,
+          "name": "Halo Pad",
+          "code": "B1 D2 A3 R2"
+        },
+        "arp": {
+          "gm": 98,
+          "name": "Crystal (FX)",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 62,
+          "name": "Synth Brass 1",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 95,
+          "name": "Sweep Pad",
+          "code": "B1 D3 A3 R2"
+        },
+        "fx": {
+          "gm": 100,
+          "name": "Brightness (FX)",
+          "code": "B3 D3 A3 R3"
+        }
+      },
+      "chain_delta": {
+        "bass": [
+          {
+            "slot": 1,
+            "action": "adjust",
+            "note": "HPF → 20 Hz, 12 dB/oct — lower cutoff than default; 808 sub needs full extension below 30 Hz"
+          },
+          {
+            "slot": 3,
+            "action": "disable",
+            "note": "808 IS the kick — self-sidechaining pumps the sub tail against its own pitch envelope"
+          }
+        ]
+      }
+    },
+    {
+      "id": "trap_hybrid",
+      "name": "Hybrid Trap",
+      "branch": "B",
+      "kick_code": "B1 D2 A0 R1",
+      "kick_desc": "Layered kick — bass kept clean below 80 Hz",
+      "instruments": {
+        "bass": {
+          "gm": 38,
+          "name": "Synth Bass 1",
+          "code": "B0 D1 A0 R0"
+        },
+        "chords": {
+          "gm": 4,
+          "name": "Electric Piano 1",
+          "code": "B1 D1 A1 R2"
+        },
+        "lead": {
+          "gm": 81,
+          "name": "Sawtooth Lead",
+          "code": "B2 D2 A1 R2"
+        },
+        "pad": {
+          "gm": 89,
+          "name": "Warm Pad",
+          "code": "B1 D1 A3 R2"
+        },
+        "arp": {
+          "gm": 98,
+          "name": "Crystal (FX)",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 62,
+          "name": "Synth Brass 1",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 95,
+          "name": "Sweep Pad",
+          "code": "B1 D3 A3 R2"
+        },
+        "fx": {
+          "gm": 96,
+          "name": "Rain (FX)",
+          "code": "B3 D3 A3 R3"
+        }
+      }
+    },
+    {
+      "id": "trap_melodic",
+      "name": "Melodic Trap",
+      "branch": "C",
+      "kick_code": "B0 D1 A3 R0",
+      "kick_desc": "Sub-boom slow-attack kick — fast bass restores grid",
+      "instruments": {
+        "bass": {
+          "gm": 38,
+          "name": "Synth Bass 1",
+          "code": "B0 D1 A0 R0"
+        },
+        "chords": {
+          "gm": 48,
+          "name": "String Ensemble 1",
+          "code": "B1 D2 A3 R2"
+        },
+        "lead": {
+          "gm": 11,
+          "name": "Vibraphone",
+          "code": "B3 D1 A1 R3"
+        },
+        "pad": {
+          "gm": 94,
+          "name": "Halo Pad",
+          "code": "B1 D2 A3 R2"
+        },
+        "arp": {
+          "gm": 9,
+          "name": "Glockenspiel",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 62,
+          "name": "Synth Brass 1",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 92,
+          "name": "Bowed Pad",
+          "code": "B1 D2 A3 R2"
+        },
+        "fx": {
+          "gm": 99,
+          "name": "Atmosphere (FX)",
+          "code": "B1 D3 A3 R2"
+        }
+      },
+      "chain_delta": {
+        "melody": [
+          {
+            "slot": 4,
+            "action": "disable",
+            "note": "Vibraphone metallic attack must stay clean; saturation smears the transient and destroys pitch clarity on the decay"
+          },
+          {
+            "slot": 5,
+            "action": "adjust",
+            "note": "Delay feedback → 18% — Vibraphone has long natural sustain; reduce feedback to avoid washy buildup at trap tempos"
+          }
+        ]
+      }
+    }
+  ],
+  "house": [
+    {
+      "id": "house_909_classic",
+      "name": "909 Classic",
+      "branch": "A",
+      "kick_code": "B0 D0 A0 R0",
+      "kick_desc": "909-style sine kick — bass pure below 80 Hz",
+      "instruments": {
+        "bass": {
+          "gm": 38,
+          "name": "Synth Bass 1",
+          "code": "B1 D1 A0 R1"
+        },
+        "chords": {
+          "gm": 4,
+          "name": "Electric Piano 1",
+          "code": "B1 D1 A1 R2"
+        },
+        "lead": {
+          "gm": 81,
+          "name": "Sawtooth Lead",
+          "code": "B2 D2 A1 R2"
+        },
+        "pad": {
+          "gm": 89,
+          "name": "Warm Pad",
+          "code": "B1 D1 A3 R2"
+        },
+        "arp": {
+          "gm": 98,
+          "name": "Crystal (FX)",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 62,
+          "name": "Synth Brass 1",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 95,
+          "name": "Sweep Pad",
+          "code": "B1 D3 A3 R2"
+        },
+        "fx": {
+          "gm": 96,
+          "name": "Rain (FX)",
+          "code": "B3 D3 A3 R3"
+        }
+      }
+    },
+    {
+      "id": "house_deep",
+      "name": "Deep House",
+      "branch": "B",
+      "kick_code": "B1 D2 A0 R1",
+      "kick_desc": "Layered kick — warm sub-bass with finger bass texture",
+      "instruments": {
+        "bass": {
+          "gm": 35,
+          "name": "Finger Bass",
+          "code": "B1 D1 A1 R1"
+        },
+        "chords": {
+          "gm": 4,
+          "name": "Electric Piano 1",
+          "code": "B1 D1 A1 R2"
+        },
+        "lead": {
+          "gm": 80,
+          "name": "Square Lead",
+          "code": "B2 D1 A1 R2"
+        },
+        "pad": {
+          "gm": 89,
+          "name": "Warm Pad",
+          "code": "B1 D1 A3 R2"
+        },
+        "arp": {
+          "gm": 46,
+          "name": "Orchestral Harp",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 61,
+          "name": "Brass Section",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 90,
+          "name": "Polysynth Pad",
+          "code": "B2 D2 A3 R2"
+        },
+        "fx": {
+          "gm": 99,
+          "name": "Atmosphere (FX)",
+          "code": "B1 D3 A3 R2"
+        }
+      },
+      "chain_delta": {
+        "bass": [
+          {
+            "slot": 3,
+            "action": "adjust",
+            "note": "SC comp Release → 120 ms — Finger Bass attack is slower than Synth Bass 1; tight release causes over-pumping"
+          },
+          {
+            "slot": 4,
+            "action": "adjust",
+            "note": "Drive +2 dB, 150-800 Hz focus — Finger Bass string noise lives here; enhance it for vintage warmth character"
+          }
+        ]
+      }
+    },
+    {
+      "id": "house_tech",
+      "name": "Tech House",
+      "branch": "C",
+      "kick_code": "B0 D1 A3 R0",
+      "kick_desc": "Sub-boom slow-attack — D3 chords allowed; arp must be A0",
+      "instruments": {
+        "bass": {
+          "gm": 38,
+          "name": "Synth Bass 1",
+          "code": "B0 D1 A0 R0"
+        },
+        "chords": {
+          "gm": 90,
+          "name": "Polysynth Pad",
+          "code": "B2 D3 A3 R2"
+        },
+        "lead": {
+          "gm": 81,
+          "name": "Sawtooth Lead",
+          "code": "B2 D2 A1 R2"
+        },
+        "pad": {
+          "gm": 94,
+          "name": "Halo Pad",
+          "code": "B1 D2 A3 R2"
+        },
+        "arp": {
+          "gm": 98,
+          "name": "Crystal (FX)",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 62,
+          "name": "Synth Brass 1",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 95,
+          "name": "Sweep Pad",
+          "code": "B1 D3 A3 R2"
+        },
+        "fx": {
+          "gm": 103,
+          "name": "Sci-Fi (FX)",
+          "code": "B3 D3 A3 R3"
+        }
+      },
+      "chain_delta": {
+        "chords": [
+          {
+            "slot": 4,
+            "action": "adjust",
+            "note": "Rate 0.5 Hz, Depth 10 ms, Mix 30% — Polysynth Pad needs heavier chorus modulation for wall-of-sound effect"
+          }
+        ]
+      }
+    }
+  ],
+  "edm": [
+    {
+      "id": "edm_clean",
+      "name": "Clean EDM",
+      "branch": "A",
+      "kick_code": "B0 D0 A0 R0",
+      "kick_desc": "Sine/clicky kick — leaves full spectrum open",
+      "instruments": {
+        "bass": {
+          "gm": 38,
+          "name": "Synth Bass 1",
+          "code": "B1 D1 A0 R1"
+        },
+        "chords": {
+          "gm": 4,
+          "name": "Electric Piano 1",
+          "code": "B1 D1 A1 R2"
+        },
+        "lead": {
+          "gm": 81,
+          "name": "Sawtooth Lead",
+          "code": "B2 D2 A1 R2"
+        },
+        "pad": {
+          "gm": 89,
+          "name": "Warm Pad",
+          "code": "B1 D1 A3 R2"
+        },
+        "arp": {
+          "gm": 98,
+          "name": "Crystal (FX)",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 62,
+          "name": "Synth Brass 1",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 95,
+          "name": "Sweep Pad",
+          "code": "B1 D3 A3 R2"
+        },
+        "fx": {
+          "gm": 96,
+          "name": "Rain (FX)",
+          "code": "B3 D3 A3 R3"
+        }
+      }
+    },
+    {
+      "id": "edm_bigroom",
+      "name": "Big Room",
+      "branch": "B",
+      "kick_code": "B1 D2 A0 R1",
+      "kick_desc": "Layered kick — centroid rule forces chords above SC × 1.5",
+      "instruments": {
+        "bass": {
+          "gm": 38,
+          "name": "Synth Bass 1",
+          "code": "B1 D1 A0 R1"
+        },
+        "chords": {
+          "gm": 90,
+          "name": "Polysynth Pad",
+          "code": "B2 D2 A3 R2"
+        },
+        "lead": {
+          "gm": 81,
+          "name": "Sawtooth Lead",
+          "code": "B2 D2 A1 R2"
+        },
+        "pad": {
+          "gm": 94,
+          "name": "Halo Pad",
+          "code": "B1 D2 A3 R2"
+        },
+        "arp": {
+          "gm": 98,
+          "name": "Crystal (FX)",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 62,
+          "name": "Synth Brass 1",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 88,
+          "name": "New Age Pad",
+          "code": "B2 D2 A3 R3"
+        },
+        "fx": {
+          "gm": 100,
+          "name": "Brightness (FX)",
+          "code": "B3 D3 A3 R3"
+        }
+      },
+      "chain_delta": {
+        "chords": [
+          {
+            "slot": 4,
+            "action": "adjust",
+            "note": "Rate 0.5 Hz, Depth 10 ms, Mix 35% — Polysynth Pad for Big Room needs maximum modulation width at the drop"
+          },
+          {
+            "slot": 6,
+            "action": "adjust",
+            "note": "Drive +3 dB, Mix 50% — Polysynth Pad needs more harmonic density than Electric Piano for room-filling impact"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edm_progressive",
+      "name": "Progressive",
+      "branch": "C",
+      "kick_code": "B0 D1 A3 R0",
+      "kick_desc": "Sub-boom slow-attack — atmospheric pads carry the build",
+      "instruments": {
+        "bass": {
+          "gm": 38,
+          "name": "Synth Bass 1",
+          "code": "B0 D1 A0 R0"
+        },
+        "chords": {
+          "gm": 94,
+          "name": "Halo Pad",
+          "code": "B1 D2 A3 R2"
+        },
+        "lead": {
+          "gm": 81,
+          "name": "Sawtooth Lead",
+          "code": "B2 D2 A1 R2"
+        },
+        "pad": {
+          "gm": 92,
+          "name": "Bowed Pad",
+          "code": "B1 D2 A3 R2"
+        },
+        "arp": {
+          "gm": 9,
+          "name": "Glockenspiel",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 62,
+          "name": "Synth Brass 1",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 88,
+          "name": "New Age Pad",
+          "code": "B2 D3 A3 R3"
+        },
+        "fx": {
+          "gm": 99,
+          "name": "Atmosphere (FX)",
+          "code": "B1 D3 A3 R2"
+        }
+      },
+      "chain_delta": {
+        "chords": [
+          {
+            "slot": 4,
+            "action": "adjust",
+            "note": "Chorus Mix → 35% — Halo Pad needs deeper modulation to carry the progressive build across 8-16 bars"
+          },
+          {
+            "slot": 5,
+            "action": "adjust",
+            "note": "Reverb Decay → 4.0 s, Mix 25% — Halo Pad tail must stretch across the build; short reverb kills the tension arc"
+          }
+        ]
+      }
+    }
+  ],
+  "jpop": [
+    {
+      "id": "jpop_electronic",
+      "name": "Electronic",
+      "branch": "A",
+      "kick_code": "B0 D0 A0 R0",
+      "kick_desc": "Sine / 808 kick — leaves full spectrum open above 80 Hz",
+      "instruments": {
+        "bass": {
+          "gm": 38,
+          "name": "Synth Bass 1",
+          "code": "B1 D1 A0 R1"
+        },
+        "chords": {
+          "gm": 4,
+          "name": "Electric Piano 1",
+          "code": "B1 D1 A1 R2"
+        },
+        "lead": {
+          "gm": 81,
+          "name": "Sawtooth Lead",
+          "code": "B2 D2 A1 R2"
+        },
+        "pad": {
+          "gm": 89,
+          "name": "Warm Pad",
+          "code": "B1 D1 A3 R2"
+        },
+        "arp": {
+          "gm": 98,
+          "name": "Crystal (FX)",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 62,
+          "name": "Synth Brass 1",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 95,
+          "name": "Sweep Pad",
+          "code": "B1 D3 A3 R2"
+        },
+        "fx": {
+          "gm": 96,
+          "name": "Rain (FX)",
+          "code": "B3 D3 A3 R3"
+        }
+      }
+    },
+    {
+      "id": "jpop_acoustic",
+      "name": "Acoustic Pop",
+      "branch": "B",
+      "kick_code": "B1 D2 A0 R1",
+      "kick_desc": "Acoustic / layered kick — Grand Piano + Flute upper register",
+      "instruments": {
+        "bass": {
+          "gm": 32,
+          "name": "Acoustic Bass",
+          "code": "B1 D1 A1 R1"
+        },
+        "chords": {
+          "gm": 0,
+          "name": "Acoustic Grand Piano",
+          "code": "B2 D1 A1 R2"
+        },
+        "lead": {
+          "gm": 73,
+          "name": "Flute",
+          "code": "B2 D2 A2 R3"
+        },
+        "pad": {
+          "gm": 48,
+          "name": "String Ensemble 1",
+          "code": "B1 D2 A3 R2"
+        },
+        "arp": {
+          "gm": 9,
+          "name": "Glockenspiel",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 55,
+          "name": "Orchestra Hit",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 89,
+          "name": "Warm Pad",
+          "code": "B1 D1 A3 R2"
+        },
+        "fx": {
+          "gm": 97,
+          "name": "Soundtrack (FX)",
+          "code": "B3 D3 A3 R3"
+        }
+      },
+      "chain_delta": {
+        "bass": [
+          {
+            "slot": 3,
+            "action": "adjust",
+            "note": "SC comp Release → 120 ms — Acoustic Bass decays slower; tight release over-pumps the natural sustain"
+          },
+          {
+            "slot": 4,
+            "action": "disable",
+            "note": "Acoustic Bass has natural HF harmonic bloom; saturation destroys the organic mid-range string texture"
+          }
+        ],
+        "melody": [
+          {
+            "slot": 2,
+            "action": "adjust",
+            "note": "De-harsh center → 5.8 kHz, Q=4 — Flute key-click noise peak vs. 3.5 kHz synth presence peak"
+          },
+          {
+            "slot": 4,
+            "action": "disable",
+            "note": "Flute air column is pure — saturation destroys the breath-to-tone relationship that defines flute timbre"
+          },
+          {
+            "slot": 5,
+            "action": "adjust",
+            "note": "Delay → 1/4 note = 60000/BPM ms, Mix 14% — Flute phrases span full beats; 1/8D delay crowds the articulation"
+          }
+        ],
+        "chords": [
+          {
+            "slot": 4,
+            "action": "disable",
+            "note": "Grand Piano has natural sympathetic resonance; chorus causes phase-beating on sustain overtones"
+          }
+        ]
+      }
+    },
+    {
+      "id": "jpop_atmospheric",
+      "name": "Atmospheric",
+      "branch": "C",
+      "kick_code": "B0 D1 A3 R0",
+      "kick_desc": "Sub-boom slow-attack — string pads and choir build atmosphere",
+      "instruments": {
+        "bass": {
+          "gm": 38,
+          "name": "Synth Bass 1",
+          "code": "B0 D1 A0 R0"
+        },
+        "chords": {
+          "gm": 48,
+          "name": "String Ensemble 1",
+          "code": "B1 D2 A3 R2"
+        },
+        "lead": {
+          "gm": 73,
+          "name": "Flute",
+          "code": "B2 D2 A2 R3"
+        },
+        "pad": {
+          "gm": 52,
+          "name": "Choir Aahs",
+          "code": "B1 D2 A3 R2"
+        },
+        "arp": {
+          "gm": 9,
+          "name": "Glockenspiel",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 55,
+          "name": "Orchestra Hit",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 94,
+          "name": "Halo Pad",
+          "code": "B1 D2 A3 R2"
+        },
+        "fx": {
+          "gm": 99,
+          "name": "Atmosphere (FX)",
+          "code": "B1 D3 A3 R2"
+        }
+      },
+      "chain_delta": {
+        "melody": [
+          {
+            "slot": 2,
+            "action": "adjust",
+            "note": "De-harsh center → 5.8 kHz, Q=4 — Flute key-click noise peak vs. synth presence peak"
+          },
+          {
+            "slot": 4,
+            "action": "disable",
+            "note": "Flute pure air column; saturation destroys breath-to-tone relationship"
+          }
+        ],
+        "chords": [
+          {
+            "slot": 4,
+            "action": "adjust",
+            "note": "Rate 0.12 Hz, Depth 3 ms, Mix 8% — String Ensemble has natural detuning; reduce chorus to avoid comb filtering"
+          }
+        ],
+        "pads": [
+          {
+            "slot": 4,
+            "action": "adjust",
+            "note": "Rate 0.08 Hz, Depth 6 ms, Mix 20% — Choir Aahs vowel needs very slow modulation; fast chorus creates unnatural vibrato"
+          }
+        ]
+      }
+    }
+  ],
+  "phonk": [
+    {
+      "id": "phonk_memphis_classic",
+      "name": "Memphis Classic",
+      "branch": "A",
+      "kick_code": "B0 D0 A0 R0",
+      "kick_desc": "808 as kick — bass IS same source, D0 R0 rule applies",
+      "instruments": {
+        "bass": {
+          "gm": 39,
+          "name": "Synth Bass 2",
+          "code": "B0 D0 A0 R0"
+        },
+        "chords": {
+          "gm": 4,
+          "name": "Electric Piano 1",
+          "code": "B1 D1 A1 R2"
+        },
+        "lead": {
+          "gm": 80,
+          "name": "Square Lead",
+          "code": "B2 D1 A0 R2"
+        },
+        "pad": {
+          "gm": 94,
+          "name": "Halo Pad",
+          "code": "B1 D2 A3 R2"
+        },
+        "arp": {
+          "gm": 98,
+          "name": "Crystal (FX)",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 62,
+          "name": "Synth Brass 1",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 95,
+          "name": "Sweep Pad",
+          "code": "B1 D3 A3 R2"
+        },
+        "fx": {
+          "gm": 100,
+          "name": "Brightness (FX)",
+          "code": "B3 D3 A3 R3"
+        }
+      },
+      "chain_delta": {
+        "bass": [
+          {
+            "slot": 2,
+            "action": "disable",
+            "note": "808 IS the kick source — self-sidechaining pumps the 808 sub tail against its own pitch envelope"
+          }
+        ]
+      }
+    },
+    {
+      "id": "phonk_dark",
+      "name": "Dark Phonk",
+      "branch": "B",
+      "kick_code": "B1 D2 A0 R1",
+      "kick_desc": "Layered kick — dark low-mid textures, distorted bass",
+      "instruments": {
+        "bass": {
+          "gm": 38,
+          "name": "Synth Bass 1",
+          "code": "B0 D1 A0 R0"
+        },
+        "chords": {
+          "gm": 4,
+          "name": "Electric Piano 1",
+          "code": "B1 D1 A1 R2"
+        },
+        "lead": {
+          "gm": 80,
+          "name": "Square Lead",
+          "code": "B2 D1 A0 R2"
+        },
+        "pad": {
+          "gm": 51,
+          "name": "Synth Strings 2",
+          "code": "B1 D2 A3 R2"
+        },
+        "arp": {
+          "gm": 98,
+          "name": "Crystal (FX)",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 57,
+          "name": "Trombone",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 95,
+          "name": "Sweep Pad",
+          "code": "B1 D3 A3 R2"
+        },
+        "fx": {
+          "gm": 102,
+          "name": "Echoes (FX)",
+          "code": "B3 D3 A3 R3"
+        }
+      }
+    },
+    {
+      "id": "phonk_drift",
+      "name": "Drift Phonk",
+      "branch": "C",
+      "kick_code": "B0 D1 A3 R0",
+      "kick_desc": "Sub-boom slow-attack — melodic vibraphone over distorted bass",
+      "instruments": {
+        "bass": {
+          "gm": 38,
+          "name": "Synth Bass 1",
+          "code": "B0 D1 A0 R0"
+        },
+        "chords": {
+          "gm": 51,
+          "name": "Synth Strings 2",
+          "code": "B1 D2 A3 R2"
+        },
+        "lead": {
+          "gm": 11,
+          "name": "Vibraphone",
+          "code": "B3 D1 A1 R3"
+        },
+        "pad": {
+          "gm": 94,
+          "name": "Halo Pad",
+          "code": "B1 D2 A3 R2"
+        },
+        "arp": {
+          "gm": 9,
+          "name": "Glockenspiel",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 62,
+          "name": "Synth Brass 1",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 92,
+          "name": "Bowed Pad",
+          "code": "B1 D2 A3 R2"
+        },
+        "fx": {
+          "gm": 99,
+          "name": "Atmosphere (FX)",
+          "code": "B1 D3 A3 R2"
+        }
+      },
+      "chain_delta": {
+        "melody": [
+          {
+            "slot": 4,
+            "action": "disable",
+            "note": "Vibraphone metallic transient is defined by clean attack; saturation smears the onset and muddies pitch on decay"
+          }
+        ]
+      }
+    }
+  ],
+  "techno": [
+    {
+      "id": "techno_minimal",
+      "name": "Minimal",
+      "branch": "A",
+      "kick_code": "B0 D0 A0 R0",
+      "kick_desc": "Pure sine kick — minimal palette, bass pure below 80 Hz",
+      "instruments": {
+        "bass": {
+          "gm": 38,
+          "name": "Synth Bass 1",
+          "code": "B1 D1 A0 R1"
+        },
+        "chords": {
+          "gm": 90,
+          "name": "Polysynth Pad",
+          "code": "B2 D1 A1 R2"
+        },
+        "lead": {
+          "gm": 81,
+          "name": "Sawtooth Lead",
+          "code": "B2 D2 A1 R2"
+        },
+        "pad": {
+          "gm": 95,
+          "name": "Sweep Pad",
+          "code": "B1 D1 A3 R2"
+        },
+        "arp": {
+          "gm": 98,
+          "name": "Crystal (FX)",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 62,
+          "name": "Synth Brass 1",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 88,
+          "name": "New Age Pad",
+          "code": "B2 D2 A3 R3"
+        },
+        "fx": {
+          "gm": 103,
+          "name": "Sci-Fi (FX)",
+          "code": "B3 D3 A3 R3"
+        }
+      }
+    },
+    {
+      "id": "techno_industrial",
+      "name": "Industrial",
+      "branch": "B",
+      "kick_code": "B1 D2 A0 R1",
+      "kick_desc": "Layered kick — metallic pads and hard stabs dominate",
+      "instruments": {
+        "bass": {
+          "gm": 38,
+          "name": "Synth Bass 1",
+          "code": "B0 D1 A0 R0"
+        },
+        "chords": {
+          "gm": 93,
+          "name": "Metallic Pad",
+          "code": "B3 D2 A1 R2"
+        },
+        "lead": {
+          "gm": 81,
+          "name": "Sawtooth Lead",
+          "code": "B2 D2 A1 R2"
+        },
+        "pad": {
+          "gm": 95,
+          "name": "Sweep Pad",
+          "code": "B1 D2 A3 R2"
+        },
+        "arp": {
+          "gm": 98,
+          "name": "Crystal (FX)",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 62,
+          "name": "Synth Brass 1",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 88,
+          "name": "New Age Pad",
+          "code": "B2 D3 A3 R3"
+        },
+        "fx": {
+          "gm": 102,
+          "name": "Echoes (FX)",
+          "code": "B3 D3 A3 R3"
+        }
+      },
+      "chain_delta": {
+        "chords": [
+          {
+            "slot": 3,
+            "action": "adjust",
+            "note": "Ratio → 4:1, Attack 8 ms, GR 4-6 dB — Metallic Pad ringing overtones need heavy compression to tame resonant peaks"
+          },
+          {
+            "slot": 4,
+            "action": "swap",
+            "effect": "Distortion (asymmetric clip)",
+            "params": "Drive +8 dB, Mix 40%, HPF 400 Hz post-clip, asymmetric waveshape",
+            "note": "Industrial chords need harmonic distortion, not stereo widening — Metallic Pad is the exception to the default chords bus"
+          }
+        ]
+      }
+    },
+    {
+      "id": "techno_dark_ambient",
+      "name": "Dark Ambient",
+      "branch": "C",
+      "kick_code": "B0 D1 A3 R0",
+      "kick_desc": "Sub-boom slow-attack — cavernous reverb pads; arp must be A0",
+      "instruments": {
+        "bass": {
+          "gm": 38,
+          "name": "Synth Bass 1",
+          "code": "B0 D1 A0 R0"
+        },
+        "chords": {
+          "gm": 94,
+          "name": "Halo Pad",
+          "code": "B1 D3 A3 R2"
+        },
+        "lead": {
+          "gm": 80,
+          "name": "Square Lead",
+          "code": "B2 D1 A0 R2"
+        },
+        "pad": {
+          "gm": 92,
+          "name": "Bowed Pad",
+          "code": "B1 D2 A3 R2"
+        },
+        "arp": {
+          "gm": 9,
+          "name": "Glockenspiel",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 62,
+          "name": "Synth Brass 1",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 88,
+          "name": "New Age Pad",
+          "code": "B2 D3 A3 R3"
+        },
+        "fx": {
+          "gm": 99,
+          "name": "Atmosphere (FX)",
+          "code": "B1 D3 A3 R2"
+        }
+      },
+      "chain_delta": {
+        "chords": [
+          {
+            "slot": 3,
+            "action": "adjust",
+            "note": "Ratio → 1.5:1, Attack 100 ms — Halo Pad swell needs to breathe; heavy compression kills the slow buildup"
+          },
+          {
+            "slot": 5,
+            "action": "adjust",
+            "note": "Reverb Decay → 8.0 s — Dark Ambient builds on tail accumulation; default industrial hall is too short for hypnotic drift"
+          }
+        ]
+      }
+    }
+  ],
+  "dnb": [
+    {
+      "id": "dnb_liquid",
+      "name": "Liquid",
+      "branch": "A",
+      "kick_code": "B0 D0 A0 R0",
+      "kick_desc": "Sine/clicky kick — warm bass, melodic harp arp",
+      "instruments": {
+        "bass": {
+          "gm": 38,
+          "name": "Synth Bass 1",
+          "code": "B1 D1 A0 R1"
+        },
+        "chords": {
+          "gm": 4,
+          "name": "Electric Piano 1",
+          "code": "B1 D1 A1 R2"
+        },
+        "lead": {
+          "gm": 40,
+          "name": "Violin",
+          "code": "B2 D2 A2 R2"
+        },
+        "pad": {
+          "gm": 89,
+          "name": "Warm Pad",
+          "code": "B1 D1 A3 R2"
+        },
+        "arp": {
+          "gm": 46,
+          "name": "Orchestral Harp",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 55,
+          "name": "Orchestra Hit",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 48,
+          "name": "String Ensemble 1",
+          "code": "B1 D2 A3 R2"
+        },
+        "fx": {
+          "gm": 97,
+          "name": "Soundtrack (FX)",
+          "code": "B3 D3 A3 R3"
+        }
+      },
+      "chain_delta": {
+        "bass": [
+          {
+            "slot": 5,
+            "action": "adjust",
+            "note": "Opto comp Attack → 60 ms — Liquid DnB bass rolls in slowly; fast default attack kills the swell and causes pumping"
+          }
+        ],
+        "melody": [
+          {
+            "slot": 3,
+            "action": "adjust",
+            "note": "Attack 20 ms, Release 180 ms — Violin needs gentle dynamics; opto default is too snappy for bowed string phrases"
+          },
+          {
+            "slot": 5,
+            "action": "adjust",
+            "note": "Plate Decay → 2.0 s, Mix 18% — Liquid warmth requires longer plate tail; default is too dry at 170+ BPM"
+          }
+        ]
+      }
+    },
+    {
+      "id": "dnb_neuro",
+      "name": "Neurofunk",
+      "branch": "B",
+      "kick_code": "B1 D2 A0 R1",
+      "kick_desc": "Layered kick — Reese bass, aggressive mid presence",
+      "instruments": {
+        "bass": {
+          "gm": 39,
+          "name": "Synth Bass 2",
+          "code": "B0 D1 A0 R0"
+        },
+        "chords": {
+          "gm": 90,
+          "name": "Polysynth Pad",
+          "code": "B2 D2 A1 R2"
+        },
+        "lead": {
+          "gm": 81,
+          "name": "Sawtooth Lead",
+          "code": "B2 D2 A1 R2"
+        },
+        "pad": {
+          "gm": 94,
+          "name": "Halo Pad",
+          "code": "B1 D2 A3 R2"
+        },
+        "arp": {
+          "gm": 98,
+          "name": "Crystal (FX)",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 62,
+          "name": "Synth Brass 1",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 95,
+          "name": "Sweep Pad",
+          "code": "B1 D3 A3 R2"
+        },
+        "fx": {
+          "gm": 103,
+          "name": "Sci-Fi (FX)",
+          "code": "B3 D3 A3 R3"
+        }
+      },
+      "chain_delta": {
+        "bass": [
+          {
+            "slot": 3,
+            "action": "adjust",
+            "note": "Drive +8 dB, Mix 80% — Reese bass is defined by heavy transistor saturation; default 4 dB/40% is insufficient for the growl"
+          },
+          {
+            "slot": 7,
+            "action": "adjust",
+            "note": "LP sweep 150 Hz → 3 kHz — Reese growl peak is higher than standard bass; widen sweep range for more aggressive movement"
+          }
+        ]
+      }
+    },
+    {
+      "id": "dnb_jump_up",
+      "name": "Jump Up",
+      "branch": "C",
+      "kick_code": "B0 D1 A3 R0",
+      "kick_desc": "Sub-boom slow-attack — aggressive bassline restores grid",
+      "instruments": {
+        "bass": {
+          "gm": 39,
+          "name": "Synth Bass 2",
+          "code": "B0 D1 A0 R0"
+        },
+        "chords": {
+          "gm": 62,
+          "name": "Synth Brass 1",
+          "code": "B2 D2 A1 R2"
+        },
+        "lead": {
+          "gm": 81,
+          "name": "Sawtooth Lead",
+          "code": "B2 D2 A1 R2"
+        },
+        "pad": {
+          "gm": 95,
+          "name": "Sweep Pad",
+          "code": "B1 D3 A3 R2"
+        },
+        "arp": {
+          "gm": 9,
+          "name": "Glockenspiel",
+          "code": "B3 D1 A0 R3"
+        },
+        "stabs": {
+          "gm": 62,
+          "name": "Synth Brass 1",
+          "code": "B2 D2 A0 R2"
+        },
+        "texture": {
+          "gm": 88,
+          "name": "New Age Pad",
+          "code": "B2 D3 A3 R3"
+        },
+        "fx": {
+          "gm": 102,
+          "name": "Echoes (FX)",
+          "code": "B3 D3 A3 R3"
+        }
+      },
+      "chain_delta": {
+        "bass": [
+          {
+            "slot": 3,
+            "action": "adjust",
+            "note": "Drive +6 dB, Mix 65% — Jump Up bass requires aggressive saturation; default transistor setting lacks the aggression"
+          }
+        ]
+      }
+    }
+  ]
+}

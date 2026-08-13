@@ -41,7 +41,7 @@ The **Production Advisor** tab (new in V7) closes the creative loop: after gener
 | **Harmonic Governor** | Resolves dissonant notes to the nearest scale pitch; configurable per genre |
 | **Bright-scale enforcement** | Commercial pipeline locks Pop/House/EDM to Major, Lydian, Mixolydian, Pentatonic Major — zero dark modes |
 | **Velocity LSB watermarking** | Hides a per-file cryptographic fingerprint in note velocities (±1 delta, inaudible) |
-| **UTAU export** | Melody track exported as `.ustx` for UTAU/OpenUtau vocal synthesis; auto-selects the vocal-ready MIDI as the scaffold source |
+| **Vocal synth export** | Melody track exported as `.ustx` for OpenUTAU vocal synthesis; auto-selects the vocal-ready MIDI as the scaffold source |
 | **Vocal-Ready WAV export** | Dedicated SAVE WAV button for the vocal-ready beat — renders the instrumental scaffold via FluidSynth so producers can send a high-quality audio reference to their vocalist |
 | **Production Advisor tab** | Full post-generation advisor: instrument picker, FX variant selector, preview player, and one-click PDF export — see [Production Advisor](#production-advisor) |
 | **BDRA psychoacoustic scoring** | `BDRARules` scores any instrument combination 0-100 across four timbral axes (Brightness · Density · Attack · Register) and five spectral principles (P1-P5); drives the InstrumentBuilder comboboxes |
@@ -95,7 +95,7 @@ music_architect_v7/
 │   ├── arrangement/               # Genre fusion and smart arrangement
 │   ├── export/
 │   │   ├── advisor_pdf.py         # 10-section A4 PDF / TXT production guide
-│   │   └── utau_bridge.py         # UTAU/OpenUtau .ustx scaffold export
+│   │   └── utau_bridge.py         # OpenUTAU .ustx vocal project scaffold export
 │   ├── rendering/                 # WAV + FluidSynth export
 │   │   ├── fluidsynth_renderer.py # Non-realtime FluidSynth renderer with cancel()
 │   │   └── soundfont_library.py   # SF2 discovery + genre-based routing (3-font split)

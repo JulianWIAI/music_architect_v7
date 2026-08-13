@@ -220,3 +220,25 @@ def get_description(program: int) -> str:
         family = _FAMILY_NAMES[program // 8]
         return f"GM program {program} · {family} family"
     return f"GM program {program}"
+
+
+# ── Drum kit descriptions (GM channel-10 bank select numbers) ────────────────
+# These are distinct from melodic GM programs: program 0 on ch10 = Standard Kit,
+# not Acoustic Grand Piano.  Use get_drum_description() for percussion comboboxes.
+
+_DRUM_KIT_DESCRIPTIONS: dict[int, str] = {
+    0:  "Standard kit · tight kick, crisp snare, natural hi-hats — universal, all-purpose percussion",
+    8:  "Room kit · roomy kick, live snare, ambience — jazz, live recording, organic feel",
+    16: "Power kit · punchy kick, loud snare, heavy cymbals — rock, metal, stadium",
+    24: "Electronic kit · synthetic hits, MIDI-trigger feel — electronic, industrial, EBM",
+    25: "TR-808 kit · sub kick, snappy rimshot, closed hats — trap, hip-hop, bass music",
+    32: "Jazz kit · warm brushed snare, resonant kick, open hats — jazz, bossa, swing",
+    40: "Brush kit · soft brush swipes, dry kick, intimate tone — jazz ballad, acoustic",
+    48: "Orchestra kit · concert bass drum, timpani, cymbals — classical, cinematic",
+    56: "SFX kit · sound effects, impacts, swooshes — film scoring, sound design",
+}
+
+
+def get_drum_description(kit: int) -> str:
+    """Return a sound-character description for a GM drum kit bank number."""
+    return _DRUM_KIT_DESCRIPTIONS.get(kit, f"Drum kit {kit}")

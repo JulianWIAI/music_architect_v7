@@ -1,0 +1,332 @@
+{
+  "_meta": {
+    "source": "Music Architect V7 — Production Guide Rev 1.0",
+    "sections": ["A", "B", "D", "E", "F", "G", "H"],
+    "genre": "edm"
+  },
+  "genre": "edm",
+  "bpm_range": [128, 145],
+  "valid_scales": ["natural_minor", "phrygian", "pentatonic_minor"],
+  "plr_target_db": "6-8",
+  "lra_target_lu": "4-7",
+  "drum_bus_cf_after_parallel_db": "10-12",
+  "bpm_buckets": [
+    {
+      "id": "E1", "bpm_range": [128, 143], "anchor_bpm": 135.5,
+      "key_families": ["natural_minor", "phrygian", "pentatonic_minor"],
+      "character": "Big-room / progressive EDM; dotted-8th delay = 332.1 ms; pre-drop build requires 8-bar riser; sidechain deeply pumped"
+    },
+    {
+      "id": "E2", "bpm_range": [143, 145], "anchor_bpm": 144.0,
+      "key_families": ["natural_minor", "phrygian", "pentatonic_minor"],
+      "character": "High-energy EDM border; tighter sidechain (release 208.3 ms); drop impact maximised; PLR target lower end"
+    }
+  ],
+  "tracks": {
+    "kick": {
+      "track_no": 1, "name": "Kick",
+      "owns": "Sub 20-80 Hz + click 3-5 kHz",
+      "role": "Big-room kick — temporal grid + low-end anchor",
+      "fundamental_hz": "50-70",
+      "gain_staging": {
+        "clip_gain_rms_dbfs": -17.0, "output_fader_db": -2.0, "peak_ceiling_dbfs": -5.0, "lufs_s": -15.0, "headroom_to_master_db": 5
+      },
+      "effect_chain": [
+        {"slot": 1, "effect": "High-pass filter",        "params": "18 Hz, 12 dB/oct Butterworth — removes sub-sonic DC"},
+        {"slot": 2, "effect": "Transient shaper",        "params": "Attack +5 dB, Sustain -4 dB — maximal punch for big-room impact"},
+        {"slot": 3, "effect": "Compressor (VCA)",        "params": "Ratio 4:1, Thr -12 dBFS, Attack 8 ms, Release 879.1 ms (=2×qn@136.5BPM), Knee 3 dB, GR 3-5 dB"},
+        {"slot": 4, "effect": "Saturation (transistor)", "params": "Drive +3-5 dB, Mix 40%, transistor model, THD 5-8%, 2nd-harmonic loudness boost — pre-compressor"},
+        {"slot": 5, "effect": "EQ (surgical)",           "params": "Bell -3 dB @300-400 Hz Q=1.4; Bell +3 dB @60 Hz Q=1.2; Shelf +2 dB @4 kHz for click definition"},
+        {"slot": 6, "effect": "Soft clipper/ceiling",    "params": "Ceiling -5.0 dBFS, 0.5 dB soft knee, oversampling 4x"}
+      ]
+    },
+    "bass": {
+      "track_no": 2, "name": "Bass",
+      "owns": "Sub 20-80 Hz + Bass 80-250 Hz (supersaw/growl hybrid)",
+      "role": "Wide supersaw sub-bass hybrid — harmonic root",
+      "fundamental_hz": "40-120",
+      "gain_staging": {
+        "clip_gain_rms_dbfs": -18.0, "output_fader_db": -4.0, "peak_ceiling_dbfs": -6.0, "lufs_s": -16.0, "headroom_to_master_db": 5
+      },
+      "effect_chain": [
+        {"slot": 1, "effect": "High-pass filter",               "params": "24-30 Hz, 12 dB/oct"},
+        {"slot": 2, "effect": "EQ (fundamental shaping + wobble)","params": "Bell +2 dB @fundamental; LFO-filter carve for wobble locked to 60000/BPM/4 ms (16th)"},
+        {"slot": 3, "effect": "Sidechain compressor (key=Kick)","params": "Ratio 6:1, Thr -20 dBFS, Attack 1-2 ms, Release 219.8 ms (=1/8÷2@136.5BPM), GR 5-8 dB"},
+        {"slot": 4, "effect": "Saturation (tube+transistor)",   "params": "Drive +4-6 dB, Mix 45%, tube+transistor blend, THD 8-12%, post-EQ"},
+        {"slot": 5, "effect": "Stereo imager (mono-maker)",     "params": "7-voice unison wide above 120 Hz; strict mono below 120 Hz (mono-compatibility law)"},
+        {"slot": 6, "effect": "Limiter (track safety)",         "params": "Ceiling -6.0 dBFS true peak, Lookahead 1.5 ms, Release 100 ms"}
+      ]
+    },
+    "chords": {
+      "track_no": 3, "name": "Chords",
+      "owns": "Low-mid 250-500 Hz + Mid 500 Hz-2 kHz (supersaw wall)",
+      "role": "Wall-of-sound harmonic density for drops",
+      "gain_staging": {
+        "clip_gain_rms_dbfs": -18.0, "output_fader_db": -6.0, "peak_ceiling_dbfs": -6.0, "lufs_s": -17.0, "headroom_to_master_db": 6
+      },
+      "effect_chain": [
+        {"slot": 1, "effect": "High-pass filter",        "params": "150-200 Hz, 12 dB/oct"},
+        {"slot": 2, "effect": "EQ (carve + density)",    "params": "Bell -2 dB @800-1200 Hz Q=1.0 (melody pocket); 7-voice detune raises apparent density"},
+        {"slot": 3, "effect": "Compressor (opto)",       "params": "Ratio 3:1, Thr -18 dBFS, Attack 15 ms, Release 439.6 ms (=qn@136.5BPM), GR 2-4 dB"},
+        {"slot": 4, "effect": "Chorus/ensemble",         "params": "Rate 0.5 Hz, Depth 20-30%, Mix 25%, 7-voice supersaw unison"},
+        {"slot": 5, "effect": "Reverb (send)",           "params": "Decay 1.5 s, Pre-delay 27.5 ms (=1/16 frac@136.5BPM), HPF 300 Hz, LPF 7 kHz, Mix 16%"},
+        {"slot": 6, "effect": "Saturation (waveshaper)", "params": "Drive +3 dB, Mix 35%, waveshaper, THD 10-20%, post-EQ pre-reverb"}
+      ]
+    },
+    "melody": {
+      "track_no": 4, "name": "Melody",
+      "owns": "Mid 500 Hz-2 kHz + High-mid 2-8 kHz (supersaw lead)",
+      "role": "Supersaw drop lead — focal voice",
+      "pitch_range_hz": "262-1047",
+      "gain_staging": {
+        "clip_gain_rms_dbfs": -15.0, "output_fader_db": -4.0, "peak_ceiling_dbfs": -4.0, "lufs_s": -13.0, "headroom_to_master_db": 4
+      },
+      "effect_chain": [
+        {"slot": 1, "effect": "High-pass filter",       "params": "250-300 Hz, 12 dB/oct"},
+        {"slot": 2, "effect": "EQ (presence + air)",    "params": "Shelf +3 dB @3 kHz (equal-loudness 2-5 kHz peak); Harmonic stack extends to 8th partial"},
+        {"slot": 3, "effect": "Compressor (FET)",       "params": "Ratio 2.5:1, Thr -15 dBFS, Attack 10 ms, Release 293.0 ms (=half-qn@136.5BPM), Knee 6 dB, GR 4-6 dB"},
+        {"slot": 4, "effect": "Saturation (tape)",      "params": "Drive +3 dB, Mix 30%, wide unison detune ±25 cents in multiband layer"},
+        {"slot": 5, "effect": "Stereo delay (send)",    "params": "Time 329.7 ms (dotted-8th@136.5BPM), Feedback 25-35%, HPF 400 Hz, LPF 5 kHz, ping-pong"},
+        {"slot": 6, "effect": "Reverb (send)",          "params": "Decay 1.5 s, Pre-delay 27.5 ms, HPF 400 Hz, LPF 10 kHz, Mix 14%"},
+        {"slot": 7, "effect": "Limiter + air shelf",    "params": "+2 dB shelf @10 kHz; Ceiling -4 dBFS true peak"}
+      ]
+    },
+    "arp": {
+      "track_no": 5, "name": "Arp",
+      "owns": "High-mid 2-6 kHz (shimmering supersaw arp wall)",
+      "role": "Wide shimmering arp — rhythmic subdivision carrier",
+      "rhythm_grid": "1/16 = 110.3 ms @136.5BPM",
+      "gain_staging": {
+        "clip_gain_rms_dbfs": -18.0, "output_fader_db": -8.0, "peak_ceiling_dbfs": -6.0, "lufs_s": -16.0, "headroom_to_master_db": 6
+      },
+      "effect_chain": [
+        {"slot": 1, "effect": "High-pass filter",            "params": "300-400 Hz, 12 dB/oct"},
+        {"slot": 2, "effect": "EQ (clarity + air)",          "params": "Bell +1.5 dB @4-6 kHz Q=1.2; Bell -3 dB @2.9 kHz Q=4 (melody carve)"},
+        {"slot": 3, "effect": "Compressor",                  "params": "Ratio 3:1, Attack 3 ms, Release 110.3 ms (=1/16@136.5BPM), GR 3-5 dB"},
+        {"slot": 4, "effect": "Stereo delay (send, synced)", "params": "Time 329.7 ms (dotted-8th@136.5BPM), Feedback 22%, HPF 600 Hz — delay throw"},
+        {"slot": 5, "effect": "Reverb (send, short)",        "params": "Decay 0.6 s (≈0.4× Chords RT60), Pre-delay 13.7 ms, HPF 700 Hz, Mix 10%"},
+        {"slot": 6, "effect": "Stereo widener + limiter",    "params": "Width 70-90% (±60-80%) above 500 Hz; Ceiling -6 dBFS true peak"}
+      ]
+    },
+    "pads": {
+      "track_no": 6, "name": "Pads",
+      "owns": "Sides, 200 Hz-20 kHz (supersaw / evolving pad)",
+      "role": "Wide EDM pad wash — ambient harmonic sustain",
+      "reverb_decay_s": 5.0,
+      "gain_staging": {
+        "clip_gain_rms_dbfs": -21.0, "output_fader_db": -11.0, "peak_ceiling_dbfs": -9.0, "lufs_s": -20.0, "headroom_to_master_db": 7
+      },
+      "effect_chain": [
+        {"slot": 1, "effect": "HPF + LPF (band-limit)",  "params": "HPF 200-250 Hz 12 dB/oct; LPF 12 kHz 12 dB/oct"},
+        {"slot": 2, "effect": "EQ (gentle scoop)",        "params": "Bell -2 dB @1-2 kHz Q=0.8 (Melody clearing); extreme unison detune ±25 cents for width"},
+        {"slot": 3, "effect": "Compressor (slow)",        "params": "Ratio 2:1, Thr -22 dBFS, Attack 30 ms, Release 1758.2 ms (=4×qn@136.5BPM), GR 2-3 dB"},
+        {"slot": 4, "effect": "Chorus/ensemble",          "params": "Rate 0.2-0.4 Hz, Depth 30-50%, Mix 50%, Spread 100%, slow LFO-modulated filter (period=4 bars)"},
+        {"slot": 5, "effect": "Sidechain comp (key=Kick)","params": "Ratio 3:1, Thr -24 dBFS, Attack 5 ms, Release 879.1 ms (=2×qn@136.5BPM), GR 4-6 dB — EDM deep pump"},
+        {"slot": 6, "effect": "Reverb (send, long)",      "params": "Decay 5.0 s (longest of all tracks), Pre-delay 54.9 ms, HPF 350 Hz, Mix 30%"},
+        {"slot": 7, "effect": "Stereo widener + mono-safety","params": "Width 80-100% above 200 Hz; strict mono below 120 Hz; Correlation floor +0.1"}
+      ]
+    },
+    "stabs": {
+      "track_no": 7, "name": "Stabs",
+      "owns": "Mid 500 Hz-6 kHz transients (distorted synth / orchestral hit)",
+      "role": "Drop accent — high-energy harmonic stab",
+      "duty_cycle_max_pct": 15,
+      "gain_staging": {
+        "clip_gain_rms_dbfs": -17.0, "output_fader_db": -5.0, "peak_ceiling_dbfs": -5.0, "lufs_s": -15.0, "headroom_to_master_db": 5
+      },
+      "effect_chain": [
+        {"slot": 1, "effect": "High-pass filter",       "params": "150-200 Hz, 18 dB/oct"},
+        {"slot": 2, "effect": "Transient shaper",       "params": "Attack +5 dB, Sustain -6 dB — wide dynamic transient for big-room impact"},
+        {"slot": 3, "effect": "EQ (impact + density)",  "params": "Bell +2 dB @2-3 kHz Q=1.0; saturation THD 15-25% waveshaper"},
+        {"slot": 4, "effect": "Compressor (fast FET)",  "params": "Ratio 4:1, Thr -14 dBFS, Attack 2 ms, Release 219.8 ms (=1/8@136.5BPM), GR 5-8 dB"},
+        {"slot": 5, "effect": "Reverb (send, short)",   "params": "Decay 0.2-0.4 s, Pre-delay 13.7 ms, HPF 400 Hz, Mix 22%"},
+        {"slot": 6, "effect": "Stereo spread + limiter","params": "Haas spread 12 ms side only, Width 120%; Ceiling -5 dBFS"}
+      ]
+    },
+    "fx": {
+      "track_no": 8, "name": "FX",
+      "owns": "Air 2 kHz-20 kHz + sub-drop + broadband sweeps",
+      "role": "Big riser / sub-drop / pre-drop tension builder",
+      "gain_staging": {
+        "clip_gain_rms_dbfs": -22.0, "output_fader_db": -9.0, "peak_ceiling_dbfs": -8.0, "lufs_s": -22.0, "headroom_to_master_db": 8
+      },
+      "effect_chain": [
+        {"slot": 1, "effect": "HPF / LPF (automated sweep)","params": "HPF sweep 80 Hz→4 kHz over final build bar; sub-drop: sine 80→20 Hz; riser: noise+tonal hybrid"},
+        {"slot": 2, "effect": "EQ (carve for coexistence)", "params": "Bell -3 dB where overlapping Melody/Lead, Q=1.5"},
+        {"slot": 3, "effect": "Compressor (glue)",          "params": "Ratio 2.5:1, Thr -28 dBFS, Attack 10 ms, Release 879.1 ms (=2×qn@136.5BPM), GR 3-5 dB"},
+        {"slot": 4, "effect": "Reverb/Delay (send, large)", "params": "Decay ≥5.0 s (≥Pads RT60), Pre-delay 27.5 ms, HPF 500 Hz, Mix 50%"},
+        {"slot": 5, "effect": "Stereo widener",             "params": "Width 90-100% (mid-side); maximal enveloping character for drops"},
+        {"slot": 6, "effect": "Limiter + LPF",              "params": "Ceiling -8 dBFS; LPF 16 kHz 12 dB/oct"}
+      ]
+    },
+    "percussion": {
+      "track_no": 9, "name": "Percussion",
+      "owns": "High-mid 2-6 kHz (processed hats/claps) + low-mid 250-500 Hz",
+      "role": "Parallel-compressed hat/clap for drop energy",
+      "micro_timing_ms": "±4-12",
+      "gain_staging": {
+        "clip_gain_rms_dbfs": -18.0, "output_fader_db": -7.0, "peak_ceiling_dbfs": -6.0, "lufs_s": -16.0, "headroom_to_master_db": 5
+      },
+      "effect_chain": [
+        {"slot": 1, "effect": "High-pass filter",           "params": "300-500 Hz, 12 dB/oct; saturated/parallel-compressed for drop energy"},
+        {"slot": 2, "effect": "Transient shaper",           "params": "Attack +3 dB, Sustain -5 dB — aggressive snap for drop-section energy"},
+        {"slot": 3, "effect": "Compressor (parallel-ready)","params": "Ratio 4:1, Attack 1 ms, Release 110.3 ms (=1/16@136.5BPM), GR 3-5 dB"},
+        {"slot": 4, "effect": "EQ (air boost)",             "params": "Shelf +2 dB @8 kHz, 6 dB/oct; Bell -3 dB @6.3 kHz Q=2.5 (sharpness control)"},
+        {"slot": 5, "effect": "Reverb (send, short)",       "params": "Decay 0.3-0.5 s (room-verb tail for big-room width), Pre-delay 13.7 ms, HPF 800 Hz, Mix 15%"},
+        {"slot": 6, "effect": "Width + saturation",         "params": "Width 50-80% above 800 Hz, Pan spread ±50-80%; Drive +2 dB, Mix 30%, transistor"}
+      ]
+    },
+    "intro": {
+      "track_no": 10, "name": "Intro",
+      "owns": "First 8-16 bars, build-intro (filtered chords+riser)",
+      "role": "Pre-drop tension build — GradualOrchestrationProtocol + 8-bar riser",
+      "max_simultaneous_elements": 4,
+      "section_contrast_target_lu": "4-6",
+      "gain_staging": {
+        "clip_gain_rms_dbfs": -20.0, "output_fader_db": -6.0, "peak_ceiling_dbfs": -8.0, "lufs_s": -20.0, "headroom_to_master_db": 7
+      },
+      "effect_chain": [
+        {"slot": 1, "effect": "HPF (automated sweep)",          "params": "Sweeps from 400 Hz→20 Hz over 8 bars (14.07 s at 136.5 BPM); 24 dB/oct"},
+        {"slot": 2, "effect": "EQ (carve for combined elements)","params": "Bell -2 dB where borrowed tracks overlap, Q=1.0"},
+        {"slot": 3, "effect": "Compressor (glue)",              "params": "Ratio 2:1, Thr -22 dBFS, Attack 20 ms, Release 879.1 ms (=2×qn@136.5BPM), GR 2-3 dB"},
+        {"slot": 4, "effect": "Reverb (send, large, auto wet%)","params": "Decay 5.0 s, Pre-delay 54.9 ms, wet% ramps down as intro progresses"},
+        {"slot": 5, "effect": "Limiter (track safety)",         "params": "Ceiling -8 dBFS true peak"}
+      ]
+    }
+  },
+  "bus_inserts": {
+    "drum":   {"chain": "EQ (HPF 25 Hz) -> Comp (4:1, 3 ms attack, aggressive) -> Saturation (transistor, 5-8% THD) -> Parallel Comp Return", "comp_ratio": "4:1", "comp_threshold_dbfs": -14, "comp_gr_db": 4, "comp_release_formula": "879.1"},
+    "bass":   {"chain": "EQ (mono-below-120, resonance carve for wobble) -> Comp (6:1) -> Saturation (tube+transistor blend, 8-12% THD)", "comp_ratio": "6:1", "comp_threshold_dbfs": -18, "comp_gr_db": 4, "comp_release_formula": "219.8"},
+    "synth":  {"chain": "EQ (broad carve) -> Comp (2.5:1, glue) -> Stereo Widener (mid-side, wide)", "comp_ratio": "2.5:1", "comp_threshold_dbfs": -20, "comp_gr_db": 2, "comp_release_formula": "439.6"},
+    "fx":     {"chain": "EQ (carve) -> Reverb/Delay Return (large) -> Limiter (-8 dBFS)", "comp_ratio": "2.5:1"},
+    "master": {"chain": "EQ (tonal balance) -> Bus Comp (2.5:1, 15 ms attack, 3-4 dB max GR) -> Saturation (1% THD) -> Limiter (True Peak -1.0 dBTP)", "comp_ratio": "2.5:1", "comp_threshold_dbfs": -22, "comp_gr_db": "3-4", "comp_release_formula": "auto"}
+  },
+  "sidechain_routing": [
+    {"trigger": "Kick",    "target": "Bass",       "ratio": "6:1",  "attack_ms": 1,  "release_formula": "219.8 ms (=sc_release@136.5BPM)", "gr_db": 6},
+    {"trigger": "Kick",    "target": "Pads",       "ratio": "3:1",  "attack_ms": 5,  "release_formula": "879.1 ms (=comp_release@136.5BPM) — massive EDM pump", "gr_db": 5},
+    {"trigger": "Kick",    "target": "Chords",     "ratio": "2.5:1","attack_ms": 5,  "release_formula": "439.6 ms (=qn@136.5BPM)", "gr_db": 3},
+    {"trigger": "Percussion (Snare/Clap)", "target": "Melody", "ratio": "2:1", "attack_ms": 3, "release_formula": "219.8 ms (=e8@136.5BPM)", "gr_db": 2}
+  ],
+  "parallel_compression": {
+    "wet_blend_pct": "35-50 (target 42)",
+    "ratio": "12:1",
+    "threshold_dbfs": -28,
+    "gr_wet_db": "14-20",
+    "attack_ms": 2,
+    "release_formula": "40-70 ms (very short — aggressive EDM drop impact)",
+    "wet_path_hpf_hz": 80,
+    "wet_path_lpf_hz": 14000,
+    "net_level_rise_db": 3.0,
+    "cf_reduction_db": "3-5",
+    "lra_target_lu": "4-7",
+    "reasoning": "Massive 35-50% wet blend with extreme ratio/GR achieves EDM's signature wall-of-sound loudness; very short release (40-70 ms) maximises transient impact at the drop."
+  },
+  "transient_shaping": {
+    "kick":       {"attack_db": 5,  "sustain_db": -4},
+    "snare":      {"attack_db": 5,  "sustain_db": -5},
+    "bass":       {"attack_db": 3,  "sustain_db": -3}
+  },
+  "stereo_field": {
+    "kick":       {"class": "MONO",          "width_pct": 0,           "correlation_target": "r>=+0.98"},
+    "bass":       {"class": "MONO<120Hz",    "width_pct": "0/wide above","correlation_target": "r>=+0.85"},
+    "chords":     {"class": "NARROW",        "width_pct": 120,         "correlation_target": "+0.5 to +0.8"},
+    "melody":     {"class": "CENTRE",        "width_pct": 110,         "correlation_target": "+0.85 to +1.0"},
+    "arp":        {"class": "WIDE",          "width_pct": "70-90",     "correlation_target": "+0.1 to +0.4"},
+    "pads":       {"class": "WIDE",          "width_pct": "80-100",    "correlation_target": "0 to +0.4"},
+    "stabs":      {"class": "NARROW",        "width_pct": 120,         "correlation_target": "+0.5 to +0.8"},
+    "fx":         {"class": "WIDE",          "width_pct": "90-100",    "correlation_target": "0 to +0.3"},
+    "percussion": {"class": "WIDE pan",      "pan_spread_pct": "±50-80","correlation_target": "+0.3 to +0.6"},
+    "intro":      {"class": "AUTOMATED",     "width_pct": "follows borrowed track","correlation_target": "+0.9->+0.3"}
+  },
+  "frequency_allocation": {
+    "kick":       {"dominant_zone": "Sub 20-80 Hz + click 3-5 kHz",        "bark_z": "0.5-2",  "hpf_hz": 18,  "lpf_hz": null, "exclusive_claim": "50-70 Hz peak; wide-band layering (30 Hz sub + 3 kHz click) maximises loudness."},
+    "bass":       {"dominant_zone": "Sub 20-80 Hz + Bass 80-250 Hz",       "bark_z": "1-5",    "hpf_hz": 24,  "lpf_hz": 8000, "exclusive_claim": "Mono below 120 Hz; 7-voice unison width above 120 Hz."},
+    "chords":     {"dominant_zone": "Low-mid 250-500 Hz + Mid 500-2 kHz",  "bark_z": "3-14",   "hpf_hz": 150, "lpf_hz": 14000,"exclusive_claim": "Supersaw density; pluck chords 150-250 ms decay to avoid Pad overlap."},
+    "melody":     {"dominant_zone": "Mid 500 Hz-2 kHz + High-mid 2-8 kHz","bark_z": "7-22",   "hpf_hz": 250, "lpf_hz": 16000,"exclusive_claim": "2-8 kHz priority for drop impact; harmonic stack extends to 8th partial."},
+    "arp":        {"dominant_zone": "High-mid 2-6 kHz (shimmering wall)",  "bark_z": "14-19",  "hpf_hz": 300, "lpf_hz": 16000,"exclusive_claim": "3-6 kHz shimmering arp; -3 dB notch at melody presence peak."},
+    "pads":       {"dominant_zone": "Sides 200 Hz-20 kHz (supersaw wash)", "bark_z": "3-24",   "hpf_hz": 200, "lpf_hz": 12000,"exclusive_claim": "Extreme width ±25 cents unison; LFO-modulated 4-bar filter sweep."},
+    "stabs":      {"dominant_zone": "Mid 500 Hz-6 kHz transients",         "bark_z": "7-19",   "hpf_hz": 150, "lpf_hz": 14000,"exclusive_claim": "Time-sliced: <15% duty cycle per bar; waveshaper THD 10-20%."},
+    "fx":         {"dominant_zone": "Air 2 kHz-20 kHz + sub-drop",         "bark_z": "14-24",  "hpf_hz": 25,  "lpf_hz": 16000,"exclusive_claim": "Riser sweep 80 Hz→4 kHz; sub-drop 80→20 Hz sine; maximal pre-drop tension."},
+    "percussion": {"dominant_zone": "High-mid 2-6 kHz + clap 250-500 Hz", "bark_z": "3-24",  "hpf_hz": 300, "lpf_hz": 18000,"exclusive_claim": "Saturated/parallel-compressed hats for drop energy; big-room clap wide."},
+    "intro":      {"dominant_zone": "Mid, build-filtered + riser",         "bark_z": "8-22",   "hpf_hz": "400->20", "lpf_hz": "3k->18k","exclusive_claim": "8-bar build; HPF sweep creates classic EDM riser effect."}
+  },
+  "ms_mastering": {
+    "status": "MANDATORY",
+    "side_hpf_hz": 200,
+    "side_hpf_slope": "12 dB/oct",
+    "side_shelf_db": 2.5,
+    "side_shelf_hz": 8000,
+    "mid_shelf_db": 0,
+    "resulting_width_pct": "115-130",
+    "correlation_floor": 0.3
+  },
+  "export_specs": {
+    "streaming": {
+      "lufs_i": -14.0, "dbtp": -1.0, "plr_db": 13.0,
+      "sample_rate_hz": 44100, "bit_depth": 24, "stereo": "Interleaved",
+      "lra_lu": "4-7",
+      "notes": "Platform-normalised on ingest. M/S mastering mandatory: side HPF 200 Hz, side shelf +1.5-2.5 dB @8 kHz. Stem naming: edm_gen{N}_seed_{id}_{track}_v{ver}.wav"
+    },
+    "broadcast": {
+      "lufs_i": -23.0, "lufs_i_tolerance": 0.5, "dbtp": -3.0, "plr_db": 20.0,
+      "sample_rate_hz": 48000, "bit_depth": 24, "stereo": "Interleaved",
+      "lra_lu": "<=10",
+      "notes": "EBU R128 ±0.5 LU tolerance; anything outside is rejected at ingest."
+    },
+    "sync_licensing": {
+      "lufs_i": "-16.0 to -18.0", "dbtp": -1.0, "plr_db": "15.0-17.0",
+      "sample_rate_hz": 48000, "bit_depth": 24, "stereo": "Interleaved",
+      "lra_lu": "6-10",
+      "notes": "Stems mandatory. Instrumental and vocal stem splits required. M/S insert mandatory per Section H EDM spec."
+    }
+  },
+  "bdra_matrix": {
+    "default_codes": {
+      "kick":       "B0 D2 A0 R0",
+      "bass":       "B1 D2 A0 R0",
+      "chords":     "B2 D3 A1 R2",
+      "melody":     "B3 D2 A0 R2",
+      "arp":        "B3 D2 A0 R3",
+      "pads":       "B2 D3 A3 R2",
+      "stabs":      "B2 D3 A0 R2",
+      "fx":         "B3 D3 A1 R3",
+      "percussion": "B3 D2 A0 R3",
+      "intro":      "B2 D2 A3 R2"
+    },
+    "branches": [
+      {
+        "branch": "A",
+        "kick_code": "B0 D0 A0 R0",
+        "kick_desc": "Pure sine sub kick — minimal techno / deep EDM variant",
+        "valid": {
+          "bass":   {"codes": "B0-B1, D0-D1, A0-A1, R0-R1", "avoid": "R2+ (would duplicate Chords register)"},
+          "chords": {"codes": "B1-B3, D1-D3, any A, R1-R2",  "avoid": "R0 (masks Kick fundamental)"},
+          "melody": {"codes": "B2-B3, D0-D2, A0-A1, R2-R3",  "avoid": ""},
+          "arp":    {"codes": "B2-B3, any D, A0, R2-R3",      "avoid": "R0-R1 (competes with Bass, not Kick)"}
+        }
+      },
+      {
+        "branch": "B",
+        "kick_code": "B0 D2 A0 R0",
+        "kick_desc": "Hybrid processed big-room kick — primary EDM default (D2 = rich partials, THD 10-20%)",
+        "valid": {
+          "bass":   {"codes": "B0-B1, D0-D1, A0-A2, R0 preferred", "avoid": "D2-D3 at R1 (intermodulation risk — EDM bass already D2)"},
+          "chords": {"codes": "B1-B2, D1-D2, any A, R2",           "avoid": "D3 (adds third dense-partial source — IMD products ∝ n²)"},
+          "melody": {"codes": "B2-B3, D0-D2, A0-A1, R2-R3",        "avoid": ""},
+          "arp":    {"codes": "B2-B3, D0-D1, A0, R2-R3",           "avoid": "D2-D3 (fourth dense layer risks IMD product density)"}
+        }
+      },
+      {
+        "branch": "C",
+        "kick_code": "B0 D1 A3 R0",
+        "kick_desc": "Dark slow-attack sub kick — breakdown / atmospheric EDM section",
+        "valid": {
+          "bass":   {"codes": "B0-B2, D0-D2, A0-A1 preferred", "avoid": "A2-A3 (two slow-attack low elements erase transient anchor)"},
+          "chords": {"codes": "B1-B3, any D, any A, R1-R2",    "avoid": ""},
+          "melody": {"codes": "B2-B3, any D, A0-A2, R2-R3",    "avoid": ""},
+          "arp":    {"codes": "B2-B3, D0-D2, A0, R2-R3",       "avoid": "A2-A3 (slow arp defeats EDM rhythmic arp purpose)"}
+        }
+      }
+    ]
+  }
+}

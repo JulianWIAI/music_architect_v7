@@ -22,6 +22,7 @@ import threading
 from typing import Optional
 
 from src.rendering.soundfont_library import SoundFontLibrary
+from src.rendering.fluidsynth_variant_params import build_fluidsynth_args
 
 
 class FluidSynthRenderer:
@@ -44,6 +45,7 @@ class FluidSynthRenderer:
             soundfont_path if soundfont_path and os.path.exists(soundfont_path)
             else None
         )
+        self._variant: str = 'neutral'
         self._library = SoundFontLibrary()
         self._current_proc: Optional[subprocess.Popen] = None
         self._proc_lock = threading.Lock()
@@ -71,6 +73,10 @@ class FluidSynthRenderer:
         if self._override:
             return f'Using override SF2: {self._override}'
         return self._library.summary()
+
+    def set_variant(self, variant_id: str) -> None:
+        """Store the timbral variant used for the next render ('bright'/'neutral'/'dark')."""
+        self._variant = variant_id if variant_id in ('bright', 'neutral', 'dark') else 'neutral'
 
     def set_override(self, path: Optional[str]) -> None:
         """
@@ -149,13 +155,15 @@ class FluidSynthRenderer:
         # Placing -F / -r / -g after sf2 / midi_path causes FluidSynth to
         # ignore those flags, produce no WAV output, and exit non-zero —
         # which silently triggers the MIDI-playback fallback in the caller.
+        variant_flags, gain = build_fluidsynth_args(self._variant)
         cmd = [
             'fluidsynth',
             '-ni',                   # non-interactive, no MIDI input
             '-a', 'null',            # null audio driver — fast, no speaker output
             '-F', wav_path,          # output WAV file  (must come before positional args)
             '-r', str(sample_rate),  # sample rate
-            '-g', '0.8',             # master gain: 0.8 linear ≈ -1.9 dB; headroom against clipping on hot full-velocity MIDI patches
+            '-g', f'{gain:.3f}',     # master gain set by active timbral variant
+            *variant_flags,          # reverb/chorus -o overrides for BRIGHT/NEUTRAL/DARK
             sf2,                     # positional: SoundFont
             midi_path,               # positional: MIDI file
         ]

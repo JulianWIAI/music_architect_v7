@@ -1,0 +1,137 @@
+{
+  "_meta": {
+    "description": "Curated GM instrument palette keyed by track role, each entry tagged with a BDRA timbral code derived from the MUSIC ARCHITECT production guide.",
+    "bdra_axes": {
+      "B": {
+        "label": "Brightness",
+        "range": "0-3",
+        "values": {
+          "0": "sub/dark  — spectral centroid < 200 Hz",
+          "1": "warm      — centroid 200-800 Hz",
+          "2": "bright    — centroid 800 Hz-4 kHz",
+          "3": "sparkle   — centroid > 4 kHz, air shelf present"
+        }
+      },
+      "D": {
+        "label": "Density",
+        "range": "0-3",
+        "values": {
+          "0": "sparse single sine  — mono-source, one partial",
+          "1": "single clear voice  — one source, full harmonics",
+          "2": "moderate texture    — ~2-4 simultaneous voices / layers",
+          "3": "dense / layered     — > 4 voices, wide unison, ensemble"
+        }
+      },
+      "A": {
+        "label": "Attack",
+        "range": "0-3",
+        "values": {
+          "0": "instantaneous  — < 5 ms (click, pluck, stab)",
+          "1": "fast           — 5-30 ms (piano, brass, short bow)",
+          "2": "medium         — 30-100 ms (slow bow, horn, clarinet)",
+          "3": "slow swell     — > 100 ms (pads, choir, string ensemble)"
+        }
+      },
+      "R": {
+        "label": "Register",
+        "range": "0-3",
+        "values": {
+          "0": "sub bass     — fundamental < 80 Hz",
+          "1": "bass/lo-mid  — fundamental 80-250 Hz",
+          "2": "mid          — fundamental 250 Hz-2 kHz",
+          "3": "treble/air   — fundamental or primary content > 2 kHz"
+        }
+      }
+    },
+    "track_roles": {
+      "bass":   "Sub-anchor — occupies R0/R1, establishes harmonic root and low-frequency energy.",
+      "chords": "Harmonic bed — mid-register (R2) sustain layer defining tonality and color.",
+      "melody": "Focal voice — perceptually brightest element, must cut through the mix (P5).",
+      "arp":    "Rhythmic subdivision — high-register (R2-R3) repeating figure driving groove.",
+      "pads":   "Spatial floor — slow-attack (A3) diffuse layer adding depth and width.",
+      "stabs":  "Accent punctuation — instantaneous attack (A0) transient hits for rhythmic emphasis."
+    },
+    "gm_program_numbering": "0-indexed (GM program 1 = gm 0)"
+  },
+  "bass": [
+    {"gm": 39, "name": "Synth Bass 2 (808)", "code": "B0 D0 A0 R0"},
+    {"gm": 43, "name": "Contrabass",          "code": "B0 D2 A2 R1"},
+    {"gm": 58, "name": "Tuba",                "code": "B0 D2 A2 R0"},
+    {"gm": 42, "name": "Cello",               "code": "B1 D2 A2 R1"},
+    {"gm": 32, "name": "Acoustic Bass",       "code": "B1 D1 A1 R1"},
+    {"gm": 33, "name": "Finger Bass",         "code": "B1 D1 A1 R1"},
+    {"gm": 35, "name": "Fretless Bass",       "code": "B1 D1 A2 R1"},
+    {"gm": 38, "name": "Synth Bass 1",        "code": "B1 D1 A0 R1"},
+    {"gm": 34, "name": "Pick Bass",           "code": "B2 D1 A0 R1"},
+    {"gm": 36, "name": "Slap Bass 1",         "code": "B2 D1 A0 R1"},
+    {"gm": 37, "name": "Slap Bass 2",         "code": "B2 D2 A0 R1"}
+  ],
+  "chords": [
+    {"gm": 95, "name": "Sweep Pad",             "code": "B1 D3 A3 R2"},
+    {"gm": 52, "name": "Choir Aahs",            "code": "B1 D3 A3 R2"},
+    {"gm": 91, "name": "Space Voice",           "code": "B1 D3 A3 R2"},
+    {"gm": 49, "name": "String Ensemble 2",     "code": "B1 D3 A3 R2"},
+    {"gm": 94, "name": "Halo Pad",              "code": "B1 D2 A3 R2"},
+    {"gm": 92, "name": "Bowed Pad",             "code": "B1 D2 A3 R2"},
+    {"gm": 48, "name": "String Ensemble 1",     "code": "B1 D2 A3 R2"},
+    {"gm": 89, "name": "Warm Pad",              "code": "B1 D1 A3 R2"},
+    {"gm": 60, "name": "French Horn",           "code": "B1 D2 A2 R2"},
+    {"gm":  4, "name": "Electric Piano 1",      "code": "B1 D1 A1 R2"},
+    {"gm":  5, "name": "Electric Piano 2",      "code": "B2 D1 A1 R2"},
+    {"gm":  0, "name": "Acoustic Grand Piano",  "code": "B2 D1 A1 R2"},
+    {"gm": 25, "name": "Acoustic Guitar Steel", "code": "B2 D2 A1 R2"},
+    {"gm": 61, "name": "Brass Section",         "code": "B2 D2 A0 R2"},
+    {"gm": 62, "name": "Synth Brass 1",         "code": "B2 D2 A0 R2"},
+    {"gm": 90, "name": "Polysynth Pad",         "code": "B2 D2 A3 R2"},
+    {"gm":  7, "name": "Clavinet",              "code": "B3 D1 A0 R2"}
+  ],
+  "melody": [
+    {"gm": 82, "name": "Calliope Lead", "code": "B1 D1 A2 R2"},
+    {"gm": 85, "name": "Voice Lead",    "code": "B1 D2 A2 R2"},
+    {"gm": 60, "name": "French Horn",   "code": "B2 D2 A2 R2"},
+    {"gm": 68, "name": "Oboe",          "code": "B2 D2 A2 R2"},
+    {"gm": 40, "name": "Violin",        "code": "B2 D2 A2 R2"},
+    {"gm": 71, "name": "Clarinet",      "code": "B2 D1 A2 R2"},
+    {"gm": 73, "name": "Flute",         "code": "B2 D1 A2 R3"},
+    {"gm": 80, "name": "Square Lead",   "code": "B2 D1 A1 R2"},
+    {"gm": 81, "name": "Sawtooth Lead", "code": "B2 D2 A1 R2"},
+    {"gm": 84, "name": "Charang Lead",  "code": "B3 D2 A1 R2"},
+    {"gm": 83, "name": "Chiff Lead",    "code": "B3 D2 A0 R2"},
+    {"gm": 56, "name": "Trumpet",       "code": "B3 D1 A0 R2"},
+    {"gm": 86, "name": "Fifths Lead",   "code": "B3 D3 A0 R2"},
+    {"gm": 11, "name": "Vibraphone",    "code": "B3 D1 A1 R3"}
+  ],
+  "arp": [
+    {"gm":  9, "name": "Glockenspiel",    "code": "B3 D1 A0 R3"},
+    {"gm": 12, "name": "Marimba",         "code": "B3 D1 A0 R3"},
+    {"gm": 13, "name": "Xylophone",       "code": "B3 D1 A0 R3"},
+    {"gm": 46, "name": "Orchestral Harp", "code": "B3 D1 A0 R3"},
+    {"gm": 98, "name": "Crystal (FX)",    "code": "B3 D1 A0 R3"},
+    {"gm": 11, "name": "Vibraphone",      "code": "B3 D1 A1 R3"},
+    {"gm": 56, "name": "Trumpet",         "code": "B3 D1 A0 R2"},
+    {"gm": 80, "name": "Square Lead",     "code": "B2 D1 A1 R2"}
+  ],
+  "pads": [
+    {"gm": 89, "name": "Warm Pad",           "code": "B1 D1 A3 R2"},
+    {"gm": 92, "name": "Bowed Pad",          "code": "B1 D2 A3 R2"},
+    {"gm": 94, "name": "Halo Pad",           "code": "B1 D2 A3 R2"},
+    {"gm": 51, "name": "Synth Strings 2",    "code": "B1 D2 A3 R2"},
+    {"gm": 48, "name": "String Ensemble 1",  "code": "B1 D2 A3 R2"},
+    {"gm": 49, "name": "String Ensemble 2",  "code": "B1 D3 A3 R2"},
+    {"gm": 52, "name": "Choir Aahs",         "code": "B1 D3 A3 R2"},
+    {"gm": 95, "name": "Sweep Pad",          "code": "B1 D3 A3 R2"},
+    {"gm": 91, "name": "Space Voice",        "code": "B1 D3 A3 R3"},
+    {"gm": 88, "name": "New Age Pad",        "code": "B2 D2 A3 R3"},
+    {"gm": 50, "name": "Synth Strings 1",    "code": "B2 D2 A3 R2"},
+    {"gm": 90, "name": "Polysynth Pad",      "code": "B2 D2 A3 R2"},
+    {"gm": 93, "name": "Metallic Pad",       "code": "B3 D2 A1 R2"}
+  ],
+  "stabs": [
+    {"gm": 28, "name": "Muted Guitar",  "code": "B1 D1 A0 R2"},
+    {"gm": 55, "name": "Orchestra Hit", "code": "B2 D2 A0 R2"},
+    {"gm": 57, "name": "Trombone",      "code": "B2 D2 A0 R2"},
+    {"gm": 61, "name": "Brass Section", "code": "B2 D2 A0 R2"},
+    {"gm": 62, "name": "Synth Brass 1", "code": "B2 D2 A0 R2"},
+    {"gm": 63, "name": "Synth Brass 2", "code": "B3 D2 A0 R2"}
+  ]
+}

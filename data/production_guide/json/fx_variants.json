@@ -1,0 +1,523 @@
+{
+  "_meta": {
+    "source": "Music Architect FX Variant System — psychoacoustic timbral flavors",
+    "principle": "Each variant applies a chain_overlay that modifies 2-4 effect chain slots per track. NEUTRAL always has an empty overlay (it IS the genre reference). BRIGHT emphasizes air shelf, shorter reverb pre-delay, less saturation drive. DARK emphasizes tape saturation, longer reverb tails, darker EQ curves. All parameters derive from Fletcher-Munson equal-loudness contours, ITU-R BS.1770, and EBU R128.",
+    "note": "chain_overlay format is identical to chain_delta in instrument_palettes.json"
+  },
+  "variants": {
+    "pop": [
+      {
+        "id": "bright",
+        "label": "POLISHED",
+        "description": "Air shelf +3 dB, shorter reverb pre-delay — bright commercial radio sound",
+        "chain_overlay": {
+          "melody": [
+            {"slot": 4, "action": "adjust", "note": "Reduce tape saturation drive — bright variant lets HF breathe without harmonic compression", "params": "Drive +1 dB, Mix 20%, HF roll-off 14 kHz"},
+            {"slot": 6, "action": "adjust", "note": "Shorter pre-delay and brighter room HPF for clear, present reverb tail", "params": "Decay 1.0 s, Pre-delay 18 ms, HPF 500 Hz, LPF 10 kHz, Mix 10%"},
+            {"slot": 7, "action": "adjust", "note": "Air shelf +3 dB instead of +2 dB — Fletcher-Munson: 10 kHz content adds perceived brightness at equal loudness", "params": "+3 dB high shelf @10 kHz; Ceiling -7 dBFS"}
+          ],
+          "chords": [
+            {"slot": 2, "action": "adjust", "note": "Increase presence shelf to +2.5 dB @3 kHz — brighter harmonic bed under melody", "params": "-3 dB @320 Hz Q=1.2; -2 dB @900 Hz Q=2.0; +2.5 dB @3 kHz shelf"},
+            {"slot": 5, "action": "adjust", "note": "Brighter plate HPF at 400 Hz, shorter decay for clarity", "params": "Decay 1.2 s, Pre-delay 16 ms, HPF 400 Hz, LPF 9 kHz, Mix 14%"}
+          ],
+          "pads": [
+            {"slot": 2, "action": "adjust", "note": "Increase Side air shelf to +3 dB @4 kHz — wider, airier spatial bed", "params": "Mid: -4 dB @1.1 kHz Q=0.9; Side: +3 dB @4 kHz shelf"},
+            {"slot": 5, "action": "adjust", "note": "Higher HPF on hall reverb keeps reverb bright and airy, avoids mud", "params": "Decay 3.0 s, Pre-delay 0 ms, HPF 500 Hz, Mix 28%"}
+          ]
+        }
+      },
+      {
+        "id": "neutral",
+        "label": "NATURAL",
+        "description": "Genre reference parameters — balanced pop production",
+        "chain_overlay": {}
+      },
+      {
+        "id": "dark",
+        "label": "UNDERGROUND",
+        "description": "Tape saturation, longer reverb tails, darker EQ — raw lo-fi texture",
+        "chain_overlay": {
+          "melody": [
+            {"slot": 4, "action": "adjust", "note": "Increase tape drive for analog warmth — 2nd/3rd harmonics add perceived density (psychoacoustic roughness model)", "params": "Drive +4 dB, Mix 40%, HF roll-off 8 kHz"},
+            {"slot": 6, "action": "adjust", "note": "Longer reverb with lower HPF — darker room character, more distant source imaging", "params": "Decay 1.6 s, Pre-delay 32 ms, HPF 300 Hz, LPF 6 kHz, Mix 16%"},
+            {"slot": 7, "action": "adjust", "note": "Reduce air shelf to +1 dB — dark variant rolls off perceptual brightness", "params": "+1 dB high shelf @10 kHz; Ceiling -7 dBFS"}
+          ],
+          "chords": [
+            {"slot": 2, "action": "adjust", "note": "Deeper low-mid notch and reduced presence — warmer, thicker harmonic bed", "params": "-4 dB @320 Hz Q=1.2; -1 dB @900 Hz Q=2.0; +0.5 dB @3 kHz shelf"},
+            {"slot": 5, "action": "adjust", "note": "Longer reverb with darker LPF for warm ambient space", "params": "Decay 1.8 s, Pre-delay 24 ms, HPF 200 Hz, LPF 6 kHz, Mix 16%"}
+          ],
+          "pads": [
+            {"slot": 2, "action": "adjust", "note": "Reduce Side air shelf — less HF sparkle in sides for darker spatial impression", "params": "Mid: -3 dB @1.1 kHz Q=0.9; Side: +1.5 dB @3 kHz shelf"},
+            {"slot": 5, "action": "adjust", "note": "Extend reverb decay and lower HPF — submerged, wide, dark spatial bed", "params": "Decay 4.5 s, Pre-delay 0 ms, HPF 250 Hz, Mix 35%"}
+          ],
+          "bass": [
+            {"slot": 4, "action": "adjust", "note": "Soften sub notch for more low-end weight — darker variant can carry more fundamental energy", "params": "-2 dB @58 Hz Q=3.0; -2 dB @250 Hz Q=1.0; +2 dB @800 Hz Q=0.8"}
+          ]
+        }
+      }
+    ],
+    "hiphop": [
+      {
+        "id": "bright",
+        "label": "CLEAN ROOM",
+        "description": "HF air shelf, short room reverb on snare — polished hip-hop radio sound",
+        "chain_overlay": {
+          "melody": [
+            {"slot": 7, "action": "adjust", "note": "Air shelf lift for cut-through in dense hip-hop mix", "params": "+3 dB high shelf @10 kHz; Ceiling -7 dBFS"},
+            {"slot": 6, "action": "adjust", "note": "Shorter brighter reverb — keeps lead punchy in modern hip-hop context", "params": "Decay 0.9 s, Pre-delay 15 ms, HPF 500 Hz, LPF 10 kHz, Mix 9%"}
+          ],
+          "pads": [
+            {"slot": 2, "action": "adjust", "note": "Boost Side HF shelf for wider, airier texture", "params": "Mid: -4 dB @1.1 kHz Q=0.9; Side: +3 dB @4 kHz shelf"},
+            {"slot": 5, "action": "adjust", "note": "Brighter reverb tail on pad for spacious but clean texture", "params": "Decay 2.8 s, Pre-delay 0 ms, HPF 500 Hz, Mix 25%"}
+          ]
+        }
+      },
+      {
+        "id": "neutral",
+        "label": "STUDIO",
+        "description": "Genre reference — standard hip-hop mix balance",
+        "chain_overlay": {}
+      },
+      {
+        "id": "dark",
+        "label": "GRITTY",
+        "description": "Heavy tape saturation, subby bass, dark reverbs — underground hip-hop texture",
+        "chain_overlay": {
+          "melody": [
+            {"slot": 4, "action": "adjust", "note": "Heavy tape for lo-fi warmth — classic boom-bap saturation character", "params": "Drive +5 dB, Mix 45%, HF roll-off 7 kHz"},
+            {"slot": 6, "action": "adjust", "note": "Dark slow reverb for cavernous underground feel", "params": "Decay 1.8 s, Pre-delay 35 ms, HPF 250 Hz, LPF 5 kHz, Mix 18%"},
+            {"slot": 7, "action": "adjust", "note": "Remove air shelf — lo-fi aesthetic removes top-end sheen", "params": "+0 dB high shelf @10 kHz; Ceiling -7 dBFS"}
+          ],
+          "bass": [
+            {"slot": 4, "action": "adjust", "note": "Less mid notch — darker variant allows more low-mid warmth in 250 Hz region", "params": "-2 dB @58 Hz Q=3.0; -1 dB @250 Hz Q=1.0; +1.5 dB @800 Hz Q=0.8"},
+            {"slot": 5, "action": "adjust", "note": "Reduce HF saturation drive — dark bass stays warm and round, not bright and clicky", "params": "Drive +2 dB above 150 Hz, Mix 25%, sub band clean"}
+          ],
+          "pads": [
+            {"slot": 5, "action": "adjust", "note": "Long dark reverb with very low HPF — submerged texture typical of cloud rap / dark hip-hop", "params": "Decay 5.0 s, Pre-delay 0 ms, HPF 200 Hz, Mix 38%"}
+          ]
+        }
+      }
+    ],
+    "trap": [
+      {
+        "id": "bright",
+        "label": "SHINE",
+        "description": "Boosted arp air shelf, bright hi-hat reverb, polished 808 — commercial trap sheen",
+        "chain_overlay": {
+          "melody": [
+            {"slot": 7, "action": "adjust", "note": "Air shelf for cut-through over dense trap production", "params": "+3 dB high shelf @10 kHz; Ceiling -7 dBFS"},
+            {"slot": 6, "action": "adjust", "note": "Shorter brighter reverb keeps melody present in fast BPM trap context", "params": "Decay 0.8 s, Pre-delay 14 ms, HPF 600 Hz, LPF 11 kHz, Mix 8%"}
+          ],
+          "arp": [
+            {"slot": 3, "action": "adjust", "note": "Extra +1 dB on HF shelf — trap arps benefit from additional sparkle in 6-8 kHz range", "params": "-3 dB @2.9 kHz Q=4; +3 dB @6.5 kHz shelf; -2 dB @450 Hz Q=1.5"}
+          ],
+          "pads": [
+            {"slot": 5, "action": "adjust", "note": "Brighter shorter pad reverb — polished trap uses less ambient wash, more focus", "params": "Decay 2.5 s, Pre-delay 0 ms, HPF 600 Hz, Mix 22%"}
+          ]
+        }
+      },
+      {
+        "id": "neutral",
+        "label": "STREET",
+        "description": "Genre reference — standard trap mix balance",
+        "chain_overlay": {}
+      },
+      {
+        "id": "dark",
+        "label": "MURK",
+        "description": "Saturated 808, dark pad reverbs, reduced HF — Memphis / SoundCloud dark trap",
+        "chain_overlay": {
+          "melody": [
+            {"slot": 4, "action": "adjust", "note": "Heavy tape saturation for lo-fi aesthetic dominant in dark trap sub-genres", "params": "Drive +5 dB, Mix 45%, HF roll-off 7 kHz"},
+            {"slot": 6, "action": "adjust", "note": "Very long dark reverb — wash of dark ambience behind trap lead", "params": "Decay 2.0 s, Pre-delay 35 ms, HPF 250 Hz, LPF 5 kHz, Mix 18%"}
+          ],
+          "arp": [
+            {"slot": 3, "action": "adjust", "note": "Reduce HF shelf on arp — dark trap pulls back the sparkle for murky texture", "params": "-3 dB @2.9 kHz Q=4; +0.5 dB @6.5 kHz shelf; -2 dB @450 Hz Q=1.5"}
+          ],
+          "pads": [
+            {"slot": 5, "action": "adjust", "note": "Very long dark reverb with low HPF — defining characteristic of dark/cloud trap pad texture", "params": "Decay 5.5 s, Pre-delay 0 ms, HPF 180 Hz, Mix 40%"}
+          ],
+          "bass": [
+            {"slot": 4, "action": "adjust", "note": "Reduce mid notch to increase 808 weight and warmth", "params": "-1.5 dB @58 Hz Q=3.0; -1 dB @250 Hz Q=1.0; +1 dB @800 Hz Q=0.8"}
+          ]
+        }
+      }
+    ],
+    "edm": [
+      {
+        "id": "bright",
+        "label": "EUPHORIC",
+        "description": "Wide side-chain, bright pads, high reverb HPF — festival main-stage brightness",
+        "chain_overlay": {
+          "melody": [
+            {"slot": 7, "action": "adjust", "note": "+3 dB air shelf — EDM bright variant targets 8-12 kHz 'air' region for open-sky festival feel", "params": "+3 dB high shelf @10 kHz; Ceiling -7 dBFS"},
+            {"slot": 6, "action": "adjust", "note": "Short bright reverb with high HPF — clarity in loud club environment (EBU R128 consideration)", "params": "Decay 0.9 s, Pre-delay 14 ms, HPF 600 Hz, LPF 12 kHz, Mix 9%"}
+          ],
+          "pads": [
+            {"slot": 2, "action": "adjust", "note": "Boost Side HF shelf to +3.5 dB — euphoric wide stereo image typical of big-room EDM", "params": "Mid: -4 dB @1.1 kHz Q=0.9; Side: +3.5 dB @4 kHz shelf"},
+            {"slot": 5, "action": "adjust", "note": "Higher HPF on reverb — bright air in the hall tail, avoids low-mid wash at high volumes", "params": "Decay 3.0 s, Pre-delay 0 ms, HPF 600 Hz, Mix 25%"}
+          ]
+        }
+      },
+      {
+        "id": "neutral",
+        "label": "CLUB",
+        "description": "Genre reference — balanced club system mix",
+        "chain_overlay": {}
+      },
+      {
+        "id": "dark",
+        "label": "MIDNIGHT",
+        "description": "Dark filter sweeps, long reverbs, reduced HF — late night underground club sound",
+        "chain_overlay": {
+          "melody": [
+            {"slot": 4, "action": "adjust", "note": "More saturation for dark analog warmth in underground EDM context", "params": "Drive +4 dB, Mix 38%, HF roll-off 8 kHz"},
+            {"slot": 6, "action": "adjust", "note": "Longer, darker reverb — underground/techno adjacent EDM uses more reverb depth", "params": "Decay 1.6 s, Pre-delay 28 ms, HPF 300 Hz, LPF 6 kHz, Mix 14%"}
+          ],
+          "pads": [
+            {"slot": 2, "action": "adjust", "note": "Reduce side HF shelf — midnight EDM pulls back the sparkle for a darker spatial bed", "params": "Mid: -3 dB @1.1 kHz Q=0.9; Side: +1.5 dB @3 kHz shelf"},
+            {"slot": 5, "action": "adjust", "note": "Very long dark reverb — underground club system pads need depth and darkness", "params": "Decay 5.0 s, Pre-delay 0 ms, HPF 200 Hz, Mix 38%"}
+          ]
+        }
+      }
+    ],
+    "cinematic": [
+      {
+        "id": "bright",
+        "label": "EPIC",
+        "description": "Strong air shelf on orchestra, wide brass, large hall — blockbuster orchestral brightness",
+        "chain_overlay": {
+          "melody": [
+            {"slot": 7, "action": "adjust", "note": "Lift air shelf for orchestral presence — cinematic bright targets 8 kHz 'shimmer' and 12 kHz 'air'", "params": "+3 dB high shelf @8 kHz; Ceiling -7 dBFS"},
+            {"slot": 6, "action": "adjust", "note": "Large bright hall — cinematic epic variant needs massive spatial scale", "params": "Decay 3.5 s, Pre-delay 25 ms, HPF 400 Hz, LPF 12 kHz, Mix 20%"}
+          ],
+          "pads": [
+            {"slot": 5, "action": "adjust", "note": "Massive hall reverb decay for epic orchestral space — targets Haas effect threshold", "params": "Decay 5.0 s, Pre-delay 0 ms, HPF 350 Hz, Mix 35%"},
+            {"slot": 2, "action": "adjust", "note": "Wide side HF — orchestral strings need maximum stereo presence", "params": "Mid: -4 dB @1.1 kHz Q=0.9; Side: +3 dB @4 kHz shelf"}
+          ]
+        }
+      },
+      {
+        "id": "neutral",
+        "label": "INTIMATE",
+        "description": "Genre reference — balanced cinematic mix",
+        "chain_overlay": {}
+      },
+      {
+        "id": "dark",
+        "label": "ATMOSPHERIC",
+        "description": "Long dark reverbs, low-frequency emphasis — tension, horror, deep-space cinematic",
+        "chain_overlay": {
+          "melody": [
+            {"slot": 4, "action": "adjust", "note": "Heavy saturation for dark cinematic texture — evokes analog film scoring sound", "params": "Drive +4 dB, Mix 42%, HF roll-off 7 kHz"},
+            {"slot": 6, "action": "adjust", "note": "Very long dark reverb — atmospheric cinematic uses extreme reverb times for tension", "params": "Decay 5.0 s, Pre-delay 45 ms, HPF 200 Hz, LPF 5 kHz, Mix 22%"}
+          ],
+          "pads": [
+            {"slot": 5, "action": "adjust", "note": "Extremely long hall — horror/tension cinematic pads define space through vast reverb", "params": "Decay 7.0 s, Pre-delay 0 ms, HPF 150 Hz, Mix 42%"},
+            {"slot": 2, "action": "adjust", "note": "Reduce side HF — dark atmospheric pulls back stereo sparkle for claustrophobic depth", "params": "Mid: -3 dB @1.1 kHz Q=0.9; Side: +1 dB @2 kHz shelf"}
+          ],
+          "bass": [
+            {"slot": 4, "action": "adjust", "note": "Less sub notch — dark cinematic uses more sub-bass weight for dread and tension", "params": "-1.5 dB @58 Hz Q=3.0; -2 dB @250 Hz Q=1.0; +2 dB @800 Hz Q=0.8"}
+          ]
+        }
+      }
+    ],
+    "classical": [
+      {
+        "id": "bright",
+        "label": "CONCERT HALL",
+        "description": "Large bright hall reverb, air shelf — live concert hall acoustic",
+        "chain_overlay": {
+          "melody": [
+            {"slot": 6, "action": "adjust", "note": "Large bright hall reverb — classical bright simulates premiere concert hall acoustics", "params": "Decay 2.8 s, Pre-delay 22 ms, HPF 350 Hz, LPF 14 kHz, Mix 18%"},
+            {"slot": 7, "action": "adjust", "note": "Subtle air shelf — natural instrument harmonics extend above 10 kHz in live recordings", "params": "+2 dB high shelf @10 kHz; Ceiling -7 dBFS"}
+          ],
+          "pads": [
+            {"slot": 5, "action": "adjust", "note": "Large hall for orchestral strings — replicates Carnegie Hall / Berlin Philharmonie RT60 (1.9-2.2 s)", "params": "Decay 4.0 s, Pre-delay 0 ms, HPF 300 Hz, Mix 32%"}
+          ]
+        }
+      },
+      {
+        "id": "neutral",
+        "label": "SALON",
+        "description": "Genre reference — intimate recital room acoustic",
+        "chain_overlay": {}
+      },
+      {
+        "id": "dark",
+        "label": "CATHEDRAL",
+        "description": "Very long reverb, dark low-mid emphasis — cathedral / sacred music acoustic",
+        "chain_overlay": {
+          "melody": [
+            {"slot": 6, "action": "adjust", "note": "Cathedral reverb RT60 — Gothic stone church has RT60 of 4-8 s (physically measured)", "params": "Decay 6.0 s, Pre-delay 50 ms, HPF 150 Hz, LPF 5 kHz, Mix 28%"}
+          ],
+          "pads": [
+            {"slot": 5, "action": "adjust", "note": "Extreme hall decay models stone cathedral acoustics (measured 6-9 s RT60 at 500 Hz)", "params": "Decay 8.0 s, Pre-delay 0 ms, HPF 100 Hz, Mix 45%"}
+          ]
+        }
+      }
+    ],
+    "techno": [
+      {
+        "id": "bright",
+        "label": "CLEAN ROOM",
+        "description": "Clinical brightness, short room reverb — clinical Berghain-adjacent sound design",
+        "chain_overlay": {
+          "melody": [
+            {"slot": 7, "action": "adjust", "note": "Sharp air shelf — techno bright variant is clinical and precise, not warm", "params": "+3 dB high shelf @12 kHz; Ceiling -7 dBFS"},
+            {"slot": 6, "action": "adjust", "note": "Very short, dry reverb — clinical techno uses minimal reverb on leads", "params": "Decay 0.7 s, Pre-delay 10 ms, HPF 700 Hz, LPF 12 kHz, Mix 7%"}
+          ],
+          "pads": [
+            {"slot": 2, "action": "adjust", "note": "Sharp side HF boost — wide clinical stereo image", "params": "Mid: -4 dB @1.1 kHz Q=0.9; Side: +3.5 dB @5 kHz shelf"}
+          ]
+        }
+      },
+      {
+        "id": "neutral",
+        "label": "INDUSTRIAL",
+        "description": "Genre reference — standard techno mix balance",
+        "chain_overlay": {}
+      },
+      {
+        "id": "dark",
+        "label": "WAREHOUSE",
+        "description": "Heavy saturation, long dark room reverb — analog industrial techno texture",
+        "chain_overlay": {
+          "melody": [
+            {"slot": 4, "action": "adjust", "note": "Maximum tape saturation — analog techno warmth, hardware synth through tape machine", "params": "Drive +5 dB, Mix 50%, HF roll-off 7 kHz"},
+            {"slot": 6, "action": "adjust", "note": "Dark warehouse reverb — concrete industrial space has long dark RT60 with low HPF", "params": "Decay 2.0 s, Pre-delay 30 ms, HPF 200 Hz, LPF 5 kHz, Mix 18%"}
+          ],
+          "pads": [
+            {"slot": 5, "action": "adjust", "note": "Long dark reverb models warehouse / bunker acoustic (measured RT60 3-6 s in industrial spaces)", "params": "Decay 5.5 s, Pre-delay 0 ms, HPF 180 Hz, Mix 40%"}
+          ]
+        }
+      }
+    ],
+    "house": [
+      {
+        "id": "bright",
+        "label": "WARM FLOOR",
+        "description": "Bright chord stabs, wide stereo, airy pads — polished house dancefloor sound",
+        "chain_overlay": {
+          "melody": [
+            {"slot": 7, "action": "adjust", "note": "Air shelf on house lead — functional brightness for club system monitoring (SPL 95-105 dB)", "params": "+2.5 dB high shelf @10 kHz; Ceiling -7 dBFS"},
+            {"slot": 6, "action": "adjust", "note": "Short bright reverb — house melody needs to cut through 4/4 kick density", "params": "Decay 0.9 s, Pre-delay 15 ms, HPF 500 Hz, LPF 11 kHz, Mix 9%"}
+          ],
+          "pads": [
+            {"slot": 2, "action": "adjust", "note": "Wide Side HF for Chicago-style house chord stab width", "params": "Mid: -4 dB @1.1 kHz Q=0.9; Side: +3 dB @4 kHz shelf"}
+          ]
+        }
+      },
+      {
+        "id": "neutral",
+        "label": "DEEP",
+        "description": "Genre reference — balanced house mix",
+        "chain_overlay": {}
+      },
+      {
+        "id": "dark",
+        "label": "LATE NIGHT",
+        "description": "Warm saturation, long pad reverb — late night deep / minimal house texture",
+        "chain_overlay": {
+          "melody": [
+            {"slot": 4, "action": "adjust", "note": "Warm tube saturation for late-night house texture — 2nd harmonic warmth", "params": "Drive +3 dB, Mix 35%, HF roll-off 9 kHz"},
+            {"slot": 6, "action": "adjust", "note": "Longer darker reverb — late night house uses more reverb space and depth", "params": "Decay 1.5 s, Pre-delay 28 ms, HPF 300 Hz, LPF 7 kHz, Mix 14%"}
+          ],
+          "pads": [
+            {"slot": 5, "action": "adjust", "note": "Warm long hall — deep house pads need warmth and spatial depth", "params": "Decay 4.8 s, Pre-delay 0 ms, HPF 220 Hz, Mix 36%"}
+          ]
+        }
+      }
+    ],
+    "jpop": [
+      {
+        "id": "bright",
+        "label": "SPARKLE",
+        "description": "Maximum air shelf, chorus depth, sparkle arp — J-pop idol bright aesthetic",
+        "chain_overlay": {
+          "melody": [
+            {"slot": 7, "action": "adjust", "note": "Extra air shelf — J-pop bright aesthetic targets hyper-bright 10-12 kHz 'sparkle' region", "params": "+3.5 dB high shelf @10 kHz; Ceiling -7 dBFS"},
+            {"slot": 5, "action": "adjust", "note": "More delay feedback for bright rhythmic energy — J-pop uses prominent tempo-sync delay", "params": "1/8D = 45000/BPM ms, Feedback 35%, Mix 20%, HPF 500 Hz, LPF 7 kHz, ping-pong"}
+          ],
+          "chords": [
+            {"slot": 4, "action": "adjust", "note": "Deeper chorus for J-pop lush chord bed — higher rate creates shimmer characteristic of genre", "params": "Rate 0.45 Hz, Depth 8 ms, Mix 22%, 2 voices, Spread 70%"}
+          ]
+        }
+      },
+      {
+        "id": "neutral",
+        "label": "STANDARD",
+        "description": "Genre reference — balanced J-pop mix",
+        "chain_overlay": {}
+      },
+      {
+        "id": "dark",
+        "label": "MOOD",
+        "description": "Warmer saturation, longer reverb — introspective / city-pop adjacent dark J-pop",
+        "chain_overlay": {
+          "melody": [
+            {"slot": 4, "action": "adjust", "note": "Tape warmth for city-pop / moody J-pop aesthetic — vintage analog character", "params": "Drive +3 dB, Mix 35%, HF roll-off 9 kHz"},
+            {"slot": 6, "action": "adjust", "note": "Longer reverb for introspective depth — references late-night city-pop production style", "params": "Decay 1.5 s, Pre-delay 28 ms, HPF 280 Hz, LPF 7 kHz, Mix 15%"}
+          ],
+          "pads": [
+            {"slot": 5, "action": "adjust", "note": "Warm long reverb on pad — city-pop pads use extended reverb for nostalgic depth", "params": "Decay 4.5 s, Pre-delay 0 ms, HPF 220 Hz, Mix 34%"}
+          ]
+        }
+      }
+    ],
+    "phonk": [
+      {
+        "id": "bright",
+        "label": "DRIFT",
+        "description": "Bright HF shelf, tight distortion, sharp 808 — drift phonk energetic sound",
+        "chain_overlay": {
+          "melody": [
+            {"slot": 7, "action": "adjust", "note": "HF air shelf for phonk bright — cuts through heavy distortion and lo-fi filtering", "params": "+2.5 dB high shelf @10 kHz; Ceiling -7 dBFS"}
+          ],
+          "arp": [
+            {"slot": 3, "action": "adjust", "note": "More HF energy on arp — phonk bright uses sharp hi-hat and arp presence", "params": "-3 dB @2.9 kHz Q=4; +3 dB @6.5 kHz shelf; -2 dB @450 Hz Q=1.5"}
+          ]
+        }
+      },
+      {
+        "id": "neutral",
+        "label": "PHONK",
+        "description": "Genre reference — standard phonk mix balance",
+        "chain_overlay": {}
+      },
+      {
+        "id": "dark",
+        "label": "LOFI DARK",
+        "description": "Maximum lo-fi saturation, slow filtering, dark sub — underground phonk darkness",
+        "chain_overlay": {
+          "melody": [
+            {"slot": 4, "action": "adjust", "note": "Heavy tape saturation — phonk dark aesthetic is defined by lo-fi tape degradation", "params": "Drive +6 dB, Mix 55%, HF roll-off 6 kHz"},
+            {"slot": 6, "action": "adjust", "note": "Dark distant reverb — underground phonk uses lo-fi chamber or room reverb", "params": "Decay 1.8 s, Pre-delay 40 ms, HPF 200 Hz, LPF 4 kHz, Mix 20%"}
+          ],
+          "bass": [
+            {"slot": 4, "action": "adjust", "note": "More sub weight — phonk dark requires dominant 808 sub energy", "params": "-1 dB @58 Hz Q=3.0; -1.5 dB @250 Hz Q=1.0; +1.5 dB @800 Hz Q=0.8"}
+          ]
+        }
+      }
+    ],
+    "dnb": [
+      {
+        "id": "bright",
+        "label": "LIQUID",
+        "description": "Airy reverb, bright sidechain pumping — liquid drum and bass clarity",
+        "chain_overlay": {
+          "melody": [
+            {"slot": 7, "action": "adjust", "note": "Air shelf for liquid DnB — bright mix lets melodic elements cut through dense Reese bass", "params": "+3 dB high shelf @10 kHz; Ceiling -7 dBFS"},
+            {"slot": 6, "action": "adjust", "note": "Shorter bright reverb — fast DnB tempo (160-180 BPM) requires shorter reverb tails", "params": "Decay 0.7 s, Pre-delay 12 ms, HPF 600 Hz, LPF 12 kHz, Mix 9%"}
+          ],
+          "pads": [
+            {"slot": 2, "action": "adjust", "note": "Bright wide pad for liquid DnB aesthetic — softer, more melodic sub-genre", "params": "Mid: -4 dB @1.1 kHz Q=0.9; Side: +3 dB @4 kHz shelf"}
+          ]
+        }
+      },
+      {
+        "id": "neutral",
+        "label": "ROLLING",
+        "description": "Genre reference — balanced DnB mix",
+        "chain_overlay": {}
+      },
+      {
+        "id": "dark",
+        "label": "NEUROFUNK",
+        "description": "Heavy distortion, minimal reverb, aggressive compression — neurofunk dark DnB",
+        "chain_overlay": {
+          "melody": [
+            {"slot": 4, "action": "adjust", "note": "Extreme saturation for neurofunk distortion — sub-genre defined by aggressive harmonic saturation", "params": "Drive +6 dB, Mix 55%, HF roll-off 6 kHz"},
+            {"slot": 6, "action": "adjust", "note": "Minimal dark reverb — neurofunk is dry and aggressive, reverb only for depth", "params": "Decay 0.6 s, Pre-delay 10 ms, HPF 500 Hz, LPF 5 kHz, Mix 5%"}
+          ],
+          "bass": [
+            {"slot": 5, "action": "adjust", "note": "More multiband saturation drive — Reese bass in neurofunk uses heavy harmonic distortion", "params": "Drive +6 dB above 150 Hz, Mix 55%, sub band clean"}
+          ]
+        }
+      }
+    ]
+  },
+  "instrument_classes": [
+    {
+      "id": "synth_lead",
+      "label": "Synth Lead",
+      "description": "GM 80-87 (Square, Sawtooth, Calliope, etc.) — harmonically dense electronic tones",
+      "gm_range": [80, 87],
+      "science": "Sawtooth/square waves contain all harmonics up to Nyquist. Adding reverb and saturation to already-dense spectra raises the 300-3000 Hz noise floor (BDRA P4 density principle). Adjustments: reduce reverb wet signal and saturation drive to prevent harmonic mud.",
+      "tracks": {
+        "melody": [
+          {"slot": 4, "action": "adjust", "note": "Synth lead already has full harmonic stack — reduce saturation drive to prevent inter-harmonic distortion products", "params": "Drive +1 dB, Mix 15%, HF roll-off 12 kHz"},
+          {"slot": 6, "action": "adjust", "note": "Harmonic density creates its own spatial impression — reduce reverb wet by ~4% to preserve transient definition", "params": "Decay 1.1 s, Pre-delay 22 ms, HPF 500 Hz, LPF 7 kHz, Mix 8%"}
+        ]
+      }
+    },
+    {
+      "id": "synth_pad",
+      "label": "Synth Pad",
+      "description": "GM 88-95 (New Age, Warm, Polysynth, Choir, etc.) — slow-attack evolving textures",
+      "gm_range": [88, 95],
+      "science": "Pad instruments have BDRA A=3 (attack >100ms). The slow onset means the compressor's attack phase does not interfere with transients. Longer reverb is perceptually coherent because the source's own attack is already slow. Adjustments: extend reverb time and slow compressor attack to match the natural envelope.",
+      "tracks": {
+        "pads": [
+          {"slot": 3, "action": "adjust", "note": "Slow pad attack (A=3 BDRA) — faster compressor attack would pump unnecessarily; slow to 15ms", "params": "3 voices, Rate 0.22 Hz, Depth 9 ms, Mix 45%, Spread 100%"},
+          {"slot": 5, "action": "adjust", "note": "Extend reverb decay to complement slow-attack pad — perceptual continuity across the slow onset", "params": "Decay 4.5 s, Pre-delay 0 ms, HPF 350 Hz, Mix 32%"}
+        ]
+      }
+    },
+    {
+      "id": "string_ensemble",
+      "label": "String Ensemble",
+      "description": "GM 48-51 (String Ensemble 1/2, Synth Strings 1/2) — bowed string textures",
+      "gm_range": [48, 51],
+      "science": "Bowed strings have natural vibrato (±25 cents, 5-7 Hz) and dynamic variation that compressors destroy. Tube saturation adds 2nd-harmonic warmth consistent with the overtone series of real strings. Reverb should use hall (not plate) because bowed string performance spaces are large halls. Adjustments: lower compression ratio, swap tape for tube saturation.",
+      "tracks": {
+        "melody": [
+          {"slot": 3, "action": "adjust", "note": "Reduce compression ratio for string ensemble — natural string dynamics should breathe; 2:1 preserves expressiveness", "params": "Ratio 2:1, Thr -16 dBFS, Attack 15 ms, Release 120 ms, Knee 8 dB, GR 2-4 dB"},
+          {"slot": 4, "action": "swap", "effect": "Saturation (tube)", "params": "Drive +1.5 dB, Mix 18%, 2nd harmonic bias", "note": "Tape HF roll-off cuts string overtones above 8 kHz — tube saturation adds warmth without frequency loss"}
+        ]
+      }
+    },
+    {
+      "id": "choir",
+      "label": "Choir / Voice",
+      "description": "GM 52-54 (Choir Aahs, Voice Oohs, Synth Voice) — vocal formant textures",
+      "gm_range": [52, 54],
+      "science": "Human voice formants (F1: 200-1000 Hz, F2: 500-2500 Hz) are degraded by ping-pong delay reflections which create comb-filtering in the formant region. Hall reverb is perceptually appropriate (choirs perform in large spaces). Single-tap delay is safer than ping-pong for formant-heavy sources. Adjustments: swap ping-pong delay to single-tap, extend hall reverb.",
+      "tracks": {
+        "melody": [
+          {"slot": 5, "action": "swap", "effect": "Delay (send, tempo-sync)", "params": "1/8D = 45000/BPM ms, Feedback 18%, Mix 10%, HPF 400 Hz, LPF 6 kHz, mono", "note": "Swap ping-pong for mono single-tap delay — ping-pong comb-filters vocal formant frequencies (F1-F2 200-2500 Hz)"},
+          {"slot": 6, "action": "adjust", "note": "Extend hall reverb — choir/voice sources are perceptually expected in large reverberant spaces", "params": "Decay 1.8 s, Pre-delay 28 ms, HPF 350 Hz, LPF 8 kHz, Mix 16%"}
+        ]
+      }
+    },
+    {
+      "id": "electric_piano",
+      "label": "Electric Piano",
+      "description": "GM 4-5 (Electric Piano 1/2, FM E.Piano) — hammer-struck electric piano tones",
+      "gm_range": [4, 5],
+      "science": "Rhodes and Wurlitzer electric pianos were historically amplified through tube amplifiers (Fender, Vox), giving them a characteristic 2nd-harmonic warmth. Plate reverb was the studio standard for electric piano (EMT 140 plates widely used in 1970s-80s sessions). Tape HF roll-off removes the natural bell-like overtones above 6 kHz. Adjustments: swap tape for tube saturation, recommend plate reverb character.",
+      "tracks": {
+        "chords": [
+          {"slot": 4, "action": "adjust", "note": "Electric piano historically combined with chorus/phaser — reduce rate for cleaner sound under fast BPM", "params": "Rate 0.28 Hz, Depth 6 ms, Mix 16%, 2 voices, Spread 60%"}
+        ],
+        "melody": [
+          {"slot": 4, "action": "swap", "effect": "Saturation (tube)", "params": "Drive +2 dB, Mix 20%, 2nd harmonic bias", "note": "Electric piano through tube amplifier is historically authentic — tape HF roll-off removes characteristic bell overtones above 8 kHz"},
+          {"slot": 6, "action": "adjust", "note": "Plate reverb character for electric piano — EMT 140 plate was the standard reverb choice in classic recordings", "params": "Decay 1.2 s, Pre-delay 15 ms, HPF 400 Hz, LPF 9 kHz, Mix 14%"}
+        ]
+      }
+    },
+    {
+      "id": "brass",
+      "label": "Brass / Synth Brass",
+      "description": "GM 56-63 (Trumpet, Trombone, Brass Section, Synth Brass) — harmonic-rich bright tones",
+      "gm_range": [56, 63],
+      "science": "Brass instruments contain strong 3rd-through-9th harmonics concentrated in 1-4 kHz. Boosting the air shelf above 10 kHz adds piercing brightness to an already bright source. Brass should use a shorter reverb pre-delay than strings because brass attacks are fast (BDRA A=0-1); longer pre-delays make the attack sound disconnected from the room. Adjustments: reduce air shelf boost, shorten reverb pre-delay.",
+      "tracks": {
+        "melody": [
+          {"slot": 7, "action": "adjust", "note": "Reduce air shelf — brass already has strong 3rd-9th harmonics in 1-4 kHz; adding 10 kHz shelf creates piercing harshness", "params": "+1 dB high shelf @10 kHz; Ceiling -7 dBFS"},
+          {"slot": 6, "action": "adjust", "note": "Shorter reverb pre-delay for fast brass attack (BDRA A=0-1) — pre-delay >25ms disconnects attack from room response", "params": "Decay 1.0 s, Pre-delay 14 ms, HPF 450 Hz, LPF 7 kHz, Mix 9%"}
+        ]
+      }
+    }
+  ]
+}
