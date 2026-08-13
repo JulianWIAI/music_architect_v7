@@ -275,6 +275,63 @@ def validate_selection(branch: str, selection: Dict[str, str]) -> ValidationResu
 
 # ── Data loader ───────────────────────────────────────────────────────────────
 
+def best_selection(branch: str, catalogue: Dict[str, List[dict]]) -> Dict[str, dict]:
+    """
+    Return the {track: instrument_dict} combination that maximises the BDRA
+    validation score for *branch*.
+
+    Algorithm: coordinate descent.
+      1. Seed every track with its first valid instrument.
+      2. For each track, try every valid alternative; keep whichever raises
+         the overall score most.  Repeat until a full pass changes nothing.
+
+    Typically converges to 100/100 in one or two passes because the six
+    branch rules and five psychoacoustic principles form a sparse constraint
+    graph — improving one track rarely conflicts with an already-improved one.
+
+    Returns {} if the catalogue has no valid instruments for any track.
+    """
+    valid: Dict[str, List[dict]] = {
+        track: filter_instruments(branch, track, catalogue.get(track, []))
+        for track in BRANCH_RULES.get(branch, {})
+    }
+
+    # Seed with first valid instrument per track
+    selection: Dict[str, dict] = {
+        track: insts[0] for track, insts in valid.items() if insts
+    }
+    if not selection:
+        return selection
+
+    def _score(sel: Dict[str, dict]) -> int:
+        return validate_selection(branch, {t: i['code'] for t, i in sel.items()}).score
+
+    for _ in range(4):      # 4 passes is always enough; usually converges in ≤ 2
+        improved = False
+        for track, insts in valid.items():
+            if not insts or track not in selection:
+                continue
+            best_inst  = selection[track]
+            best_score = _score(selection)
+            if best_score == 100:
+                break       # already perfect — skip remaining tracks in pass
+            for inst in insts:
+                trial = {**selection, track: inst}
+                s = _score(trial)
+                if s > best_score:
+                    best_score = s
+                    best_inst  = inst
+                    if s == 100:
+                        break
+            if best_inst is not selection[track]:
+                selection[track] = best_inst
+                improved = True
+        if not improved:
+            break
+
+    return selection
+
+
 def load_instruments() -> Dict[str, List[dict]]:
     """Load curated BDRA instrument catalogue from bdra_instruments.json."""
     path = (pathlib.Path(__file__).parent.parent.parent

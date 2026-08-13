@@ -306,14 +306,34 @@ class InstrumentBuilder(tk.Frame):
                 text=f"Branch {branch}  {kb['code']}  {kb['desc']}"
             )
 
+            # Build valid option lists first so we know which priors survive.
+            valid_map: dict = {}
+            for track in self._track_cbs:
+                insts = self._catalogue.get(track, [])
+                valid_map[track] = _br.filter_instruments(branch, track, insts)
+
+            # Only run the optimizer for tracks whose prior selection is no
+            # longer valid (e.g. on first init, or after a branch switch that
+            # invalidates some picks).  Tracks with a still-valid prior are
+            # kept as-is so manual edits survive a kick-branch change.
+            needs_opt = any(
+                self._track_vars[t].get() not in [_fmt(i) for i in v]
+                for t, v in valid_map.items() if v
+            )
+            best = _br.best_selection(branch, self._catalogue) if needs_opt else {}
+
             for track, cb in self._track_cbs.items():
                 prior   = self._track_vars[track].get()
-                insts   = self._catalogue.get(track, [])
-                valid   = _br.filter_instruments(branch, track, insts)
+                valid   = valid_map[track]
                 options = [_fmt(i) for i in valid]
                 cb['values'] = options
                 if options:
-                    cb.set(prior if prior in options else options[0])
+                    if prior in options:
+                        cb.set(prior)                          # keep manual pick
+                    elif track in best:
+                        cb.set(_fmt(best[track]))              # use optimised pick
+                    else:
+                        cb.set(options[0])
                 else:
                     cb.set('')
 
