@@ -45,6 +45,7 @@ from tkinter import ttk, messagebox
 from typing import Callable, Optional
 
 from src.gui.collapsible_section import CollapsibleSection
+from src.gui.tooltips import ToolTip, TOOLTIPS
 
 
 # ── Genre / key constants ─────────────────────────────────────────────────────
@@ -157,6 +158,7 @@ class AdvisorQueryPanel:
             font=S.FN_X,
         )
         genre_cb.pack(side='left', padx=(0, 8))
+        ToolTip(genre_cb, TOOLTIPS['advisor_genre'])
 
         # ── BPM ───────────────────────────────────────────────────────
         tk.Label(
@@ -180,6 +182,7 @@ class AdvisorQueryPanel:
             bd=1,
         )
         bpm_entry.pack(side='left', padx=(0, 8))
+        ToolTip(bpm_entry, TOOLTIPS['advisor_bpm'])
 
         # ── Key root + mode ───────────────────────────────────────────
         tk.Label(
@@ -196,6 +199,7 @@ class AdvisorQueryPanel:
             font=S.FN_X,
         )
         root_cb.pack(side='left', padx=(0, 2))
+        ToolTip(root_cb, TOOLTIPS['advisor_key_root'])
 
         self._mode_var = tk.StringVar(value='major')
         mode_cb = ttk.Combobox(
@@ -207,6 +211,7 @@ class AdvisorQueryPanel:
             font=S.FN_X,
         )
         mode_cb.pack(side='left', padx=(0, 12))
+        ToolTip(mode_cb, TOOLTIPS['advisor_key_mode'])
 
         # ── Submit button ─────────────────────────────────────────────
         btn = tk.Button(
@@ -228,6 +233,7 @@ class AdvisorQueryPanel:
         btn.bind('<Enter>', lambda e: btn.configure(bg=S.BG_BTN_HOV))
         btn.bind('<Leave>', lambda e: btn.configure(bg=S.BG_BTN))
         btn.pack(side='left')
+        ToolTip(btn, TOOLTIPS['advisor_get_recommendations'])
 
         # ── Help hint ─────────────────────────────────────────────────
         tk.Label(

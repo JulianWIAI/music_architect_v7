@@ -184,4 +184,115 @@ TOOLTIPS: dict[str, str] = {
         "Export the full composition data as JSON.\n"
         "Includes all notes, structure, chord progressions and metadata."
     ),
+
+    # ── Production Advisor — Query panel ──────────────────────────────────
+    'advisor_genre': (
+        "Genre to look up.\n"
+        "Sets the palette, effect chain, BPM bucket, gain targets, and\n"
+        "frequency allocation shown in the advisor output."
+    ),
+    'advisor_bpm': (
+        "Tempo of your MIDI file in beats per minute (40–240).\n"
+        "Used to match the correct BPM bucket and delay/reverb time targets."
+    ),
+    'advisor_key_root': "Root note of the key (e.g. C, F#, Bb).",
+    'advisor_key_mode': (
+        "Scale / mode of the key.\n"
+        "Major = bright, energetic  |  Minor = darker, emotional\n"
+        "Shown in the advisor output for reference; does not restrict palettes."
+    ),
+    'advisor_get_recommendations': (
+        "Load full production recommendations for the genre / BPM / key\n"
+        "you entered — without running the composition engine.\n"
+        "Useful for any external MIDI file you already have."
+    ),
+
+    # ── Production Advisor — Instrument Builder ────────────────────────────
+    'advisor_kick': (
+        "Kick type — determines the timbral Branch (A / B / C).\n"
+        "  Branch A  Pure sine / 808  — sub-focused, electronic\n"
+        "  Branch B  Acoustic layered — natural, punchy transient\n"
+        "  Branch C  Sub-boom / taiko — deep, orchestral impact\n"
+        "All track comboboxes are filtered live to show only\n"
+        "instruments that are compatible with the selected branch."
+    ),
+    'advisor_score': (
+        "BDRA compatibility score (0–100).\n"
+        "Measures how well the selected instruments satisfy the five\n"
+        "psychoacoustic principles:\n"
+        "  P1  Sub-bass exclusivity   — only one source below 80 Hz\n"
+        "  P2  Register monotonicity  — roles occupy ascending spectral layers\n"
+        "  P3  Attack contrast        — adjacent voices differ in onset time\n"
+        "  P4  Density headroom       — total texture stays below masking threshold\n"
+        "  P5  Timbral complementarity — kick and bass share a compatible profile\n"
+        "Green ≥ 90  ·  Yellow ≥ 70  ·  Orange ≥ 50  ·  Red < 50"
+    ),
+    'advisor_apply': (
+        "Copy the current instrument selection to the\n"
+        "TRACKS & INSTRUMENTS panel in the Seed Composer.\n"
+        "The next generation will use these exact GM programs."
+    ),
+
+    # ── Production Advisor — FX Variant panel ────────────────────────────
+    'advisor_variant_bright': (
+        "BRIGHT variant — a cleaner, more polished production flavour.\n"
+        "Applies: air shelf +2-4 dB above 8 kHz (Fletcher-Munson equal-\n"
+        "loudness compensation), shorter reverb pre-delays for transient\n"
+        "clarity, and a higher reverb HPF for a brighter room tail."
+    ),
+    'advisor_variant_neutral': (
+        "NEUTRAL variant — the genre reference chain with no modifications.\n"
+        "Use this as the baseline before auditioning bright or dark flavours.\n"
+        "Identical to the raw JSON effect chain for the selected genre."
+    ),
+    'advisor_variant_dark': (
+        "DARK variant — a warmer, more saturated production flavour.\n"
+        "Applies: tape saturation +2-5 dB (adds 2nd/3rd harmonic density),\n"
+        "longer reverb decay tails (Haas-effect depth), and a lower reverb\n"
+        "HPF for a darker, more atmospheric room character."
+    ),
+
+    # ── Production Advisor — Action strip ─────────────────────────────────
+    'advisor_preview': (
+        "Re-compose the beat with the pinned seed and currently selected\n"
+        "instruments, render WAV via FluidSynth, then auto-play.\n"
+        "Falls back to MIDI playback if FluidSynth is unavailable.\n"
+        "The chosen SoundFont (see SOUNDFONT row above) is used for rendering."
+    ),
+    'advisor_save_wav': (
+        "Save the FluidSynth-rendered WAV of this advisor preview.\n"
+        "Enabled only after a successful preview render.\n"
+        "The WAV uses the SoundFont and instruments selected in the advisor."
+    ),
+    'advisor_save_midi': (
+        "Save the full-beat MIDI with program_change events for the\n"
+        "currently selected instruments embedded.\n"
+        "Available immediately after preview — no WAV render required."
+    ),
+    'advisor_save_vocal_midi': (
+        "Save the vocal-ready MIDI scaffold (vocal_mask=True).\n"
+        "Melody is collapsed to a monophonic lead line; the C4–C6 register\n"
+        "is cleared in verse/chorus/hook sections for a vocalist to record over.\n"
+        "Enabled when the Vocal-Ready checkbox is ticked before previewing."
+    ),
+    'advisor_export_pdf': (
+        "Export a 10-section printable A4 production guide (PDF or .txt).\n"
+        "Sections: palette, instruments, BPM targets, gain staging, effect\n"
+        "chains, frequency allocation, parallel compression, M/S mastering.\n"
+        "Falls back to a UTF-8 .txt file if fpdf2 is not installed."
+    ),
+
+    # ── Production Advisor — SoundFont picker ─────────────────────────────
+    'advisor_sf_browse': (
+        "Browse to any .sf2 SoundFont file on your computer.\n"
+        "The selected font is used for all FluidSynth previews\n"
+        "until you click 'Genre auto'.  Your choice is saved between sessions.\n"
+        "Try commercial fonts (e.g. SGM-v2.01, Vienna Lite) to compare timbres."
+    ),
+    'advisor_sf_auto': (
+        "Revert to automatic SoundFont routing by genre:\n"
+        "  Fluid R3 GM      → trap · hip-hop · techno · dnb · phonk\n"
+        "  GeneralUser GS   → pop · j-pop · edm · house\n"
+        "  Arachno SF v1.0  → cinematic · classical"
+    ),
 }

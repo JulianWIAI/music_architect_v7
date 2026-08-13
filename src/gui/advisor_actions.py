@@ -87,6 +87,7 @@ from tkinter import filedialog
 from typing import Callable, Optional
 
 import tkinter as tk
+from src.gui.tooltips import ToolTip, TOOLTIPS
 
 
 class AdvisorActionsBar(tk.Frame):
@@ -201,24 +202,28 @@ class AdvisorActionsBar(tk.Frame):
             "▶  PREVIEW WITH INSTRUMENTS", S.CYAN, self._on_preview
         )
         self._btn_preview.pack(side='left', padx=(0, 4))
+        ToolTip(self._btn_preview, TOOLTIPS['advisor_preview'])
 
         # ⬇ SAVE WAV — enabled only after a successful FluidSynth render
         self._btn_wav = _btn(
             "⬇  SAVE WAV", S.ORANGE, self._on_save_wav, disabled=True
         )
         self._btn_wav.pack(side='left', padx=(0, 4))
+        ToolTip(self._btn_wav, TOOLTIPS['advisor_save_wav'])
 
         # ⬇ STANDARD MIDI — enabled as soon as the MIDI file is written
         self._btn_midi = _btn(
             "⬇  STANDARD MIDI", S.PURPLE, self._on_save_midi, disabled=True
         )
         self._btn_midi.pack(side='left', padx=(0, 4))
+        ToolTip(self._btn_midi, TOOLTIPS['advisor_save_midi'])
 
         # ⬇ VOCAL MIDI — enabled when vocal-ready was included in the preview
         self._btn_vocal = _btn(
             "⬇  VOCAL MIDI", S.PINK, self._on_save_vocal_midi, disabled=True
         )
         self._btn_vocal.pack(side='left', padx=(0, 4))
+        ToolTip(self._btn_vocal, TOOLTIPS['advisor_save_vocal_midi'])
 
         # ⬇ EXPORT PDF — present only when the app injects save_pdf_fn.
         # Always enabled: the PDF is built from advisor state, not a render.
@@ -227,6 +232,7 @@ class AdvisorActionsBar(tk.Frame):
                 "⬇  EXPORT PDF", S.YELLOW, self._save_pdf
             )
             self._btn_pdf.pack(side='left')
+            ToolTip(self._btn_pdf, TOOLTIPS['advisor_export_pdf'])
 
     # ── Public API ────────────────────────────────────────────────────────────
 

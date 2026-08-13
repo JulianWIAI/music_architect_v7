@@ -47,6 +47,8 @@ import tkinter as tk
 from tkinter import filedialog
 from typing import Callable, Optional
 
+from src.gui.tooltips import ToolTip, TOOLTIPS
+
 # Persisted user preference for custom SoundFont path.
 _PREF_FILE = (
     pathlib.Path(__file__).parent.parent.parent
@@ -142,6 +144,7 @@ class SoundFontPickerWidget:
         btn_browse.bind("<Enter>", lambda e: btn_browse.configure(bg=S.BG_BTN_HOV))
         btn_browse.bind("<Leave>", lambda e: btn_browse.configure(bg=S.BG_BTN))
         btn_browse.pack(side="left", padx=(0, 4))
+        ToolTip(btn_browse, TOOLTIPS['advisor_sf_browse'])
 
         # Genre auto button — reverts to SoundFontLibrary routing
         btn_auto = tk.Button(
@@ -161,6 +164,7 @@ class SoundFontPickerWidget:
         btn_auto.bind("<Enter>", lambda e: btn_auto.configure(bg=S.BG_BTN_HOV))
         btn_auto.bind("<Leave>", lambda e: btn_auto.configure(bg=S.BG_BTN))
         btn_auto.pack(side="left", padx=(0, 4))
+        ToolTip(btn_auto, TOOLTIPS['advisor_sf_auto'])
 
     # ------------------------------------------------------------------
     # Callbacks

@@ -44,6 +44,7 @@ from typing import Callable, Dict, Optional
 
 from src.composition.fx_chain_selector import FxChainSelector
 from src.gui.collapsible_section import CollapsibleSection
+from src.gui.tooltips import ToolTip, TOOLTIPS
 
 
 # ── Timbral color mapping for button highlights ───────────────────────────────
@@ -217,6 +218,7 @@ class FxVariantPanel:
             btn.bind("<Enter>", lambda e, b=btn: b.configure(bg=S.BG_BTN_HOV))
             btn.bind("<Leave>", lambda e, b=btn: b.configure(bg=S.BG_BTN))
             btn.pack(side="left", padx=4)
+            ToolTip(btn, TOOLTIPS.get(f'advisor_variant_{vid}', ''))
             self._btns[vid] = btn
 
         # ── Active variant description ─────────────────────────────────────

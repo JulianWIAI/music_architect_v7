@@ -49,7 +49,7 @@ from typing import Callable, Dict, List, Optional
 
 from src.composition import bdra_rules as _br
 from src.composition.gm_descriptions import get_description as _gm_desc
-from src.gui.tooltips import ToolTip
+from src.gui.tooltips import ToolTip, TOOLTIPS
 
 
 # ── Track configuration ───────────────────────────────────────────────────────
@@ -172,6 +172,7 @@ class InstrumentBuilder(tk.Frame):
         )
         kick_cb.pack(side='left', padx=4)
         kick_cb.bind('<<ComboboxSelected>>', lambda _e: self._on_kick_change())
+        ToolTip(kick_cb, TOOLTIPS['advisor_kick'])
 
         # ── Track rows ────────────────────────────────────────────────────
         for track_key, display, color_key in _TRACKS:
@@ -252,6 +253,7 @@ class InstrumentBuilder(tk.Frame):
             score_row, text='—', font=S.FN_S, fg=S.GREEN, bg=S.BG2,
         )
         self._score_lbl.pack(side='left', padx=4)
+        ToolTip(self._score_lbl, TOOLTIPS['advisor_score'])
 
         # First violation shown inline (space-constrained; full list in advisor text)
         self._viol_lbl = tk.Label(
@@ -264,13 +266,15 @@ class InstrumentBuilder(tk.Frame):
         btn_row = tk.Frame(self._content, bg=S.BG2)
         btn_row.pack(fill='x', pady=(2, 6))
 
-        tk.Button(
+        apply_btn = tk.Button(
             btn_row, text='APPLY TO TRACKS',
             font=S.FN_X, fg=S.BG, bg=S.GREEN,
             activebackground=S.CYAN, activeforeground=S.BG,
             bd=0, padx=8, pady=2, cursor='hand2',
             command=self._apply,
-        ).pack(side='right', padx=4)
+        )
+        apply_btn.pack(side='right', padx=4)
+        ToolTip(apply_btn, TOOLTIPS['advisor_apply'])
 
     # ─────────────────────────────────────────────────────────────────────
     #  Event handlers
