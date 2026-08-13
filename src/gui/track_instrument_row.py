@@ -103,10 +103,8 @@ class TrackInstrumentRow:
         self.volume:     Optional[tk.Scale]    = None
         self.instrument: Optional[ttk.Combobox] = None
 
-        # Build all widgets into a new row frame
-        row = tk.Frame(parent, bg=S.BG2)
-        row.pack(fill='x', pady=2)
-        self._build(row, default_volume, default_program)
+        # Build all widgets — two sub-rows inside a container frame
+        self._build(parent, default_volume, default_program)
 
     # ------------------------------------------------------------------
     # Widget construction
@@ -114,15 +112,24 @@ class TrackInstrumentRow:
 
     def _build(
         self,
-        row: tk.Frame,
+        parent: tk.Frame,
         default_volume: int,
         default_program: Optional[int],
     ) -> None:
-        """Create and pack all child widgets into *row*."""
+        """
+        Build two sub-rows inside a container frame:
+          Row 1 — checkbox · vol slider · combobox · Rand button
+          Row 2 — sound-character description (indented, full panel width)
+        """
+        container = tk.Frame(parent, bg=S.BG2)
+        container.pack(fill='x', pady=2)
 
-        # ── Enabled checkbox ─────────────────────────────────────────
+        row1 = tk.Frame(container, bg=S.BG2)
+        row1.pack(fill='x')
+
+        # ── Enabled checkbox ──────────────────────────────────────────
         en_cb = tk.Checkbutton(
-            row,
+            row1,
             text=self._track.upper(),
             variable=self.enabled,
             font=S.FN_S,
@@ -138,11 +145,11 @@ class TrackInstrumentRow:
 
         # ── Volume slider ─────────────────────────────────────────────
         tk.Label(
-            row, text="Vol:", font=S.FN_X, fg=S.TXT_DIM, bg=S.BG2
+            row1, text="Vol:", font=S.FN_X, fg=S.TXT_DIM, bg=S.BG2
         ).pack(side='left')
 
         self.volume = tk.Scale(
-            row,
+            row1,
             from_=0, to=100,
             orient='horizontal',
             font=S.FN_X,
@@ -159,41 +166,39 @@ class TrackInstrumentRow:
 
         # ── Instrument combobox (skipped for percussion) ──────────────
         if self._mode == 'percussion':
-            # Percussion runs on the drum channel — no GM program selector.
-            # Add a spacer so the row aligns with the other rows.
             tk.Label(
-                row,
+                row1,
                 text="(drum channel – no program)",
                 font=S.FN_X,
                 fg=S.TXT_DIM,
                 bg=S.BG2,
             ).pack(side='left', padx=4)
-            # instrument stays None
-            return
+            return   # instrument stays None; no description row needed
 
         # Build the combobox values list based on mode
         combobox_values = self._get_combobox_values()
 
         self.instrument = ttk.Combobox(
-            row, values=combobox_values, width=22, font=S.FN_X
+            row1, values=combobox_values, width=22, font=S.FN_X
         )
-
-        # Set the initial selection
         initial = self._resolve_default_program(default_program)
         self.instrument.set(initial)
         self.instrument.pack(side='left', padx=4)
         self._attach_tip(self.instrument, 'track_instrument')
 
         # ── Randomise button ──────────────────────────────────────────
-        rand_btn = self._make_button(row, "Rand", self.randomize, self._color)
+        rand_btn = self._make_button(row1, "Rand", self.randomize, self._color)
         rand_btn.pack(side='left', padx=2)
         self._attach_tip(rand_btn, 'btn_rand_instrument')
 
-        # ── Sound-character description label ─────────────────────────
-        # Shows a live one-liner (colour + character) for the selected
-        # GM instrument so newcomers can understand the timbral choice.
-        self._desc = InstrumentDescriptionLabel(row, styles=S, max_chars=120)
-        self._desc.pack(side='left', padx=(6, 4), fill='x', expand=True)
+        # ── Description row (below row 1) ─────────────────────────────
+        # Indent spacer aligns the text under the instrument area rather
+        # than starting flush with the track checkbox.
+        row2 = tk.Frame(container, bg=S.BG2)
+        row2.pack(fill='x')
+        tk.Label(row2, text="", bg=S.BG2, width=10, font=S.FN_X).pack(side='left')
+        self._desc = InstrumentDescriptionLabel(row2, styles=S, max_chars=120)
+        self._desc.pack(side='left', fill='x', expand=True, padx=(2, 4))
         self._desc.attach(self.instrument)
 
     # ------------------------------------------------------------------
