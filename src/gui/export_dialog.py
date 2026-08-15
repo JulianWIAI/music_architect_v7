@@ -41,6 +41,7 @@ Usage (from app.py)
 """
 
 import os
+import tempfile
 import threading
 import tkinter as tk
 from pathlib import Path
@@ -59,6 +60,13 @@ from src.export.audio_converter import (
     ffmpeg_available,
     read_wav_duration,
 )
+
+try:
+    from src.dsp.mastering_chain import MasteringChain
+    from src.gui.mastering_panel import MasteringPanel
+    _MASTERING_AVAILABLE = True
+except Exception:
+    _MASTERING_AVAILABLE = False
 
 
 # ── Constants for the settings dropdowns ─────────────────────────────────────
@@ -92,6 +100,7 @@ class ExportDialog(tk.Toplevel):
         composition: Optional[dict] = None,
         gen_number:  int            = 1,
         log_fn                      = None,
+        variant_id:  str            = 'neutral',
     ):
         super().__init__(parent)
 
@@ -100,6 +109,8 @@ class ExportDialog(tk.Toplevel):
         self._composition = composition
         self._gen_number  = gen_number
         self._log         = log_fn or (lambda msg: None)
+        self._variant_id  = variant_id
+        self._mastering_panel: Optional['MasteringPanel'] = None
 
         # Duration from the WAV file header — used for size estimation
         self._duration_sec: float = read_wav_duration(source_wav) if source_wav else 0.0
@@ -126,12 +137,12 @@ class ExportDialog(tk.Toplevel):
         self.grab_set()           # modal: captures all events
         self.focus_set()
 
-        # Center on the parent window
+        # Center on the parent window — extra height for the mastering panel
         self.update_idletasks()
-        self.geometry("680x620")
+        self.geometry("680x760")
         x = parent.winfo_rootx() + max(0, (parent.winfo_width()  - 680) // 2)
-        y = parent.winfo_rooty() + max(0, (parent.winfo_height() - 620) // 2)
-        self.geometry(f"680x620+{x}+{y}")
+        y = parent.winfo_rooty() + max(0, (parent.winfo_height() - 760) // 2)
+        self.geometry(f"680x760+{x}+{y}")
 
         # Close via X button = same as Cancel
         self.protocol("WM_DELETE_WINDOW", self._on_cancel)
@@ -208,8 +219,19 @@ class ExportDialog(tk.Toplevel):
         tk.Frame(body, bg=S.BG3, width=1).pack(side='left', fill='y', padx=(6, 6))
         self._build_settings_panel(body)
 
+        # ── Mastering chain panel ─────────────────────────────────────────────
+        tk.Frame(self, bg=S.BG3, height=1).pack(fill='x', padx=10, pady=(6, 0))
+        if _MASTERING_AVAILABLE:
+            self._mastering_panel = MasteringPanel(self, styles=S)
+            self._mastering_panel.pack(fill='x', padx=10)
+        else:
+            tk.Label(
+                self, text="Mastering unavailable (numpy/scipy missing)",
+                font=S.FN_X, fg=S.TXT_DIM, bg=S.BG2,
+            ).pack(anchor='w', padx=10, pady=4)
+
         # ── Progress bar (hidden until export starts) ─────────────────────────
-        tk.Frame(self, bg=S.BG3, height=1).pack(fill='x', padx=10)
+        tk.Frame(self, bg=S.BG3, height=1).pack(fill='x', padx=10, pady=(4, 0))
         self._prog_frame = tk.Frame(self, bg=S.BG2)
         self._prog_frame.pack(fill='x', padx=10, pady=(4, 0))
         self._prog_var = tk.DoubleVar()
@@ -635,20 +657,78 @@ class ExportDialog(tk.Toplevel):
         self._export_btn.config(state='disabled', text="Exporting…")
         self.update_idletasks()
 
+        # Read mastering settings on the main thread before handing off
+        mastering_enabled   = False
+        mastering_target_id = 'streaming'
+        if _MASTERING_AVAILABLE and self._mastering_panel is not None:
+            ms_settings         = self._mastering_panel.get_settings()
+            mastering_enabled   = ms_settings.get('enabled', False)
+            mastering_target_id = ms_settings.get('target_id', 'streaming')
+
         # Run conversion off the main thread to keep the UI alive
         thread = threading.Thread(
             target=self._run_export,
-            args=(preset, dst),
+            args=(preset, dst, mastering_enabled, mastering_target_id),
             daemon=True,
         )
         thread.start()
 
-    def _run_export(self, preset: ExportPreset, dst: str) -> None:
-        """Worker thread: call the converter and post the result to the main thread."""
+    def _run_export(self, preset: ExportPreset, dst: str,
+                    mastering_enabled: bool = False,
+                    mastering_target_id: str = 'streaming') -> None:
+        """
+        Worker thread: optionally apply mastering chain, then convert and write.
+
+        When mastering is enabled the full DSP chain (EQ → compression →
+        parallel compression → M/S → LUFS normalisation → limiter) is applied
+        to a temp WAV before the format converter runs.  The temp file is
+        cleaned up whether the conversion succeeds or fails.
+        """
         def progress_cb(fraction: float):
             self._prog_var.set(fraction * 100)
 
-        ok, message = convert(self._source_wav, dst, preset, on_progress=progress_cb)
+        src = self._source_wav
+        tmp_mastered = None
+
+        try:
+            if mastering_enabled and _MASTERING_AVAILABLE:
+                self.after(0, lambda: self._prog_lbl.config(
+                    text="Applying mastering chain…"
+                ))
+                genre = 'pop'
+                if self._composition:
+                    genre = self._composition.get('config', {}).get('genre', 'pop')
+
+                # Write mastered audio to a temp file; ffmpeg converts from there
+                fd, tmp_mastered = tempfile.mkstemp(suffix='_mastered.wav')
+                import os as _os; _os.close(fd)
+
+                chain = MasteringChain()
+                ok_m, msg_m = chain.process(
+                    wav_in     = src,
+                    wav_out    = tmp_mastered,
+                    genre      = genre,
+                    variant_id = self._variant_id,
+                    target_id  = mastering_target_id,
+                )
+                if ok_m:
+                    self._log(f"  Mastering: {msg_m}")
+                    src = tmp_mastered   # feed the mastered WAV to ffmpeg
+                else:
+                    self._log(f"  Mastering skipped ({msg_m}) — exporting dry signal")
+
+            ok, message = convert(src, dst, preset, on_progress=progress_cb)
+
+        finally:
+            # Always clean up the intermediate mastered temp file
+            if tmp_mastered and tmp_mastered != src:
+                try:
+                    import os as _os
+                    if _os.path.exists(tmp_mastered):
+                        _os.unlink(tmp_mastered)
+                except Exception:
+                    pass
+
         # Schedule result handling on the main (Tkinter) thread
         self.after(0, lambda: self._on_export_done(ok, message, dst))
 

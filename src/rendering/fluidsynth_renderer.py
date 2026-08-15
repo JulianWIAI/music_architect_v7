@@ -24,6 +24,12 @@ from typing import Optional
 from src.rendering.soundfont_library import SoundFontLibrary
 from src.rendering.fluidsynth_variant_params import build_fluidsynth_args
 
+try:
+    from src.dsp.mastering_chain import MasteringChain
+    _MASTERING_AVAILABLE = True
+except Exception:
+    _MASTERING_AVAILABLE = False
+
 
 class FluidSynthRenderer:
     """
@@ -188,7 +194,24 @@ class FluidSynthRenderer:
                     if self._current_proc is proc:
                         self._current_proc = None
 
-            return proc.returncode == 0 and os.path.exists(wav_path)
+            wav_ok = proc.returncode == 0 and os.path.exists(wav_path)
+            # Apply mastering chain in-place on the preview WAV so that
+            # both listening and export reflect the full production sound.
+            if wav_ok and _MASTERING_AVAILABLE:
+                try:
+                    chain = MasteringChain()
+                    ok_m, msg_m = chain.process(
+                        wav_in     = wav_path,
+                        wav_out    = wav_path,   # in-place via internal tempfile
+                        genre      = self._genre or genre,
+                        variant_id = self._variant,
+                        target_id  = 'streaming',
+                    )
+                    if not ok_m:
+                        print(f'[FluidSynthRenderer] Mastering skipped: {msg_m}')
+                except Exception as me:
+                    print(f'[FluidSynthRenderer] Mastering error (preview unaffected): {me}')
+            return wav_ok
         except Exception as e:
             print(f'FluidSynth render error: {e}')
             return False

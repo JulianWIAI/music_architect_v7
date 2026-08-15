@@ -2152,6 +2152,7 @@ class SeedComposerApp:
             composition = self.current_composition,
             gen_number  = self.generation_counter,
             log_fn      = self._log,
+            variant_id  = self._current_variant_id,
         )
 
     def _open_export_dialog_for_wav(self, wav_path: str) -> None:
@@ -2169,6 +2170,7 @@ class SeedComposerApp:
             composition = self.current_composition,
             gen_number  = self.generation_counter,
             log_fn      = self._log,
+            variant_id  = self._current_variant_id,
         )
 
     def _export_midi(self):
