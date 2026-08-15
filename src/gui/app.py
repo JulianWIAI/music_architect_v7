@@ -126,6 +126,16 @@ except Exception:
     _CORPUS_MATCHER = None          # type: ignore
     CORPUS_MATCH_AVAILABLE = False
 
+try:
+    from src.gui.track_metadata_panel import TrackMetadataPanel
+    from src.gui.waveform_widget import WaveformWidget
+    from src.audio.audio_metadata import metadata_from_composition
+    PLAYER_WIDGETS_AVAILABLE = True
+except ImportError:
+    TrackMetadataPanel = None       # type: ignore
+    WaveformWidget     = None       # type: ignore
+    PLAYER_WIDGETS_AVAILABLE = False
+
 
 class SeedComposerApp:
     def __init__(self, root: tk.Tk):
@@ -157,6 +167,9 @@ class SeedComposerApp:
         self._lyrics_json: dict = {}        # filled-out lyric scaffold from AI
         self._lyric_file_label: tk.Label   # declared; created in _build_utau_section
         self._external_midi_path: str | None = None
+        # Player UI widgets — created in _build_output_panel; None until then
+        self._metadata_panel: Optional['TrackMetadataPanel'] = None
+        self._waveform_widget: Optional['WaveformWidget']    = None
         self._external_midi_notes: list | None = None
         self._external_midi_bpm: int = 120
         self._cipher = SemanticCipher() if PROMPT_DECODER_AVAILABLE else None
@@ -776,6 +789,12 @@ class SeedComposerApp:
         out_tab = tk.Frame(self._out_nb, bg=S.BG2)
         self._out_nb.add(out_tab, text=' OUTPUT ')
 
+        # ── Track metadata panel (title / artist / genre / duration / bitrate …) ──
+        if PLAYER_WIDGETS_AVAILABLE:
+            self._metadata_panel = TrackMetadataPanel(out_tab, styles=S)
+            self._metadata_panel.pack(fill='x', padx=4, pady=(4, 0))
+            tk.Frame(out_tab, bg=S.BG3, height=1).pack(fill='x', padx=4, pady=(2, 0))
+
         self.info_text = tk.Text(out_tab, font=S.FN_S, bg=S.BG, fg=S.TXT,
                                   insertbackground=S.CYAN, height=18, wrap='word',
                                   state='disabled', bd=0, highlightthickness=1,
@@ -795,6 +814,16 @@ class SeedComposerApp:
         adv_tab = tk.Frame(self._out_nb, bg=S.BG2)
         self._out_nb.add(adv_tab, text=' ADVISOR ')
         self._build_advisor_tab(adv_tab)
+
+        # ── Waveform widget — spans the full right-panel width below the tabs ──
+        if PLAYER_WIDGETS_AVAILABLE:
+            self._waveform_widget = WaveformWidget(
+                parent,
+                styles   = S,
+                on_seek  = self._on_waveform_seek,
+                height   = 72,
+            )
+            self._waveform_widget.pack(fill='x', padx=4, pady=(2, 0))
 
         bf = tk.Frame(parent, bg=S.BG2); bf.pack(fill='x', padx=6, pady=4)
         btn_play = self._cbtn(bf, "PLAY  Full Beat", self._play_preview, S.GREEN, wide=True)
@@ -1869,6 +1898,11 @@ class SeedComposerApp:
         self._info_clear()
         self._info_add("GENERATING NEW COMPOSITION...\n", 'header')
         self.progress_var.set(0)
+        # Clear the player UI so it doesn't show stale data from the previous song
+        if self._waveform_widget is not None:
+            self._waveform_widget.reset()
+        if self._metadata_panel is not None:
+            self._metadata_panel.update(None)
 
         config = self._build_config()
         gen_id = self.generation_counter
@@ -2033,14 +2067,41 @@ class SeedComposerApp:
             return
         # Prefer WAV if already rendered (better quality), otherwise play MIDI directly
         if self.current_wav_path and os.path.exists(self.current_wav_path):
-            success = self.player.play_wav(self.current_wav_path)
+            success = self.player.play_wav(self.current_wav_path, start_sec=0.0)
         else:
             success = self.player.play_midi(self.current_midi_path)
         if success:
             self._set_status("PLAYING", S.GREEN)
+            # Reset waveform playhead to the beginning
+            if self._waveform_widget is not None:
+                self._waveform_widget.update_playhead(0.0)
         else:
             msg = "Install pygame for playback:\npip install pygame" if not PYGAME_AVAILABLE else "Playback failed"
             self._log(msg)
+
+    def _on_waveform_seek(self, fraction: float) -> None:
+        """
+        Called when the user clicks or drags on the waveform canvas.
+
+        If audio is currently playing, seeks to the new position.
+        If audio is loaded but stopped, starts playback from the clicked position
+        so the user can explore the song without pressing PLAY first.
+        """
+        if self._waveform_widget is None:
+            return
+        dur = self._waveform_widget._duration
+        if dur <= 0:
+            return
+        target_sec = fraction * dur
+
+        if self.player.is_busy():
+            # Already playing — reposition without restarting
+            self.player.seek(target_sec)
+        elif self.current_wav_path and os.path.exists(self.current_wav_path):
+            # Not playing — start from the clicked position
+            success = self.player.play_wav(self.current_wav_path, start_sec=target_sec)
+            if success:
+                self._set_status("PLAYING", S.GREEN)
 
     def _play_vocal_ready(self):
         if not self.vocal_ready_midi_path and not self.vocal_ready_wav_path:
@@ -2132,6 +2193,16 @@ class SeedComposerApp:
                 self._handle_msg(msg)
         except queue.Empty:
             pass
+
+        # Advance the waveform playhead while audio is playing
+        if (PLAYER_WIDGETS_AVAILABLE
+                and self._waveform_widget is not None
+                and self.player.is_busy()):
+            dur = self._waveform_widget._duration
+            if dur > 0:
+                current_sec = self.player.get_current_sec()
+                self._waveform_widget.update_playhead(current_sec / dur)
+
         self.root.after(50, self._poll_queue)
 
     def _handle_msg(self, msg):
@@ -2169,6 +2240,15 @@ class SeedComposerApp:
             self.progress_var.set(100)
             self.progress_label.configure(text="Done!")
             self._display_composition(comp)
+            # ── Update metadata panel and waveform ────────────────────────────
+            if PLAYER_WIDGETS_AVAILABLE:
+                if self._metadata_panel is not None:
+                    meta = metadata_from_composition(
+                        comp, wav, self.generation_counter,
+                    )
+                    self._metadata_panel.update(meta)
+                if self._waveform_widget is not None and wav and os.path.exists(wav):
+                    self._waveform_widget.load_wav(wav)
             # Auto-select the timbral variant deterministically from the seed
             # so each composition gets a consistent default flavor.
             if FX_VARIANT_AVAILABLE and FxChainSelector is not None:
