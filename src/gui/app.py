@@ -112,6 +112,20 @@ except ImportError:
 from src.gui.instrument_description_label import InstrumentDescriptionLabel
 from src.composition.gm_descriptions import get_drum_description
 
+try:
+    from src.gui.spectral_chart import build_spectral_chart
+    SPECTRAL_CHART_AVAILABLE = True
+except ImportError:
+    SPECTRAL_CHART_AVAILABLE = False
+
+try:
+    from src.composition.corpus_matcher import CorpusMatcher
+    _CORPUS_MATCHER = CorpusMatcher()
+    CORPUS_MATCH_AVAILABLE = True
+except Exception:
+    _CORPUS_MATCHER = None          # type: ignore
+    CORPUS_MATCH_AVAILABLE = False
+
 
 class SeedComposerApp:
     def __init__(self, root: tk.Tk):
@@ -951,16 +965,20 @@ class SeedComposerApp:
         if ADVISOR_ACTIONS_AVAILABLE:
             self._advisor_actions = AdvisorActionsBar(
                 parent,
-                styles          = S,
-                get_engine_fn   = lambda: self.engine,
-                fluid_renderer  = _FLUID_RENDERER,
-                player          = self.player,
-                build_config_fn = self._build_config,
-                want_vocal_fn   = lambda: self.gen_vocal_ready.get(),
-                log_fn          = self._log,
-                status_fn       = self._set_status,
-                app_dir         = APP_DIR,
-                save_pdf_fn     = self._export_advisor_pdf,
+                styles               = S,
+                get_engine_fn        = lambda: self.engine,
+                fluid_renderer       = _FLUID_RENDERER,
+                player               = self.player,
+                build_config_fn      = self._build_config,
+                want_vocal_fn        = lambda: self.gen_vocal_ready.get(),
+                log_fn               = self._log,
+                status_fn            = self._set_status,
+                app_dir              = APP_DIR,
+                save_pdf_fn          = self._export_advisor_pdf,
+                get_muted_tracks_fn  = (
+                    self._instrument_builder.get_muted_tracks
+                    if self._instrument_builder is not None else None
+                ),
             )
             self._advisor_actions.pack(fill='x', padx=4)
         else:
@@ -1267,6 +1285,10 @@ class SeedComposerApp:
         bpm   = c['bpm']
         key   = c['key']
 
+        # Keep FluidSynth's genre-FX profile in sync with the advisor genre.
+        if _FLUID_RENDERER is not None:
+            _FLUID_RENDERER.set_genre(genre)
+
         base        = pathlib.Path(__file__).parent.parent.parent / 'data' / 'production_guide' / 'json'
         shared_path = base / 'shared.json'
         genre_path  = base / f'{genre}.json'
@@ -1496,6 +1518,67 @@ class SeedComposerApp:
                 if 'plr_db' in d:
                     A(f"    {'PLR':<12}", 'lbl'); A(f"{d['plr_db']} dB\n", 'value')
 
+        # ── Spectral Allocation Map (Feature 2) ──────────────────────────────
+        if SPECTRAL_CHART_AVAILABLE:
+            freq = gdata.get('frequency_allocation', {})
+            sf   = gdata.get('stereo_field', {})
+            if freq:
+                for text, tag in build_spectral_chart(freq, sf):
+                    A(text, tag)
+
+        # ── Corpus-Match Score (Feature 6) ───────────────────────────────────
+        if CORPUS_MATCH_AVAILABLE and _CORPUS_MATCHER is not None:
+            # Extract chord qualities used in the composition if available.
+            chord_qualities: list = []
+            try:
+                chord_qualities = list(comp.get('chord_qualities_used', []))
+            except Exception:
+                pass
+            if not chord_qualities:
+                # Fallback: read from config chord_quality field (single value).
+                cq = c.get('chord_quality', '')
+                if cq:
+                    chord_qualities = [cq]
+
+            cm = _CORPUS_MATCHER.match(
+                genre=genre,
+                bpm=bpm,
+                key=key,
+                chord_qualities=chord_qualities,
+            )
+            score      = cm['score']
+            bpm_m      = cm['bpm_match']
+            scale_m    = cm['scale_match']
+            chord_m    = cm['chord_match']
+            n_seeds    = cm['seed_count']
+            bpm_lo, bpm_hi = cm['bpm_range']
+
+            # Colour the overall score: green ≥80, yellow ≥60, red <60.
+            score_tag = 'ok' if score >= 80 else 'warn'
+
+            A("\n  CORPUS MATCH\n", 'section')
+            A(f"  {'OVERALL':<14}", 'lbl')
+            A(f"{score}%", score_tag)
+            seeds_note = f"  ({n_seeds} seeds)" if n_seeds else "  (parametric model)"
+            A(f"{seeds_note}\n", 'dim')
+            A(f"  {'BPM FIT':<14}", 'lbl')
+            A(f"{bpm_m}%", 'value')
+            A(f"  typical {bpm_lo}–{bpm_hi} BPM\n", 'dim')
+            A(f"  {'SCALE FIT':<14}", 'lbl')
+            A(f"{scale_m}%\n", 'value')
+            A(f"  {'CHORD FIT':<14}", 'lbl')
+            A(f"{chord_m}%\n", 'value')
+
+            # Motivating interpretation line for the student.
+            if score >= 90:
+                A("  This composition is a strong corpus representative.\n", 'ok')
+            elif score >= 75:
+                A("  Good genre alignment — minor parameter adjustments would raise fit.\n", 'dim')
+            elif score >= 55:
+                A("  Moderate fit — consider BPM or scale adjustments to better match the genre.\n", 'warn')
+            else:
+                A("  Low corpus match — consider switching genre or adjusting BPM/key.\n", 'warn')
+
         # ── BPM Time Values ──
         A("\n  BPM TIME VALUES\n", 'section')
         q = 60000 / bpm
@@ -1575,6 +1658,8 @@ class SeedComposerApp:
             self.chord_quality.set(valid_qualities[0])
         if hasattr(self, '_palette_cb'):
             self._load_palettes_for(genre)
+        if _FLUID_RENDERER is not None:
+            _FLUID_RENDERER.set_genre(genre)
         self._log(f"Genre -> {genre.upper()}")
 
     def _random_seed(self):

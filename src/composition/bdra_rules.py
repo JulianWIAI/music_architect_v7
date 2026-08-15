@@ -168,20 +168,71 @@ def filter_instruments(branch: str, track: str, instruments: List[dict]) -> List
 
 # ── Music theory validator ────────────────────────────────────────────────────
 
+# ── Principle metadata — used by the pedagogical breakdown panel ──────────────
+PRINCIPLE_INFO: Dict[str, Dict[str, str]] = {
+    'P1': {
+        'name':  'Sub-bass exclusivity',
+        'law':   'Critical-band masking (Bark 0-2, <80 Hz)',
+        'pass':  'One source occupies the sub-bass critical band — no incoherent summing.',
+        'fail':  'Two or more instruments share D0 R0: fundamentals below 80 Hz sum incoherently, '
+                 'producing comb-filtering the ear cannot separate. Keep one sub-bass source only.',
+    },
+    'P2': {
+        'name':  'Register monotonicity',
+        'law':   'Spectral layering / upward masking model',
+        'pass':  'Registers ascend correctly: bass ≤ chords ≤ melody ≤ arp.',
+        'fail':  'A lower role occupies a higher register than the role above it. '
+                 'The upper layer masks the lower by upward spread of excitation on the basilar membrane. '
+                 'Reorder so each successive role sits higher in the spectrum.',
+    },
+    'P3': {
+        'name':  'Attack contrast',
+        'law':   'Transient crowding / onset masking (≥10 dB at shared onset)',
+        'pass':  'Voices sharing a register have distinct attack envelopes — no onset collision.',
+        'fail':  'Two voices in the same register have identical attack times. '
+                 'Their transients sum at the same moment, raising the masking threshold ≥10 dB. '
+                 'Choose instruments with different A values (e.g. pluck A=0 paired with pad A=3).',
+    },
+    'P4': {
+        'name':  'Density budget',
+        'law':   'ITU-R BS.1770 loudness / spectral mud threshold (300-3000 Hz)',
+        'pass':  'Total voice density Σ D is within the branch budget — no mud risk.',
+        'fail':  'Total simultaneous voice count exceeds the branch density budget. '
+                 'Each D-unit over budget raises the noise floor in the 300-3000 Hz band by ≈3 dB, '
+                 'smearing transient definition. Reduce D on pads or chords.',
+    },
+    'P5': {
+        'name':  'Brightness contrast',
+        'law':   'Fletcher-Munson equal-loudness / lead voice cut-through',
+        'pass':  'Melody is perceptually brighter than bass by ≥2 B steps — natural cut-through.',
+        'fail':  'Melody brightness B is not greater than bass B. '
+                 'The lead voice sits in the same or darker spectral region as the root, '
+                 'requiring corrective HF shelving EQ to separate them. '
+                 'Choose a brighter melody instrument (B ≥ bass B + 2).',
+    },
+}
+
+
 class ValidationResult:
     """Scored validation report for a complete instrument selection."""
 
     def __init__(self) -> None:
         self.score: int = 100
         self.violations: List[str] = []
-        self.warnings: List[str] = []
+        self.warnings:   List[str] = []
+        # Per-principle status: 'pass' | 'fail' | 'warn' — populated by validate_selection()
+        self.principles: Dict[str, str] = {p: 'pass' for p in ('P1', 'P2', 'P3', 'P4', 'P5')}
 
-    def deduct(self, points: int, msg: str) -> None:
+    def deduct(self, points: int, msg: str, principle: str = '') -> None:
         self.score = max(0, self.score - points)
         self.violations.append(msg)
+        if principle and principle in self.principles:
+            self.principles[principle] = 'fail'
 
-    def warn(self, msg: str) -> None:
+    def warn(self, msg: str, principle: str = '') -> None:
         self.warnings.append(msg)
+        if principle and principle in self.principles and self.principles[principle] == 'pass':
+            self.principles[principle] = 'warn'
 
     @property
     def label(self) -> str:
@@ -228,7 +279,7 @@ def validate_selection(branch: str, selection: Dict[str, str]) -> ValidationResu
     sub_bass_tracks = [t for t, v in parsed.items() if v.get('D') == 0 and v.get('R') == 0]
     if len(sub_bass_tracks) > 1:
         r.deduct(20, f"P1 Sub-bass: {', '.join(sub_bass_tracks)} both claim D0 R0 "
-                     f"— critical-band masking below 80 Hz")
+                     f"— critical-band masking below 80 Hz", 'P1')
 
     # ── P2 — Register monotonicity ─────────────────────────────────────────
     prev_r, prev_t = -1, ''
@@ -238,7 +289,7 @@ def validate_selection(branch: str, selection: Dict[str, str]) -> ValidationResu
         cur_r = parsed[track].get('R', 0)
         if prev_r > cur_r:
             r.deduct(10, f"P2 Register: {prev_t.upper()} R={prev_r} > {track.upper()} R={cur_r} "
-                         f"— upper layer masks lower (spectral inversion)")
+                         f"— upper layer masks lower (spectral inversion)", 'P2')
         prev_r, prev_t = cur_r, track
 
     # ── P3 — Attack separation in shared register ──────────────────────────
@@ -249,7 +300,7 @@ def validate_selection(branch: str, selection: Dict[str, str]) -> ValidationResu
             vi, vj = parsed[ti], parsed[tj]
             if vi.get('R') == vj.get('R') and vi.get('A') == vj.get('A'):
                 r.deduct(10, f"P3 Attack: {ti.upper()} + {tj.upper()} share "
-                             f"R={vi['R']} A={vi['A']} — transient crowding at onset")
+                             f"R={vi['R']} A={vi['A']} — transient crowding at onset", 'P3')
 
     # ── P4 — Density budget ────────────────────────────────────────────────
     budget = _DENSITY_BUDGET.get(branch, 10)
@@ -257,7 +308,7 @@ def validate_selection(branch: str, selection: Dict[str, str]) -> ValidationResu
     if total_d > budget:
         over = total_d - budget
         r.deduct(min(15, over * 5), f"P4 Density: Σ D={total_d} exceeds Branch {branch} budget "
-                                     f"({budget}) by {over} — spectral mud risk in 300-3000 Hz band")
+                                     f"({budget}) by {over} — spectral mud risk in 300-3000 Hz band", 'P4')
 
     # ── P5 — Brightness contrast ───────────────────────────────────────────
     if 'bass' in parsed and 'melody' in parsed:
@@ -265,12 +316,60 @@ def validate_selection(branch: str, selection: Dict[str, str]) -> ValidationResu
         b_melody = parsed['melody'].get('B', 0)
         if b_melody <= b_bass:
             r.deduct(15, f"P5 Brightness: melody B={b_melody} ≤ bass B={b_bass} "
-                         f"— lead voice will not cut through without EQ")
+                         f"— lead voice will not cut through without EQ", 'P5')
         elif b_melody - b_bass == 1:
             r.warn(f"P5 Brightness: melody B={b_melody}, bass B={b_bass} — "
-                   f"1-step margin; consider a shelving EQ at 4 kHz to secure separation")
+                   f"1-step margin; consider a shelving EQ at 4 kHz to secure separation", 'P5')
 
     return r
+
+
+def suggest_fixes(
+    branch: str,
+    catalogue: Dict[str, List[dict]],
+    selection: Dict[str, str],
+) -> List[Dict]:
+    """
+    For a selection that scores below 100, find the highest-value single-track
+    instrument swaps and return them ranked by score improvement.
+
+    Each entry in the returned list has:
+        track    : str   — which track to change
+        inst     : dict  — the suggested replacement instrument
+        gain     : int   — score points gained by this swap
+        new_score: int   — resulting total score
+
+    Returns at most one suggestion per track (the best swap for that track),
+    sorted by gain descending.  Returns [] when the selection already scores 100.
+    """
+    current_result = validate_selection(branch, selection)
+    if current_result.score >= 100:
+        return []
+
+    suggestions: List[Dict] = []
+    for track in selection:
+        valid = filter_instruments(branch, track, catalogue.get(track, []))
+        best_gain  = 0
+        best_inst  = None
+        for inst in valid:
+            if inst['code'] == selection[track]:
+                continue          # skip current pick
+            trial  = {**selection, track: inst['code']}
+            result = validate_selection(branch, trial)
+            gain   = result.score - current_result.score
+            if gain > best_gain:
+                best_gain = gain
+                best_inst = inst
+        if best_inst is not None and best_gain > 0:
+            suggestions.append({
+                'track':     track,
+                'inst':      best_inst,
+                'gain':      best_gain,
+                'new_score': current_result.score + best_gain,
+            })
+
+    suggestions.sort(key=lambda x: -x['gain'])
+    return suggestions[:3]   # top 3 — enough to show without cluttering the UI
 
 
 # ── Data loader ───────────────────────────────────────────────────────────────

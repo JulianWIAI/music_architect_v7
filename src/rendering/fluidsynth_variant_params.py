@@ -1,105 +1,427 @@
 """
 src.rendering.fluidsynth_variant_params
 -----------------------------------------
-Maps BRIGHT / NEUTRAL / DARK variant IDs to FluidSynth synthesiser
-parameters that audibly shift the timbre toward the variant's character.
+Maps (genre, variant_id) → FluidSynth synthesiser parameters so that the
+BRIGHT / NEUTRAL / DARK preview sounds genre-appropriate, not just a uniform
+reverb sweep.
 
-All parameters are passed to FluidSynth via the -o flag, which overrides
-built-in defaults at render time without editing any config file.
+Design rationale
+----------------
+Each genre has a distinct acoustic signature in commercial productions:
 
-Design intent — maximise audible contrast
-------------------------------------------
-Parameters are pushed to near-extremes so the three variants are
-unmistakably different without post-processing:
+  trap / hiphop   — dry booth (BRIGHT) through cavernous urban space (DARK)
+  pop / jpop      — tight studio gloss (BRIGHT) through warm melancholy (DARK)
+  edm / house     — club-ready punch (BRIGHT) through underground warehouse (DARK)
+  techno          — clinical cold room (BRIGHT) through Berlin cathedral (DARK)
+  dnb             — liquid clarity (BRIGHT) through neurofunk dark box (DARK)
+  phonk           — lo-fi close (BRIGHT) through maximum distorted cave (DARK)
+  cinematic       — bright hall (BRIGHT) through cathedral darkness (DARK)
+  classical       — recital room (BRIGHT) through cathedral organ space (DARK)
 
-  BRIGHT  Very dry (level 0.20), tiny room (size 0.12), no HF absorption
-          → instruments sound close, present, almost no room ambience.
-          Fast chorus shimmer adds air without smearing transients.
-
-  NEUTRAL Moderate room (size 0.50), half-wet (level 0.65), light damping
-          → reference balance; sounds like a treated studio room.
-
-  DARK    Fully wet (level 0.96), cathedral-size room (size 0.96),
-          heavy HF absorption (damp 0.95) → instruments sit far back
-          inside a cavernous, muffled space; slow deep chorus adds thickness.
-
-synth.reverb.damp (0.0–1.0)
-    High-frequency absorption in the reverb tail.
-    0.0 = bright, airy tail.  1.0 = dark, muffled tail.
-
-synth.reverb.room-size (0.0–1.0)
-    Reverb decay time proxy.  0.0 = dead booth.  1.0 = cathedral.
-
-synth.reverb.level (0.0–1.0)
-    Wet/dry balance.  The primary contrast knob: 0.20 (BRIGHT) vs
-    0.96 (DARK) is a 14 dB swing in wet signal — easily audible.
-
-synth.reverb.width (0.0–1.0)
-    Stereo spread of the reverb tail.  Wider = more spatial on BRIGHT.
-
-synth.chorus.depth / speed
-    Higher depth + slower speed = warm, thick pitch modulation (DARK).
-    Lower depth + faster speed  = subtle crisp shimmer (BRIGHT).
-
-gain
-    BRIGHT raised to 0.95 to compensate for the dry mix sounding quieter.
-    DARK lowered to 0.68; the very wet reverb adds perceived loudness.
+Parameters
+----------
+synth.reverb.room-size (0-1) : decay time proxy.  0=dead booth, 1=cathedral.
+synth.reverb.damp      (0-1) : HF absorption.  0=bright/airy, 1=dark/muffled.
+synth.reverb.width     (0-1) : stereo spread of reverb tail.
+synth.reverb.level     (0-1) : wet/dry balance.  Primary contrast axis.
+synth.chorus.nr              : number of chorus voices (int).
+synth.chorus.level           : chorus amplitude.
+synth.chorus.speed           : LFO speed (Hz).
+synth.chorus.depth           : pitch modulation depth (ms).
+gain                         : FluidSynth -g master gain.
 """
 
 from __future__ import annotations
 
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
-# ── Per-variant parameter tables ──────────────────────────────────────────────
-# 'gain' maps to the FluidSynth -g flag.
-# All other keys map to -o key=value overrides.
+# ---------------------------------------------------------------------------
+# Per-genre, per-variant parameter tables
+# 'gain' → FluidSynth -g flag.  Everything else → -o key=value overrides.
+# ---------------------------------------------------------------------------
 
-_PARAMS: dict = {
+_GENRE_PARAMS: Dict[str, Dict[str, dict]] = {
+
+    # ── Trap ─────────────────────────────────────────────────────────────
+    'trap': {
+        'bright': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.08, 'synth.reverb.damp': 0.01,
+            'synth.reverb.width':     0.95, 'synth.reverb.level': 0.15,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 3, 'synth.chorus.level': 1.80,
+            'synth.chorus.speed': 0.45, 'synth.chorus.depth': 3.0,
+            'gain': 1.00,
+        },
+        'neutral': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.45, 'synth.reverb.damp': 0.25,
+            'synth.reverb.width':     0.60, 'synth.reverb.level': 0.60,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 3, 'synth.chorus.level': 1.60,
+            'synth.chorus.speed': 0.30, 'synth.chorus.depth': 6.0,
+            'gain': 0.82,
+        },
+        'dark': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.90, 'synth.reverb.damp': 0.92,
+            'synth.reverb.width':     0.20, 'synth.reverb.level': 0.90,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 2, 'synth.chorus.level': 0.90,
+            'synth.chorus.speed': 0.15, 'synth.chorus.depth': 12.0,
+            'gain': 0.65,
+        },
+    },
+
+    # ── Hip-hop ───────────────────────────────────────────────────────────
+    'hiphop': {
+        'bright': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.20, 'synth.reverb.damp': 0.05,
+            'synth.reverb.width':     0.90, 'synth.reverb.level': 0.30,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 4, 'synth.chorus.level': 2.00,
+            'synth.chorus.speed': 0.42, 'synth.chorus.depth': 4.0,
+            'gain': 0.95,
+        },
+        'neutral': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.50, 'synth.reverb.damp': 0.35,
+            'synth.reverb.width':     0.55, 'synth.reverb.level': 0.65,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 3, 'synth.chorus.level': 1.70,
+            'synth.chorus.speed': 0.30, 'synth.chorus.depth': 7.0,
+            'gain': 0.80,
+        },
+        'dark': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.80, 'synth.reverb.damp': 0.85,
+            'synth.reverb.width':     0.25, 'synth.reverb.level': 0.88,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 2, 'synth.chorus.level': 1.00,
+            'synth.chorus.speed': 0.18, 'synth.chorus.depth': 13.0,
+            'gain': 0.68,
+        },
+    },
+
+    # ── Pop ───────────────────────────────────────────────────────────────
+    'pop': {
+        'bright': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.15, 'synth.reverb.damp': 0.02,
+            'synth.reverb.width':     0.98, 'synth.reverb.level': 0.25,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 5, 'synth.chorus.level': 2.50,
+            'synth.chorus.speed': 0.50, 'synth.chorus.depth': 3.0,
+            'gain': 0.98,
+        },
+        'neutral': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.45, 'synth.reverb.damp': 0.20,
+            'synth.reverb.width':     0.60, 'synth.reverb.level': 0.60,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 3, 'synth.chorus.level': 1.80,
+            'synth.chorus.speed': 0.32, 'synth.chorus.depth': 6.5,
+            'gain': 0.82,
+        },
+        'dark': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.70, 'synth.reverb.damp': 0.70,
+            'synth.reverb.width':     0.35, 'synth.reverb.level': 0.82,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 2, 'synth.chorus.level': 1.10,
+            'synth.chorus.speed': 0.20, 'synth.chorus.depth': 11.0,
+            'gain': 0.70,
+        },
+    },
+
+    # ── EDM ───────────────────────────────────────────────────────────────
+    'edm': {
+        'bright': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.25, 'synth.reverb.damp': 0.02,
+            'synth.reverb.width':     0.99, 'synth.reverb.level': 0.35,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 5, 'synth.chorus.level': 2.80,
+            'synth.chorus.speed': 0.55, 'synth.chorus.depth': 4.0,
+            'gain': 0.95,
+        },
+        'neutral': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.55, 'synth.reverb.damp': 0.30,
+            'synth.reverb.width':     0.65, 'synth.reverb.level': 0.65,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 3, 'synth.chorus.level': 1.80,
+            'synth.chorus.speed': 0.30, 'synth.chorus.depth': 7.0,
+            'gain': 0.80,
+        },
+        'dark': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.88, 'synth.reverb.damp': 0.90,
+            'synth.reverb.width':     0.20, 'synth.reverb.level': 0.92,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 2, 'synth.chorus.level': 0.80,
+            'synth.chorus.speed': 0.14, 'synth.chorus.depth': 14.0,
+            'gain': 0.65,
+        },
+    },
+
+    # ── House ─────────────────────────────────────────────────────────────
+    'house': {
+        'bright': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.20, 'synth.reverb.damp': 0.05,
+            'synth.reverb.width':     0.92, 'synth.reverb.level': 0.30,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 4, 'synth.chorus.level': 2.20,
+            'synth.chorus.speed': 0.46, 'synth.chorus.depth': 3.5,
+            'gain': 0.96,
+        },
+        'neutral': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.50, 'synth.reverb.damp': 0.30,
+            'synth.reverb.width':     0.55, 'synth.reverb.level': 0.65,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 3, 'synth.chorus.level': 1.80,
+            'synth.chorus.speed': 0.30, 'synth.chorus.depth': 7.0,
+            'gain': 0.80,
+        },
+        'dark': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.78, 'synth.reverb.damp': 0.78,
+            'synth.reverb.width':     0.28, 'synth.reverb.level': 0.85,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 2, 'synth.chorus.level': 1.00,
+            'synth.chorus.speed': 0.17, 'synth.chorus.depth': 12.0,
+            'gain': 0.70,
+        },
+    },
+
+    # ── J-Pop ─────────────────────────────────────────────────────────────
+    'jpop': {
+        'bright': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.12, 'synth.reverb.damp': 0.02,
+            'synth.reverb.width':     0.99, 'synth.reverb.level': 0.20,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 5, 'synth.chorus.level': 2.80,
+            'synth.chorus.speed': 0.55, 'synth.chorus.depth': 2.5,
+            'gain': 1.00,
+        },
+        'neutral': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.40, 'synth.reverb.damp': 0.20,
+            'synth.reverb.width':     0.65, 'synth.reverb.level': 0.55,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 3, 'synth.chorus.level': 1.90,
+            'synth.chorus.speed': 0.35, 'synth.chorus.depth': 6.0,
+            'gain': 0.82,
+        },
+        'dark': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.68, 'synth.reverb.damp': 0.65,
+            'synth.reverb.width':     0.35, 'synth.reverb.level': 0.80,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 2, 'synth.chorus.level': 1.10,
+            'synth.chorus.speed': 0.20, 'synth.chorus.depth': 10.5,
+            'gain': 0.72,
+        },
+    },
+
+    # ── Techno ────────────────────────────────────────────────────────────
+    'techno': {
+        'bright': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.18, 'synth.reverb.damp': 0.01,
+            'synth.reverb.width':     0.80, 'synth.reverb.level': 0.25,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 2, 'synth.chorus.level': 1.20,
+            'synth.chorus.speed': 0.35, 'synth.chorus.depth': 2.0,
+            'gain': 0.95,
+        },
+        'neutral': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.60, 'synth.reverb.damp': 0.40,
+            'synth.reverb.width':     0.50, 'synth.reverb.level': 0.70,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 3, 'synth.chorus.level': 1.60,
+            'synth.chorus.speed': 0.28, 'synth.chorus.depth': 7.5,
+            'gain': 0.78,
+        },
+        'dark': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.94, 'synth.reverb.damp': 0.88,
+            'synth.reverb.width':     0.15, 'synth.reverb.level': 0.94,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 2, 'synth.chorus.level': 0.70,
+            'synth.chorus.speed': 0.12, 'synth.chorus.depth': 15.0,
+            'gain': 0.62,
+        },
+    },
+
+    # ── Drum & Bass ───────────────────────────────────────────────────────
+    'dnb': {
+        'bright': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.22, 'synth.reverb.damp': 0.05,
+            'synth.reverb.width':     0.90, 'synth.reverb.level': 0.35,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 4, 'synth.chorus.level': 2.00,
+            'synth.chorus.speed': 0.48, 'synth.chorus.depth': 4.5,
+            'gain': 0.94,
+        },
+        'neutral': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.50, 'synth.reverb.damp': 0.35,
+            'synth.reverb.width':     0.55, 'synth.reverb.level': 0.65,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 3, 'synth.chorus.level': 1.70,
+            'synth.chorus.speed': 0.30, 'synth.chorus.depth': 7.0,
+            'gain': 0.80,
+        },
+        'dark': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.85, 'synth.reverb.damp': 0.92,
+            'synth.reverb.width':     0.22, 'synth.reverb.level': 0.90,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 2, 'synth.chorus.level': 0.85,
+            'synth.chorus.speed': 0.15, 'synth.chorus.depth': 13.5,
+            'gain': 0.66,
+        },
+    },
+
+    # ── Phonk ─────────────────────────────────────────────────────────────
+    'phonk': {
+        'bright': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.10, 'synth.reverb.damp': 0.05,
+            'synth.reverb.width':     0.70, 'synth.reverb.level': 0.15,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 2, 'synth.chorus.level': 1.40,
+            'synth.chorus.speed': 0.35, 'synth.chorus.depth': 3.0,
+            'gain': 0.95,
+        },
+        'neutral': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.55, 'synth.reverb.damp': 0.55,
+            'synth.reverb.width':     0.40, 'synth.reverb.level': 0.72,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 2, 'synth.chorus.level': 1.30,
+            'synth.chorus.speed': 0.22, 'synth.chorus.depth': 8.0,
+            'gain': 0.75,
+        },
+        'dark': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.95, 'synth.reverb.damp': 0.97,
+            'synth.reverb.width':     0.15, 'synth.reverb.level': 0.95,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 2, 'synth.chorus.level': 0.70,
+            'synth.chorus.speed': 0.12, 'synth.chorus.depth': 14.0,
+            'gain': 0.60,
+        },
+    },
+
+    # ── Cinematic ─────────────────────────────────────────────────────────
+    'cinematic': {
+        'bright': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.60, 'synth.reverb.damp': 0.10,
+            'synth.reverb.width':     0.90, 'synth.reverb.level': 0.65,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 3, 'synth.chorus.level': 1.50,
+            'synth.chorus.speed': 0.25, 'synth.chorus.depth': 5.0,
+            'gain': 0.88,
+        },
+        'neutral': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.75, 'synth.reverb.damp': 0.35,
+            'synth.reverb.width':     0.70, 'synth.reverb.level': 0.78,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 3, 'synth.chorus.level': 1.40,
+            'synth.chorus.speed': 0.22, 'synth.chorus.depth': 7.0,
+            'gain': 0.80,
+        },
+        'dark': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.98, 'synth.reverb.damp': 0.80,
+            'synth.reverb.width':     0.40, 'synth.reverb.level': 0.95,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 2, 'synth.chorus.level': 1.00,
+            'synth.chorus.speed': 0.15, 'synth.chorus.depth': 12.0,
+            'gain': 0.68,
+        },
+    },
+
+    # ── Classical ─────────────────────────────────────────────────────────
+    'classical': {
+        'bright': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.45, 'synth.reverb.damp': 0.10,
+            'synth.reverb.width':     0.85, 'synth.reverb.level': 0.55,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 3, 'synth.chorus.level': 1.30,
+            'synth.chorus.speed': 0.22, 'synth.chorus.depth': 4.0,
+            'gain': 0.90,
+        },
+        'neutral': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.72, 'synth.reverb.damp': 0.30,
+            'synth.reverb.width':     0.75, 'synth.reverb.level': 0.75,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 3, 'synth.chorus.level': 1.30,
+            'synth.chorus.speed': 0.20, 'synth.chorus.depth': 6.5,
+            'gain': 0.80,
+        },
+        'dark': {
+            'synth.reverb.active':    1,
+            'synth.reverb.room-size': 0.98, 'synth.reverb.damp': 0.75,
+            'synth.reverb.width':     0.50, 'synth.reverb.level': 0.95,
+            'synth.chorus.active':    1,
+            'synth.chorus.nr': 2, 'synth.chorus.level': 1.00,
+            'synth.chorus.speed': 0.15, 'synth.chorus.depth': 11.0,
+            'gain': 0.68,
+        },
+    },
+}
+
+# Generic fallback used for any genre not in _GENRE_PARAMS
+_FALLBACK: Dict[str, dict] = {
     'bright': {
-        'synth.reverb.active':    1,      # ensure reverb unit is on
-        'synth.reverb.room-size': 0.12,   # tiny booth → almost no tail
-        'synth.reverb.damp':      0.02,   # near-zero HF absorption → airy tail
-        'synth.reverb.width':     0.95,   # maximum stereo spread
-        'synth.reverb.level':     0.20,   # very dry → transients up front
-        'synth.chorus.active':    1,      # ensure chorus unit is on
-        'synth.chorus.nr':        5,      # more voices → sparkly shimmer
-        'synth.chorus.level':     2.50,
-        'synth.chorus.speed':     0.50,   # fast LFO → crisp movement
-        'synth.chorus.depth':     3.0,    # shallow depth → subtle, not seasick
-        'gain': 0.95,                     # louder to compensate for dry mix
+        'synth.reverb.active': 1,
+        'synth.reverb.room-size': 0.12, 'synth.reverb.damp': 0.02,
+        'synth.reverb.width': 0.95,     'synth.reverb.level': 0.20,
+        'synth.chorus.active': 1,
+        'synth.chorus.nr': 5,  'synth.chorus.level': 2.50,
+        'synth.chorus.speed': 0.50,     'synth.chorus.depth': 3.0,
+        'gain': 0.95,
     },
     'neutral': {
-        'synth.reverb.active':    1,
-        'synth.reverb.room-size': 0.50,   # mid-size treated room
-        'synth.reverb.damp':      0.30,
-        'synth.reverb.width':     0.50,
-        'synth.reverb.level':     0.65,
-        'synth.chorus.active':    1,
-        'synth.chorus.nr':        3,
-        'synth.chorus.level':     1.80,
-        'synth.chorus.speed':     0.30,
-        'synth.chorus.depth':     7.0,
+        'synth.reverb.active': 1,
+        'synth.reverb.room-size': 0.50, 'synth.reverb.damp': 0.30,
+        'synth.reverb.width': 0.50,     'synth.reverb.level': 0.65,
+        'synth.chorus.active': 1,
+        'synth.chorus.nr': 3,  'synth.chorus.level': 1.80,
+        'synth.chorus.speed': 0.30,     'synth.chorus.depth': 7.0,
         'gain': 0.80,
     },
     'dark': {
-        'synth.reverb.active':    1,
-        'synth.reverb.room-size': 0.96,   # cathedral → very long tail
-        'synth.reverb.damp':      0.95,   # maximum HF absorption → muffled
-        'synth.reverb.width':     0.20,   # narrow → instruments buried in mono wash
-        'synth.reverb.level':     0.96,   # almost fully wet → deep in the room
-        'synth.chorus.active':    1,
-        'synth.chorus.nr':        2,      # fewer voices → thick, slow throb
-        'synth.chorus.level':     1.00,
-        'synth.chorus.speed':     0.15,   # very slow LFO → warm, heavy movement
-        'synth.chorus.depth':     14.0,   # deep pitch modulation
-        'gain': 0.68,                     # pull back; wet reverb adds loudness
+        'synth.reverb.active': 1,
+        'synth.reverb.room-size': 0.96, 'synth.reverb.damp': 0.95,
+        'synth.reverb.width': 0.20,     'synth.reverb.level': 0.96,
+        'synth.chorus.active': 1,
+        'synth.chorus.nr': 2,  'synth.chorus.level': 1.00,
+        'synth.chorus.speed': 0.15,     'synth.chorus.depth': 14.0,
+        'gain': 0.68,
     },
 }
 
 
-def build_fluidsynth_args(variant_id: str) -> Tuple[List[str], float]:
+def build_fluidsynth_args(
+    variant_id: str,
+    genre: str = '',
+) -> Tuple[List[str], float]:
     """
-    Return (option_flags, gain) for *variant_id*.
+    Return (option_flags, gain) for *variant_id* and *genre*.
 
     option_flags is a flat list of '-o', 'key=value' pairs ready to be
     spliced into the FluidSynth subprocess command before the positional
@@ -107,16 +429,17 @@ def build_fluidsynth_args(variant_id: str) -> Tuple[List[str], float]:
 
     gain is the float for the -g master-gain flag.
 
-    An unrecognised variant_id falls back to 'neutral'.
+    Unknown variant_id falls back to 'neutral'.
+    Unknown genre uses the generic fallback table.
     """
-    params = _PARAMS.get(variant_id, _PARAMS['neutral'])
-    gain   = float(params.get('gain', 0.80))
+    genre_table = _GENRE_PARAMS.get(genre, _FALLBACK)
+    params      = genre_table.get(variant_id, genre_table.get('neutral', _FALLBACK['neutral']))
+    gain        = float(params.get('gain', 0.80))
 
     flags: List[str] = []
     for key, value in params.items():
         if key == 'gain':
             continue
-        # chorus.nr is an integer; all others are floats
         if isinstance(value, int):
             flags += ['-o', f'{key}={value}']
         else:

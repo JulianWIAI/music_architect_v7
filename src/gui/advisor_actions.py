@@ -136,28 +136,31 @@ class AdvisorActionsBar(tk.Frame):
         parent: tk.Widget,
         *,
         styles,
-        get_engine_fn:   Callable,
+        get_engine_fn:      Callable,
         fluid_renderer,
         player,
-        build_config_fn: Callable,
-        want_vocal_fn:   Callable[[], bool],
-        log_fn:          Callable[[str], None],
-        status_fn:       Callable[[str, str], None],
-        app_dir:         str,
-        save_pdf_fn:     Optional[Callable[[], None]] = None,
+        build_config_fn:    Callable,
+        want_vocal_fn:      Callable[[], bool],
+        log_fn:             Callable[[str], None],
+        status_fn:          Callable[[str, str], None],
+        app_dir:            str,
+        save_pdf_fn:        Optional[Callable[[], None]] = None,
+        get_muted_tracks_fn: Optional[Callable[[], set]] = None,
     ) -> None:
         super().__init__(parent, bg=styles.BG2)
 
-        self._S             = styles
-        self._get_engine    = get_engine_fn
-        self._renderer      = fluid_renderer
-        self._player        = player
-        self._build_config  = build_config_fn
-        self._want_vocal    = want_vocal_fn
-        self._log           = log_fn
-        self._status        = status_fn
-        self._app_dir       = app_dir
-        self._save_pdf      = save_pdf_fn   # None → button hidden
+        self._S                  = styles
+        self._get_engine         = get_engine_fn
+        self._renderer           = fluid_renderer
+        self._player             = player
+        self._build_config       = build_config_fn
+        self._want_vocal         = want_vocal_fn
+        self._log                = log_fn
+        self._status             = status_fn
+        self._app_dir            = app_dir
+        self._save_pdf           = save_pdf_fn
+        # Returns set of track keys to silence in the next preview render.
+        self._get_muted_tracks   = get_muted_tracks_fn or (lambda: set())
 
         # Seed cached by App.set_seed() after every generation.
         # None → a fresh random seed is used for that preview session.
@@ -284,6 +287,17 @@ class AdvisorActionsBar(tk.Frame):
         # Read all UI widget state on the main thread, then override seed.
         config            = self._build_config()
         config.seed_value = seed
+
+        # Apply muted tracks: set enabled=False so the composition engine
+        # omits those voices from the MIDI before FluidSynth renders.
+        muted = self._get_muted_tracks()
+        if muted:
+            self._log(f"  Muted tracks: {', '.join(sorted(muted)).upper()}")
+            for track_key in muted:
+                # config.tracks uses 'lead' for melody; builder uses 'melody'
+                cfg_key = 'lead' if track_key == 'melody' else track_key
+                if cfg_key in config.tracks:
+                    config.tracks[cfg_key]['enabled'] = False
 
         self._log(f"Advisor preview: composing (seed={seed}, genre={config.genre})…")
 

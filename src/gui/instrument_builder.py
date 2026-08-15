@@ -105,9 +105,15 @@ class InstrumentBuilder(tk.Frame):
         self._track_cbs:   Dict[str, ttk.Combobox]   = {}
         self._track_lbls:  Dict[str, tk.Label]        = {}
         self._track_tips:  Dict[str, object]          = {}  # ToolTip per combobox
+        self._mute_vars:   Dict[str, tk.BooleanVar]  = {}   # mute state per track
+        self._track_name_lbls: Dict[str, tk.Label]   = {}   # dimmed when muted
         self._score_lbl:   Optional[tk.Label]         = None
         self._viol_lbl:    Optional[tk.Label]         = None
         self._branch_badge: Optional[tk.Label]        = None
+        # P1-P5 principle status labels (populated in _build_ui)
+        self._principle_lbls: Dict[str, tk.Label]    = {}
+        # Fix suggestion rows
+        self._fix_rows:    List[dict]                 = []
 
         self._expanded = True   # collapse state
 
@@ -187,15 +193,29 @@ class InstrumentBuilder(tk.Frame):
             insts   = self._catalogue.get(track_key, [])
             options = [_fmt(i) for i in insts]
 
-            var = tk.StringVar()
+            var      = tk.StringVar()
+            mute_var = tk.BooleanVar(value=False)   # True = muted in preview
+            self._mute_vars[track_key] = mute_var
 
             row = tk.Frame(self._content, bg=S.BG2)
             row.pack(fill='x', pady=1)
 
+            # Mute toggle — dims the label when active; excluded from preview render
+            mute_btn = tk.Checkbutton(
+                row, text='', variable=mute_var,
+                font=S.FN_X, fg=S.TXT_DIM, bg=S.BG2,
+                selectcolor=S.BG3, activebackground=S.BG2,
+                width=1, indicatoron=True,
+                command=lambda tk=track_key, mv=mute_var, c=color: self._on_mute_toggle(tk, mv, c),
+            )
+            mute_btn.pack(side='left', padx=(2, 0))
+            ToolTip(mute_btn, f"Mute {display} in advisor preview.\nMuted tracks are excluded from the next render.")
+
             tk.Label(
                 row, text=display, font=S.FN_X, fg=color,
-                bg=S.BG2, width=7, anchor='w',
-            ).pack(side='left', padx=(4, 0))
+                bg=S.BG2, width=6, anchor='w',
+            ).pack(side='left', padx=(1, 0))
+            self._track_name_lbls[track_key] = row.winfo_children()[-1]
 
             cb = ttk.Combobox(
                 row, textvariable=var,
@@ -262,12 +282,63 @@ class InstrumentBuilder(tk.Frame):
         self._score_lbl.pack(side='left', padx=4)
         ToolTip(self._score_lbl, TOOLTIPS['advisor_score'])
 
-        # First violation shown inline (space-constrained; full list in advisor text)
+        # First violation shown inline (space-constrained)
         self._viol_lbl = tk.Label(
             score_row, text='', font=S.FN_X,
             fg=S.YELLOW, bg=S.BG2, anchor='w',
         )
         self._viol_lbl.pack(side='left', padx=4, fill='x', expand=True)
+
+        # ── P1-P5 principle breakdown (pedagogical) ───────────────────────
+        # Five compact rows, one per psychoacoustic principle.
+        # Icon: ✓ green (pass) · ✗ red (fail) · ⚠ yellow (warn).
+        # Hovering over any row shows the full academic rationale.
+        breakdown_frame = tk.Frame(self._content, bg=S.BG2)
+        breakdown_frame.pack(fill='x', pady=(2, 0))
+
+        tk.Label(
+            breakdown_frame, text='THEORY', font=S.FN_X,
+            fg=S.TXT_DIM, bg=S.BG2, width=7, anchor='w',
+        ).pack(side='left', padx=(4, 2))
+
+        p_row = tk.Frame(breakdown_frame, bg=S.BG2)
+        p_row.pack(side='left', fill='x', expand=True)
+
+        for pid, info in _br.PRINCIPLE_INFO.items():
+            lbl = tk.Label(
+                p_row, text=f'{pid} ✓', font=S.FN_X,
+                fg=S.GREEN, bg=S.BG2, padx=4,
+            )
+            lbl.pack(side='left')
+            tip_text = (
+                f"{pid} — {info['name']}\n"
+                f"Law: {info['law']}\n\n"
+                f"PASS: {info['pass']}\n"
+                f"FAIL: {info['fail']}"
+            )
+            ToolTip(lbl, tip_text)
+            self._principle_lbls[pid] = lbl
+
+        # ── Fix suggestions (Feature 5) ───────────────────────────────────
+        # Up to 3 rows; each row shown/hidden dynamically by _refresh_score().
+        self._fix_frame = tk.Frame(self._content, bg=S.BG2)
+        self._fix_frame.pack(fill='x', pady=(1, 0))
+
+        for _ in range(3):
+            fix_row = tk.Frame(self._fix_frame, bg=S.BG2)
+            lbl = tk.Label(
+                fix_row, text='', font=S.FN_X,
+                fg=S.ORANGE, bg=S.BG2, anchor='w',
+            )
+            lbl.pack(side='left', padx=(74, 2), fill='x', expand=True)
+            btn = tk.Button(
+                fix_row, text='APPLY FIX',
+                font=S.FN_X, fg=S.BG, bg=S.ORANGE,
+                activebackground=S.YELLOW, activeforeground=S.BG,
+                bd=0, padx=6, pady=1, cursor='hand2',
+            )
+            btn.pack(side='right', padx=4)
+            self._fix_rows.append({'row': fix_row, 'lbl': lbl, 'btn': btn, 'fix': None})
 
         # ── Apply button ──────────────────────────────────────────────────
         btn_row = tk.Frame(self._content, bg=S.BG2)
@@ -407,16 +478,14 @@ class InstrumentBuilder(tk.Frame):
 
     def _refresh_score(self) -> None:
         """
-        Run the five-principle validator and update the score label.
+        Run the five-principle validator; update score label, P1-P5 breakdown,
+        and fix suggestion rows.
 
         Score colours:  ≥90 green · ≥70 yellow · ≥50 orange · <50 red.
-        The first violation (if any) is shown inline; the full list is
-        available via current_validation().
         """
         S      = self._S
         branch = self._branch()
 
-        # Build selection dict {track: code} for the validator
         sel = {}
         for t in self._track_cbs:
             inst = self._inst(t)
@@ -431,20 +500,68 @@ class InstrumentBuilder(tk.Frame):
                  S.YELLOW if result.score >= 70 else
                  S.ORANGE if result.score >= 50 else S.RED)
 
-        self._score_lbl.config(
-            text=f"{result.score}/100  {result.label}", fg=color,
-        )
+        self._score_lbl.config(text=f"{result.score}/100  {result.label}", fg=color)
 
         if result.violations:
-            self._viol_lbl.config(
-                text=f"· {result.violations[0]}", fg=S.YELLOW,
-            )
+            self._viol_lbl.config(text=f"· {result.violations[0]}", fg=S.YELLOW)
         elif result.warnings:
-            self._viol_lbl.config(
-                text=f"· {result.warnings[0]}", fg=S.TXT_DIM,
-            )
+            self._viol_lbl.config(text=f"· {result.warnings[0]}", fg=S.TXT_DIM)
         else:
             self._viol_lbl.config(text='', fg=S.TXT_DIM)
+
+        # ── P1-P5 principle icons ─────────────────────────────────────────
+        status_cfg = {
+            'pass': ('✓', S.GREEN),
+            'warn': ('⚠', S.YELLOW),
+            'fail': ('✗', S.RED),
+        }
+        for pid, lbl in self._principle_lbls.items():
+            status = result.principles.get(pid, 'pass')
+            icon, clr = status_cfg.get(status, ('?', S.TXT_DIM))
+            lbl.config(text=f'{pid} {icon}', fg=clr)
+
+        # ── Fix suggestions ───────────────────────────────────────────────
+        fixes = _br.suggest_fixes(branch, self._catalogue, sel)
+        for i, row_data in enumerate(self._fix_rows):
+            if i < len(fixes):
+                fix = fixes[i]
+                track  = fix['track']
+                inst   = fix['inst']
+                gain   = fix['gain']
+                row_data['fix'] = fix
+                row_data['lbl'].config(
+                    text=f"FIX {track.upper()} → {inst['name']}  {inst['code']}"
+                         f"  (+{gain} pts → {fix['new_score']}/100)",
+                )
+                row_data['btn'].config(
+                    command=lambda f=fix: self._apply_fix(f),
+                )
+                row_data['row'].pack(fill='x', pady=0)
+            else:
+                row_data['fix'] = None
+                row_data['row'].pack_forget()
+
+    def _on_mute_toggle(self, track: str, mute_var: tk.BooleanVar, color: str) -> None:
+        """Dim the track name label when muted; restore when unmuted."""
+        lbl = self._track_name_lbls.get(track)
+        if lbl:
+            lbl.config(fg=self._S.TXT_DIM if mute_var.get() else color)
+
+    def _apply_fix(self, fix: dict) -> None:
+        """Apply a single fix suggestion — set the combobox to the suggested instrument."""
+        track = fix['track']
+        inst  = fix['inst']
+        cb    = self._track_cbs.get(track)
+        if cb is None:
+            return
+        target = _fmt(inst)
+        if target in cb['values']:
+            cb.set(target)
+        # trace fires _on_track_change → _refresh_score automatically
+
+    def get_muted_tracks(self) -> set:
+        """Return the set of track keys currently muted (excluded from advisor preview)."""
+        return {t for t, mv in self._mute_vars.items() if mv.get()}
 
     def _refresh_desc(self, track: str) -> None:
         """

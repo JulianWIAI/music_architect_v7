@@ -46,6 +46,7 @@ class FluidSynthRenderer:
             else None
         )
         self._variant: str = 'neutral'
+        self._genre: str = ''
         self._library = SoundFontLibrary()
         self._current_proc: Optional[subprocess.Popen] = None
         self._proc_lock = threading.Lock()
@@ -77,6 +78,10 @@ class FluidSynthRenderer:
     def set_variant(self, variant_id: str) -> None:
         """Store the timbral variant used for the next render ('bright'/'neutral'/'dark')."""
         self._variant = variant_id if variant_id in ('bright', 'neutral', 'dark') else 'neutral'
+
+    def set_genre(self, genre: str) -> None:
+        """Store the genre so build_fluidsynth_args() selects the matching FX profile."""
+        self._genre = genre or ''
 
     def set_override(self, path: Optional[str]) -> None:
         """
@@ -155,7 +160,7 @@ class FluidSynthRenderer:
         # Placing -F / -r / -g after sf2 / midi_path causes FluidSynth to
         # ignore those flags, produce no WAV output, and exit non-zero —
         # which silently triggers the MIDI-playback fallback in the caller.
-        variant_flags, gain = build_fluidsynth_args(self._variant)
+        variant_flags, gain = build_fluidsynth_args(self._variant, self._genre)
         cmd = [
             'fluidsynth',
             '-ni',                   # non-interactive, no MIDI input
