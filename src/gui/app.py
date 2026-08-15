@@ -136,6 +136,13 @@ except ImportError:
     WaveformWidget     = None       # type: ignore
     PLAYER_WIDGETS_AVAILABLE = False
 
+try:
+    from src.gui.export_dialog import ExportDialog
+    EXPORT_DIALOG_AVAILABLE = True
+except ImportError:
+    ExportDialog = None             # type: ignore
+    EXPORT_DIALOG_AVAILABLE = False
+
 
 class SeedComposerApp:
     def __init__(self, root: tk.Tk):
@@ -861,6 +868,26 @@ class SeedComposerApp:
         self._tip(btn_midi, 'btn_midi')
         self._tip(btn_wav, 'btn_wav')
         self._tip(btn_json, 'btn_json')
+
+        # ── Multi-format Export dialog button ──────────────────────────────────
+        if EXPORT_DIALOG_AVAILABLE:
+            ef2 = tk.Frame(parent, bg=S.BG2); ef2.pack(fill='x', padx=6, pady=(0, 2))
+            btn_export = tk.Button(
+                ef2,
+                text            = "▼  EXPORT AUDIO…",
+                font            = S.FN_S,
+                fg              = S.BG,
+                bg              = S.CYAN,
+                bd              = 0,
+                padx            = 10,
+                pady            = 6,
+                relief          = 'flat',
+                cursor          = 'hand2',
+                activeforeground= S.BG,
+                activebackground= S.GREEN,
+                command         = self._open_export_dialog,
+            )
+            btn_export.pack(fill='x', padx=2, ipady=2)
 
         lf = self._section(parent, "CONSOLE", S.TXT_DIM)
         self.log_text = tk.Text(lf, font=S.FN_X, bg=S.BG, fg=S.TXT_DIM,
@@ -2122,6 +2149,26 @@ class SeedComposerApp:
             _FLUID_RENDERER.cancel()
         self.player.stop()
         self._set_status("STOPPED", S.YELLOW)
+
+    def _open_export_dialog(self) -> None:
+        """Open the multi-format audio export dialog."""
+        if not EXPORT_DIALOG_AVAILABLE:
+            self._log("Export dialog not available.")
+            return
+        if not self.current_wav_path or not os.path.exists(self.current_wav_path):
+            messagebox.showinfo(
+                "No audio",
+                "No rendered WAV found.\nGenerate a song first, then export.",
+            )
+            return
+        ExportDialog(
+            parent      = self.root,
+            styles      = S,
+            source_wav  = self.current_wav_path,
+            composition = self.current_composition,
+            gen_number  = self.generation_counter,
+            log_fn      = self._log,
+        )
 
     def _export_midi(self):
         if not self.current_composition: messagebox.showinfo("", "Generate first!"); return
