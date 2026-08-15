@@ -148,8 +148,8 @@ class SeedComposerApp:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("SEED COMPOSER - CYBERPUNK EDITION")
-        self.root.geometry("1300x920")
-        self.root.minsize(1100, 750)
+        self.root.geometry("1400x960")
+        self.root.minsize(1100, 850)
         self.root.configure(bg=S.BG)
 
         self.engine = None
@@ -789,8 +789,20 @@ class SeedComposerApp:
     # ─── Output Panel ───
 
     def _build_output_panel(self, parent):
+        # ── Waveform widget — ABOVE the notebook so it's always visible ──────
+        # Placed first so Tkinter's pack manager shrinks the notebook (expand=True)
+        # before ever hiding the waveform or the player buttons below.
+        if PLAYER_WIDGETS_AVAILABLE:
+            self._waveform_widget = WaveformWidget(
+                parent,
+                styles  = S,
+                on_seek = self._on_waveform_seek,
+                height  = 60,
+            )
+            self._waveform_widget.pack(fill='x', padx=4, pady=(4, 0))
+
         self._out_nb = ttk.Notebook(parent)
-        self._out_nb.pack(fill='both', expand=True, padx=4, pady=4)
+        self._out_nb.pack(fill='both', expand=True, padx=4, pady=(2, 4))
 
         # ── Tab 1: OUTPUT ──
         out_tab = tk.Frame(self._out_nb, bg=S.BG2)
@@ -822,16 +834,6 @@ class SeedComposerApp:
         self._out_nb.add(adv_tab, text=' ADVISOR ')
         self._build_advisor_tab(adv_tab)
 
-        # ── Waveform widget — spans the full right-panel width below the tabs ──
-        if PLAYER_WIDGETS_AVAILABLE:
-            self._waveform_widget = WaveformWidget(
-                parent,
-                styles   = S,
-                on_seek  = self._on_waveform_seek,
-                height   = 72,
-            )
-            self._waveform_widget.pack(fill='x', padx=4, pady=(2, 0))
-
         bf = tk.Frame(parent, bg=S.BG2); bf.pack(fill='x', padx=6, pady=4)
         btn_play = self._cbtn(bf, "PLAY  Full Beat", self._play_preview, S.GREEN, wide=True)
         btn_play.pack(side='left', padx=2, fill='x', expand=True)
@@ -861,33 +863,14 @@ class SeedComposerApp:
         ef = tk.Frame(parent, bg=S.BG2); ef.pack(fill='x', padx=6, pady=2)
         btn_midi = self._cbtn(ef, "MIDI", self._export_midi, S.PURPLE, wide=True)
         btn_midi.pack(side='left', padx=2, fill='x', expand=True)
-        btn_wav = self._cbtn(ef, "WAV", self._export_wav, S.ORANGE, wide=True)
-        btn_wav.pack(side='left', padx=2, fill='x', expand=True)
+        # EXPORT AUDIO replaces the old single-format WAV button — opens the
+        # multi-format dialog so users can choose WAV / MP3 / FLAC / OGG.
+        btn_export_audio = self._cbtn(ef, "EXPORT AUDIO…", self._open_export_dialog, S.CYAN, wide=True)
+        btn_export_audio.pack(side='left', padx=2, fill='x', expand=True)
         btn_json = self._cbtn(ef, "JSON", self._export_json, S.BLUE, wide=True)
         btn_json.pack(side='left', padx=2, fill='x', expand=True)
         self._tip(btn_midi, 'btn_midi')
-        self._tip(btn_wav, 'btn_wav')
         self._tip(btn_json, 'btn_json')
-
-        # ── Multi-format Export dialog button ──────────────────────────────────
-        if EXPORT_DIALOG_AVAILABLE:
-            ef2 = tk.Frame(parent, bg=S.BG2); ef2.pack(fill='x', padx=6, pady=(0, 2))
-            btn_export = tk.Button(
-                ef2,
-                text            = "▼  EXPORT AUDIO…",
-                font            = S.FN_S,
-                fg              = S.BG,
-                bg              = S.CYAN,
-                bd              = 0,
-                padx            = 10,
-                pady            = 6,
-                relief          = 'flat',
-                cursor          = 'hand2',
-                activeforeground= S.BG,
-                activebackground= S.GREEN,
-                command         = self._open_export_dialog,
-            )
-            btn_export.pack(fill='x', padx=2, ipady=2)
 
         lf = self._section(parent, "CONSOLE", S.TXT_DIM)
         self.log_text = tk.Text(lf, font=S.FN_X, bg=S.BG, fg=S.TXT_DIM,
@@ -1031,6 +1014,7 @@ class SeedComposerApp:
                 status_fn            = self._set_status,
                 app_dir              = APP_DIR,
                 save_pdf_fn          = self._export_advisor_pdf,
+                export_audio_fn      = self._open_export_dialog_for_wav,
                 get_muted_tracks_fn  = (
                     self._instrument_builder.get_muted_tracks
                     if self._instrument_builder is not None else None
@@ -2165,6 +2149,23 @@ class SeedComposerApp:
             parent      = self.root,
             styles      = S,
             source_wav  = self.current_wav_path,
+            composition = self.current_composition,
+            gen_number  = self.generation_counter,
+            log_fn      = self._log,
+        )
+
+    def _open_export_dialog_for_wav(self, wav_path: str) -> None:
+        """Open the export dialog for an arbitrary wav_path (used by AdvisorActionsBar)."""
+        if not EXPORT_DIALOG_AVAILABLE:
+            self._log("Export dialog not available.")
+            return
+        if not wav_path or not os.path.exists(wav_path):
+            messagebox.showinfo("No audio", "No rendered WAV found.")
+            return
+        ExportDialog(
+            parent      = self.root,
+            styles      = S,
+            source_wav  = wav_path,
             composition = self.current_composition,
             gen_number  = self.generation_counter,
             log_fn      = self._log,

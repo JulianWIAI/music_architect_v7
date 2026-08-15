@@ -133,16 +133,33 @@ class FxVariantPanel:
         variants   = FxChainSelector.get_all_variants(genre)
         active_v   = FxChainSelector.get_variant(genre, variant_id)
 
-        # ── Update each button: highlight active, dim others ──────────
+        # ── Update each button: colored fill when active, dim text when inactive ──
         for vid, btn in self._btns.items():
             is_active = (vid == variant_id)
             color = _VARIANT_COLORS.get(vid, self._S.CYAN)
-            btn.configure(
-                relief="solid" if is_active else "flat",
-                bd=1 if is_active else 0,
-                fg=color if is_active else self._S.TXT_DIM,
-                highlightbackground=color if is_active else self._S.BG3,
-            )
+            if is_active:
+                # Active: solid colored background so it's unmistakably selected
+                btn.configure(
+                    relief              = 'flat',
+                    bd                  = 0,
+                    fg                  = self._S.BG,        # dark text on colored bg
+                    bg                  = color,
+                    activeforeground    = self._S.BG,
+                    activebackground    = color,
+                    highlightthickness  = 0,
+                )
+            else:
+                # Inactive: dark button background, dim colored text
+                btn.configure(
+                    relief              = 'flat',
+                    bd                  = 0,
+                    fg                  = self._S.TXT_DIM,
+                    bg                  = self._S.BG_BTN,
+                    activeforeground    = self._S.TXT_BRT,
+                    activebackground    = self._S.BG_BTN_ACT,
+                    highlightthickness  = 1,
+                    highlightbackground = color,
+                )
 
         # ── Active variant description ────────────────────────────────
         self._desc_lbl.config(
@@ -203,7 +220,7 @@ class FxVariantPanel:
                 btn_row,
                 text=label,
                 font=S.FN_S,
-                fg=color,
+                fg=S.TXT_DIM,
                 bg=S.BG_BTN,
                 activeforeground=S.TXT_BRT,
                 activebackground=S.BG_BTN_ACT,
@@ -215,8 +232,14 @@ class FxVariantPanel:
                 highlightbackground=color,
                 command=lambda v_id=vid: self._on_click(v_id),
             )
-            btn.bind("<Enter>", lambda e, b=btn: b.configure(bg=S.BG_BTN_HOV))
-            btn.bind("<Leave>", lambda e, b=btn: b.configure(bg=S.BG_BTN))
+            # Hover: only brighten bg when the button is NOT the active one;
+            # refresh() will re-apply the correct bg after every click.
+            btn.bind("<Enter>", lambda e, b=btn, c=color: (
+                b.configure(bg=S.BG_BTN_HOV) if b.cget('bg') != c else None
+            ))
+            btn.bind("<Leave>", lambda e, b=btn, c=color: (
+                b.configure(bg=S.BG_BTN) if b.cget('bg') != c else None
+            ))
             btn.pack(side="left", padx=4)
             ToolTip(btn, TOOLTIPS.get(f'advisor_variant_{vid}', ''))
             self._btns[vid] = btn
@@ -251,6 +274,10 @@ class FxVariantPanel:
     # ------------------------------------------------------------------
 
     def _on_click(self, variant_id: str) -> None:
-        """Variant button was clicked — notify app and refresh highlights."""
+        """
+        Variant button was clicked — notify the app.
+
+        _on_variant_change (in app.py) already calls self.refresh() at the end,
+        so we do NOT call it a second time here to avoid a redundant update.
+        """
         self._on_variant_change(variant_id)
-        self.refresh()

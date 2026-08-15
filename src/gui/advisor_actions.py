@@ -145,6 +145,7 @@ class AdvisorActionsBar(tk.Frame):
         status_fn:          Callable[[str, str], None],
         app_dir:            str,
         save_pdf_fn:        Optional[Callable[[], None]] = None,
+        export_audio_fn:    Optional[Callable[[str], None]] = None,
         get_muted_tracks_fn: Optional[Callable[[], set]] = None,
     ) -> None:
         super().__init__(parent, bg=styles.BG2)
@@ -159,6 +160,8 @@ class AdvisorActionsBar(tk.Frame):
         self._status             = status_fn
         self._app_dir            = app_dir
         self._save_pdf           = save_pdf_fn
+        # Called with the rendered WAV path to open the multi-format export dialog.
+        self._export_audio       = export_audio_fn
         # Returns set of track keys to silence in the next preview render.
         self._get_muted_tracks   = get_muted_tracks_fn or (lambda: set())
 
@@ -207,12 +210,13 @@ class AdvisorActionsBar(tk.Frame):
         self._btn_preview.pack(side='left', padx=(0, 4))
         ToolTip(self._btn_preview, TOOLTIPS['advisor_preview'])
 
-        # ⬇ SAVE WAV — enabled only after a successful FluidSynth render
-        self._btn_wav = _btn(
-            "⬇  SAVE WAV", S.ORANGE, self._on_save_wav, disabled=True
+        # ⬇ EXPORT AUDIO — enabled only after a successful FluidSynth render;
+        # opens the multi-format dialog (WAV/MP3/FLAC/OGG) instead of a plain save.
+        self._btn_export = _btn(
+            "⬇  EXPORT AUDIO…", S.ORANGE, self._on_export_audio, disabled=True
         )
-        self._btn_wav.pack(side='left', padx=(0, 4))
-        ToolTip(self._btn_wav, TOOLTIPS['advisor_save_wav'])
+        self._btn_export.pack(side='left', padx=(0, 4))
+        ToolTip(self._btn_export, TOOLTIPS.get('advisor_save_wav', 'Export rendered audio in multiple formats'))
 
         # ⬇ STANDARD MIDI — enabled as soon as the MIDI file is written
         self._btn_midi = _btn(
@@ -437,7 +441,7 @@ class AdvisorActionsBar(tk.Frame):
 
         # WAV path is set → FluidSynth succeeded
         if wav_path and os.path.exists(wav_path):
-            self._btn_wav.config(state=tk.NORMAL)
+            self._btn_export.config(state=tk.NORMAL)
             self._player.play_wav(wav_path)
             self._status("ADVISOR PREVIEW  ▶  PLAYING (WAV)", self._S.CYAN)
 
@@ -476,19 +480,23 @@ class AdvisorActionsBar(tk.Frame):
 
     # ── Save dialogs ──────────────────────────────────────────────────────────
 
-    def _on_save_wav(self) -> None:
-        """Open a save dialog and copy the advisor WAV to the chosen path."""
+    def _on_export_audio(self) -> None:
+        """Open the multi-format export dialog for the advisor preview WAV."""
         if not self._wav_path or not os.path.exists(self._wav_path):
             return
-        dest = filedialog.asksaveasfilename(
-            defaultextension=".wav",
-            filetypes=[("WAV audio", "*.wav")],
-            initialfile="advisor_preview.wav",
-        )
-        if dest:
-            shutil.copy2(self._wav_path, dest)
-            self._log(f"Advisor WAV → {dest}")
-            self._status("WAV SAVED", self._S.GREEN)
+        if self._export_audio is not None:
+            self._export_audio(self._wav_path)
+        else:
+            # Fallback: plain WAV copy if the export dialog isn't available.
+            dest = filedialog.asksaveasfilename(
+                defaultextension=".wav",
+                filetypes=[("WAV audio", "*.wav")],
+                initialfile="advisor_preview.wav",
+            )
+            if dest:
+                shutil.copy2(self._wav_path, dest)
+                self._log(f"Advisor WAV → {dest}")
+                self._status("WAV SAVED", self._S.GREEN)
 
     def _on_save_midi(self) -> None:
         """
