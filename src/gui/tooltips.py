@@ -303,4 +303,16 @@ TOOLTIPS: dict[str, str] = {
         "  GeneralUser GS   → pop · j-pop · edm · house\n"
         "  Arachno SF v1.0  → cinematic · classical"
     ),
+    'advisor_sf_pro': (
+        "Professional SoundFont mode.\n"
+        "Applies the full mastering chain: genre EQ, bus compressor,\n"
+        "LUFS normalisation, and true-peak limiter.\n"
+        "Use for high-quality GM fonts (Crisis, SGM, MuseScore General, etc.)."
+    ),
+    'advisor_sf_retro': (
+        "Retro / Game SoundFont mode.\n"
+        "Bypasses the mastering chain and reduces gain so that 8-bit\n"
+        "game SoundFonts (Mario, SNES-era, etc.) do not clip or distort.\n"
+        "Chorus and reverb are also tamed to avoid harsh beating artifacts."
+    ),
 }

@@ -9,7 +9,7 @@ Pipeline (in order):
   5. M/S Processing (side HPF + stereo width shelf, stereo only)
   6. LUFS Normalisation (ITU-R BS.1770-4) to target platform
   7. Limiter (true-peak ceiling from target preset)
-  8. Write 24-bit WAV (vectorised, no Python loop)
+  8. Write 24-bit WAV via AudioWriter (libsndfile + TPDF dithering)
 
 The main entry point is MasteringChain().process(...).
 """
@@ -24,12 +24,26 @@ from typing import Optional, Tuple
 
 import numpy as np
 
+from src.audio_io.audio_format import AudioFormat, BitDepth, OutputSpec
+from src.audio_io.audio_writer import AudioWriter
 from src.dsp.compressor import Compressor, Limiter
 from src.dsp.equalizer import build_genre_eq
 from src.dsp.loudness import measure_lufs, normalize_to_lufs
 from src.dsp.mastering_targets import TARGETS, MasteringTarget
 from src.dsp.ms_processor import from_genre_data as ms_from_genre
 from src.dsp.parallel_compression import from_genre_data as pc_from_genre
+
+# ── Mastering-chain AudioWriter ────────────────────────────────────────────────
+# Shared instance configured for 24-bit WAV with TPDF dithering.
+# Using a module-level singleton avoids re-constructing the writer on every
+# process() call while remaining thread-safe (AudioWriter is stateless).
+_mastering_writer = AudioWriter(
+    OutputSpec(
+        format=AudioFormat.WAV,
+        bit_depth=BitDepth.INT_24,   # 24-bit — mastering standard
+        apply_dither=True,           # TPDF dither on float→int quantisation
+    )
+)
 
 # ── Genre JSON directory ───────────────────────────────────────────────────────
 _GENRE_JSON_DIR = Path(__file__).parent.parent.parent / 'data' / 'production_guide' / 'json'
@@ -100,46 +114,6 @@ def _read_wav_float32(path: str) -> Tuple[np.ndarray, int]:
     return samples, sr
 
 
-def _write_wav_float32(
-    path:      str,
-    samples:   np.ndarray,
-    sr:        int,
-    bit_depth: int = 24,
-) -> None:
-    """
-    Write *samples* (float32) to a WAV file at *path*.
-
-    Supports 16-bit (int16) and 24-bit (packed, vectorised) output.
-    The 24-bit packer uses only numpy operations — no Python sample loop.
-    """
-    flat = samples.flatten().astype(np.float32)
-    n_ch = samples.shape[1] if samples.ndim == 2 else 1
-
-    if bit_depth == 24:
-        # ── Vectorised 24-bit packing ──────────────────────────────────────────
-        # Scale float → int32, clamp to 24-bit range
-        vals = (flat * 8_388_607.0).clip(-8_388_608, 8_388_607).astype(np.int32)
-
-        buf          = np.empty(len(vals) * 3, dtype=np.uint8)
-        buf[0::3]    = (vals         & 0xFF).astype(np.uint8)  # LSB
-        buf[1::3]    = ((vals >>  8) & 0xFF).astype(np.uint8)  # middle byte
-        buf[2::3]    = ((vals >> 16) & 0xFF).astype(np.uint8)  # MSB (sign here)
-        raw_bytes    = buf.tobytes()
-        sw           = 3
-
-    elif bit_depth == 16:
-        vals      = (flat * 32767.0).clip(-32768, 32767).astype(np.dtype('<i2'))
-        raw_bytes = vals.tobytes()
-        sw        = 2
-
-    else:
-        raise ValueError(f"Unsupported bit depth: {bit_depth}")
-
-    with wave.open(path, 'wb') as wf:
-        wf.setnchannels(n_ch)
-        wf.setsampwidth(sw)
-        wf.setframerate(sr)
-        wf.writeframes(raw_bytes)
 
 
 # ── Mastering chain ────────────────────────────────────────────────────────────
@@ -225,15 +199,18 @@ class MasteringChain:
             samples = Limiter(ceiling_db=target.true_peak_dbfs).process(samples, sr)
 
             # ── 9. Write output WAV ────────────────────────────────────────────
+            # AudioWriter uses libsndfile for 24-bit output with TPDF dithering,
+            # replacing the old vectorised manual 24-bit packer.
             if wav_in == wav_out:
-                # In-place: write to a temp file then atomically move
-                tmp_fd, tmp_path = tempfile.mkstemp(suffix='.wav')
+                # In-place: write to a temp file then atomically move so that
+                # the source file is never partially overwritten on failure.
                 import os
+                tmp_fd, tmp_path = tempfile.mkstemp(suffix='.wav')
                 os.close(tmp_fd)
-                _write_wav_float32(tmp_path, samples, sr, bit_depth=24)
+                _mastering_writer.write(tmp_path, samples, sample_rate=sr)
                 shutil.move(tmp_path, wav_out)
             else:
-                _write_wav_float32(wav_out, samples, sr, bit_depth=24)
+                _mastering_writer.write(wav_out, samples, sample_rate=sr)
 
             # ── 10. Measure final loudness and compose status message ──────────
             final_lufs = measure_lufs(samples, sr)

@@ -12,7 +12,33 @@ Output is a list of (text, tag) pairs compatible with the advisor's A() helper
 so colours are applied consistently with the rest of the advisor panel.
 """
 
+import re
 from typing import List, Tuple, Dict, Any
+
+
+def _parse_hz(value, default: int) -> int:
+    """
+    Safely convert a frequency value to int.
+
+    Handles plain numbers as well as sweep-notation strings like '400->30'
+    that appear in some genre JSON files (the first integer in the string is
+    used as the representative frequency).
+
+    Args:
+        value:   Raw value from the genre JSON (int, float, or str).
+        default: Fallback when the value is falsy or contains no digits.
+
+    Returns:
+        int: Parsed frequency in Hz, or *default* if parsing fails.
+    """
+    if not value:
+        return default
+    # Already a number — fast path
+    if isinstance(value, (int, float)):
+        return int(value)
+    # String path: extract the first run of digits (e.g. '400->30' → 400)
+    m = re.search(r'\d+', str(value))
+    return int(m.group()) if m else default
 
 # Canonical bands: (label, lo_hz, hi_hz)
 _BANDS: List[Tuple[str, int, int]] = [
@@ -115,8 +141,8 @@ def build_spectral_chart(
     lines.append(('  ' + '─' * (12 + (_BAR_WIDTH + 1) * len(_BANDS)) + '\n', 'dim'))
 
     for track, fdata in freq_data.items():
-        hpf = int(fdata.get('hpf_hz', 20) or 20)
-        lpf = int(fdata.get('lpf_hz', 20000) or 20000)
+        hpf = _parse_hz(fdata.get('hpf_hz', 20), default=20)
+        lpf = _parse_hz(fdata.get('lpf_hz', 20000), default=20000)
         dom_text = fdata.get('dominant_zone', '')
         dom_idx = _infer_dominant(dom_text, hpf, lpf)
         cells = _band_mask(hpf, lpf, dom_idx)

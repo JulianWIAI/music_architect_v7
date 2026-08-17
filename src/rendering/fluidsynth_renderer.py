@@ -17,12 +17,53 @@ playing through speakers).  With `-a null` it writes the WAV at CPU speed
 """
 
 import os
+import shutil
 import subprocess
 import threading
 from typing import Optional
 
 from src.rendering.soundfont_library import SoundFontLibrary
 from src.rendering.fluidsynth_variant_params import build_fluidsynth_args
+
+
+def _find_fluidsynth() -> Optional[str]:
+    """
+    Locate the FluidSynth executable, returning the full path or None.
+
+    macOS GUI apps (launched from PyCharm, Finder, or the Dock) receive a
+    stripped PATH that excludes Homebrew's prefix, so a bare ``shutil.which``
+    call often fails even when FluidSynth is installed.  This function tries
+    several locations in priority order:
+
+    1. ``shutil.which('fluidsynth')``  — works when PATH is correct (terminal)
+    2. ``/opt/homebrew/bin/fluidsynth``  — Homebrew on Apple Silicon (M1/M2/M3)
+    3. ``/usr/local/bin/fluidsynth``     — Homebrew on Intel Mac / manual install
+    4. ``/usr/bin/fluidsynth``           — system-wide install (rare)
+
+    Returns
+    -------
+    str | None
+        Full executable path if a working binary is found; None otherwise.
+    """
+    # Priority 1: respect whatever PATH the process has
+    via_path = shutil.which('fluidsynth')
+    if via_path:
+        return via_path
+
+    # Priority 2-4: hardcoded Homebrew / system fallbacks for GUI-launched apps
+    for candidate in (
+        '/opt/homebrew/bin/fluidsynth',   # Apple Silicon Homebrew
+        '/usr/local/bin/fluidsynth',      # Intel Homebrew / manual
+        '/usr/bin/fluidsynth',            # system package managers
+    ):
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+
+    return None
+
+
+# Resolved once at import time — avoids repeated filesystem lookups.
+_FLUIDSYNTH_EXE: Optional[str] = _find_fluidsynth()
 
 try:
     from src.dsp.mastering_chain import MasteringChain
@@ -53,6 +94,9 @@ class FluidSynthRenderer:
         )
         self._variant: str = 'neutral'
         self._genre: str = ''
+        # 'professional' → full mastering chain, full gain (default).
+        # 'retro'        → mastering bypassed, gain capped at 0.50.
+        self._font_type: str = 'professional'
         self._library = SoundFontLibrary()
         self._current_proc: Optional[subprocess.Popen] = None
         self._proc_lock = threading.Lock()
@@ -60,16 +104,20 @@ class FluidSynthRenderer:
     # ── Availability ──────────────────────────────────────────────────────────
 
     def is_available(self) -> bool:
-        """Return True if FluidSynth is on PATH and at least one SF2 is accessible."""
+        """
+        Return True if a FluidSynth executable and at least one SF2 are found.
+
+        Uses the module-level _FLUIDSYNTH_EXE resolved at import time, which
+        searches Homebrew paths so the check works even when the app is launched
+        from PyCharm or the macOS Dock (which strips the shell PATH).
+        """
+        if _FLUIDSYNTH_EXE is None:
+            return False
         try:
             result = subprocess.run(
-                ['fluidsynth', '--version'],
+                [_FLUIDSYNTH_EXE, '--version'],
                 capture_output=True, timeout=5,
             )
-            # Count an override as available even before the path is existence-
-            # checked — render() will fall back to the library if the file is
-            # missing.  This keeps is_available() consistent with set_override()
-            # which now stores the path unconditionally.
             has_sf2 = self._override is not None or self._library.any_available
             return result.returncode == 0 and has_sf2
         except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -88,6 +136,21 @@ class FluidSynthRenderer:
     def set_genre(self, genre: str) -> None:
         """Store the genre so build_fluidsynth_args() selects the matching FX profile."""
         self._genre = genre or ''
+
+    def set_font_type(self, font_type: str) -> None:
+        """
+        Set how the custom override SoundFont should be processed.
+
+        'professional' — full mastering chain, standard gain.  Use for
+                         high-quality GM fonts (Crisis 3.51, SGM, etc.).
+        'retro'        — mastering chain bypassed, gain capped at 0.50,
+                         chorus and reverb tamed.  Use for game / 8-bit
+                         SoundFonts that clip or distort at full settings.
+
+        Has no effect when no override is set (genre-routed fonts always
+        use the full pipeline regardless of this setting).
+        """
+        self._font_type = font_type if font_type in ('professional', 'retro') else 'professional'
 
     def set_override(self, path: Optional[str]) -> None:
         """
@@ -166,9 +229,20 @@ class FluidSynthRenderer:
         # Placing -F / -r / -g after sf2 / midi_path causes FluidSynth to
         # ignore those flags, produce no WAV output, and exit non-zero —
         # which silently triggers the MIDI-playback fallback in the caller.
-        variant_flags, gain = build_fluidsynth_args(self._variant, self._genre)
+        #
+        # override_mode=True only when the user loaded a custom SoundFont AND
+        # marked it as 'retro' (game / 8-bit).  Retro mode caps gain at 0.50
+        # and tames chorus/reverb so hot game-font samples don't clip.
+        # Professional custom fonts (Crisis 3.51, SGM, etc.) keep full gain
+        # and the full mastering chain regardless of being an override.
+        using_override = (
+            self._override is not None and self._font_type == 'retro'
+        )
+        variant_flags, gain = build_fluidsynth_args(
+            self._variant, self._genre, override_mode=using_override
+        )
         cmd = [
-            'fluidsynth',
+            _FLUIDSYNTH_EXE,
             '-ni',                   # non-interactive, no MIDI input
             '-a', 'null',            # null audio driver — fast, no speaker output
             '-F', wav_path,          # output WAV file  (must come before positional args)
@@ -197,7 +271,16 @@ class FluidSynthRenderer:
             wav_ok = proc.returncode == 0 and os.path.exists(wav_path)
             # Apply mastering chain in-place on the preview WAV so that
             # both listening and export reflect the full production sound.
-            if wav_ok and _MASTERING_AVAILABLE:
+            #
+            # The mastering chain (compressor, LUFS normaliser, true-peak
+            # limiter) was calibrated for professional SoundFonts (Fluid R3,
+            # GeneralUser GS, Arachno).  Applying it to custom/game SoundFonts
+            # (e.g. Mario) that are already hot and timbrely distinct causes
+            # heavy over-compression — the classic "broken speaker / airport PA"
+            # artefact.  When the user has loaded an override font we skip the
+            # mastering chain so the raw FluidSynth output (already tamed by
+            # the reduced gain/chorus in override_mode) is written unmodified.
+            if wav_ok and _MASTERING_AVAILABLE and not using_override:
                 try:
                     chain = MasteringChain()
                     ok_m, msg_m = chain.process(

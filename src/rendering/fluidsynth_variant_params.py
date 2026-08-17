@@ -419,6 +419,7 @@ _FALLBACK: Dict[str, dict] = {
 def build_fluidsynth_args(
     variant_id: str,
     genre: str = '',
+    override_mode: bool = False,
 ) -> Tuple[List[str], float]:
     """
     Return (option_flags, gain) for *variant_id* and *genre*.
@@ -429,6 +430,22 @@ def build_fluidsynth_args(
 
     gain is the float for the -g master-gain flag.
 
+    Parameters
+    ----------
+    variant_id : str
+        Timbral variant ('bright', 'neutral', 'dark').
+    genre : str
+        Genre key used to select the appropriate parameter table.
+    override_mode : bool
+        True when the user has loaded a custom override SoundFont (e.g. a
+        game SoundFont such as Mario).  Game SoundFonts have their samples
+        mastered hot internally, so the normal gain values (0.80–1.00) cause
+        clipping.  High chorus levels (up to 2.80) also cause harsh beating
+        with square/triangle waves.  In override mode:
+          - gain is capped at 0.50 (avoids output clipping)
+          - chorus.level is capped at 0.60 (removes harsh intermodulation)
+          - reverb.level is capped at 0.55 (prevents muddy wash)
+
     Unknown variant_id falls back to 'neutral'.
     Unknown genre uses the generic fallback table.
     """
@@ -436,10 +453,23 @@ def build_fluidsynth_args(
     params      = genre_table.get(variant_id, genre_table.get('neutral', _FALLBACK['neutral']))
     gain        = float(params.get('gain', 0.80))
 
+    if override_mode:
+        # Custom/game SoundFonts clip at full gain — keep headroom.
+        gain = min(gain, 0.50)
+
     flags: List[str] = []
     for key, value in params.items():
         if key == 'gain':
             continue
+
+        # Tame chorus and reverb for custom SoundFonts that are already
+        # heavily processed or have strong built-in timbres.
+        if override_mode:
+            if key == 'synth.chorus.level':
+                value = min(float(value), 0.60)
+            elif key == 'synth.reverb.level':
+                value = min(float(value), 0.55)
+
         if isinstance(value, int):
             flags += ['-o', f'{key}={value}']
         else:

@@ -45,6 +45,11 @@ _SF2_SEARCH: Dict[str, List[str]] = {
         '/usr/share/sounds/sf2/FluidR3_GM.sf2',
         '/usr/share/soundfonts/FluidR3_GM.sf2',
         os.path.expanduser('~/soundfonts/FluidR3_GM.sf2'),
+        # macOS Homebrew fallback — FluidSynth ships VintageDreams as its
+        # bundled SF2.  The /opt/homebrew/share path is version-independent
+        # (Homebrew maintains it as a stable symlink to the latest Cellar).
+        '/opt/homebrew/share/fluid-synth/sf2/VintageDreamsWaves-v2.sf2',
+        '/usr/local/share/fluid-synth/sf2/VintageDreamsWaves-v2.sf2',
     ],
     'generaluser': [
         # Exact installed filename first, then common variants
@@ -58,6 +63,9 @@ _SF2_SEARCH: Dict[str, List[str]] = {
         os.path.expanduser(r'~\soundfonts\GeneralUser_GS.sf2'),
         os.path.expanduser(r'~\Downloads\GeneralUser GS v1.472.sf2'),
         os.path.expanduser('~/soundfonts/GeneralUser_GS.sf2'),
+        # macOS Homebrew fallback
+        '/opt/homebrew/share/fluid-synth/sf2/VintageDreamsWaves-v2.sf2',
+        '/usr/local/share/fluid-synth/sf2/VintageDreamsWaves-v2.sf2',
     ],
     'arachno': [
         r'C:\SoundFonts\Arachno SoundFont - Version 1.0.sf2',
@@ -65,6 +73,9 @@ _SF2_SEARCH: Dict[str, List[str]] = {
         r'C:\SoundFonts\Arachno.sf2',
         os.path.expanduser(r'~\soundfonts\Arachno SoundFont - Version 1.0.sf2'),
         os.path.expanduser('~/soundfonts/Arachno SoundFont - Version 1.0.sf2'),
+        # macOS Homebrew fallback
+        '/opt/homebrew/share/fluid-synth/sf2/VintageDreamsWaves-v2.sf2',
+        '/usr/local/share/fluid-synth/sf2/VintageDreamsWaves-v2.sf2',
     ],
 }
 

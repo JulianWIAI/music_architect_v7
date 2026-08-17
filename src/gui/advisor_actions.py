@@ -88,6 +88,7 @@ from typing import Callable, Optional
 
 import tkinter as tk
 from src.gui.tooltips import ToolTip, TOOLTIPS
+from src.rendering.wav_renderer import WAVRenderer as _WAVRenderer
 
 
 class AdvisorActionsBar(tk.Frame):
@@ -178,66 +179,131 @@ class AdvisorActionsBar(tk.Frame):
 
     # ── UI construction ───────────────────────────────────────────────────────
 
-    def _build_ui(self) -> None:
-        """Create the visual separator and four-button action row."""
-        S = self._S
+    # ── Button colour registry ────────────────────────────────────────────────
+    # Stores (active_bg, active_fg, hover_bg) for each managed button so that
+    # _enable_btn() can restore the correct colour after a disable/enable cycle.
+    # Keys are tk.Button instances set during _build_ui().
+    _btn_palette: dict = {}
 
-        # Thin line separating the InstrumentBuilder from this strip
+    @staticmethod
+    def _lighten(hex_col: str, factor: float = 1.22) -> str:
+        """Return a lightened hex colour for hover states."""
+        r = min(255, int(int(hex_col[1:3], 16) * factor))
+        g = min(255, int(int(hex_col[3:5], 16) * factor))
+        b = min(255, int(int(hex_col[5:7], 16) * factor))
+        return f'#{r:02x}{g:02x}{b:02x}'
+
+    def _enable_btn(self, btn: tk.Button) -> None:
+        """Restore a button to its active colour scheme and enable clicks."""
+        # Palette stores (bg, fg, bg_hover, accent) — accent is the highlight border colour.
+        entry = self._btn_palette.get(btn, (self._S.BG_BTN, self._S.TXT_BRT, self._S.BG_BTN_HOV, self._S.BG3))
+        bg, fg, bg_h, accent = entry
+        btn.config(state=tk.NORMAL, bg=bg, fg=fg, cursor='hand2',
+                   highlightbackground=accent)
+        btn.bind('<Enter>', lambda e, _b=btn, _h=bg_h: _b.config(bg=_h))
+        btn.bind('<Leave>', lambda e, _b=btn, _bg=bg: _b.config(bg=_bg))
+
+    def _disable_btn(self, btn: tk.Button) -> None:
+        """Grey out a button and remove hover effects."""
+        btn.config(state=tk.DISABLED, bg=self._S.BG_BTN, fg=self._S.TXT_DIM,
+                   cursor='arrow', highlightbackground=self._S.BG3)
+        btn.unbind('<Enter>')
+        btn.unbind('<Leave>')
+
+    def _build_ui(self) -> None:
+        """
+        Create the separator and five action buttons.
+
+        Matches the _cbtn pattern used by the rest of the app:
+          bg=BG_BTN (dark), fg=TXT_BRT (bright white), bd=0,
+          highlightthickness=1, highlightbackground=accent colour.
+
+        This renders correctly on macOS (which overrides relief='flat' with
+        native Aqua styling, turning coloured backgrounds light grey and
+        making white text unreadable).  By keeping the dark BG_BTN fill and
+        using a coloured 1px border for identity, each button is clearly
+        legible on both macOS Retina and Windows.
+        """
+        S = self._S
+        self._btn_palette = {}   # reset on re-build (shouldn't happen but be safe)
+
+        # Thin divider line
         tk.Frame(self, bg=S.BG3, height=1).pack(fill='x', pady=(4, 0))
 
         row = tk.Frame(self, bg=S.BG2)
-        row.pack(fill='x', pady=(3, 3))
+        row.pack(fill='x', pady=(5, 5), padx=2)
 
-        def _btn(text, color, cmd, disabled=False):
-            """Helper: create a styled button matching the app's _cbtn style."""
+        # Per-button accent colour used for BOTH fg text AND the 1px highlight
+        # border.  This matches the app's _cbtn pattern: coloured text on a dark
+        # bg reads correctly on macOS (where Aqua overrides bg to native light
+        # grey — white text would disappear, coloured text remains visible).
+        # Colours are mid-saturation muted tones — not neon — so they look
+        # professional on Retina and Windows displays alike.
+        _ACCENT = {
+            'preview': S.CYAN,    # steel blue  — primary listen/render action
+            'export':  S.ORANGE,  # muted amber — audio file export
+            'midi':    S.PURPLE,  # muted violet — MIDI output
+            'vocal':   S.PINK,    # muted rose  — vocal scaffold
+            'pdf':     S.GREEN,   # muted sage  — document export
+        }
+
+        def _btn(key: str, text: str, cmd, disabled: bool = False) -> tk.Button:
+            """
+            Create an action button matching the app's _cbtn style.
+
+            fg = accent colour — readable on dark BG_BTN AND on macOS native
+            light-grey button face (Aqua theme overrides bg but not fg).
+            highlightbackground = same accent — 1px coloured border for identity.
+            """
+            accent = _ACCENT[key]
             b = tk.Button(
-                row, text=text,
-                font=S.FN_S, fg=color, bg=S.BG_BTN,
-                relief='flat', cursor='hand2', pady=2,
-                highlightthickness=1, highlightbackground=color,
-                activeforeground=S.TXT_BRT, activebackground=S.BG_BTN_ACT,
+                row,
+                text=text,
+                font=('Consolas', 10, 'bold'),
+                fg=S.TXT_DIM if disabled else accent,
+                bg=S.BG_BTN,
+                activeforeground=S.TXT_BRT,
+                activebackground=S.BG_BTN_ACT,
+                bd=0,
+                padx=14, pady=6,
+                cursor='arrow' if disabled else 'hand2',
+                highlightthickness=1,
+                highlightbackground=S.BG3 if disabled else accent,
                 state=tk.DISABLED if disabled else tk.NORMAL,
                 command=cmd,
+                disabledforeground=S.TXT_DIM,
             )
-            b.bind('<Enter>', lambda e, b=b: b.config(bg=S.BG_BTN_HOV))
-            b.bind('<Leave>', lambda e, b=b: b.config(bg=S.BG_BTN))
+            # Store (bg, fg, hover_bg, accent) so _enable_btn() can fully restore.
+            self._btn_palette[b] = (S.BG_BTN, accent, S.BG_BTN_HOV, accent)
+
+            if not disabled:
+                b.bind('<Enter>', lambda e, _b=b: _b.config(bg=S.BG_BTN_HOV))
+                b.bind('<Leave>', lambda e, _b=b: _b.config(bg=S.BG_BTN))
             return b
 
         # ▶ PREVIEW — always active once engine is loaded
-        self._btn_preview = _btn(
-            "▶  PREVIEW WITH INSTRUMENTS", S.CYAN, self._on_preview
-        )
-        self._btn_preview.pack(side='left', padx=(0, 4))
+        self._btn_preview = _btn('preview', '▶  PREVIEW WITH INSTRUMENTS', self._on_preview)
+        self._btn_preview.pack(side='left', padx=(0, 3))
         ToolTip(self._btn_preview, TOOLTIPS['advisor_preview'])
 
-        # ⬇ EXPORT AUDIO — enabled only after a successful FluidSynth render;
-        # opens the multi-format dialog (WAV/MP3/FLAC/OGG) instead of a plain save.
-        self._btn_export = _btn(
-            "⬇  EXPORT AUDIO…", S.ORANGE, self._on_export_audio, disabled=True
-        )
-        self._btn_export.pack(side='left', padx=(0, 4))
+        # ⬇ EXPORT AUDIO — enabled after successful render
+        self._btn_export = _btn('export', '⬇  EXPORT AUDIO…', self._on_export_audio, disabled=True)
+        self._btn_export.pack(side='left', padx=(0, 3))
         ToolTip(self._btn_export, TOOLTIPS.get('advisor_save_wav', 'Export rendered audio in multiple formats'))
 
         # ⬇ STANDARD MIDI — enabled as soon as the MIDI file is written
-        self._btn_midi = _btn(
-            "⬇  STANDARD MIDI", S.PURPLE, self._on_save_midi, disabled=True
-        )
-        self._btn_midi.pack(side='left', padx=(0, 4))
+        self._btn_midi = _btn('midi', '⬇  STANDARD MIDI', self._on_save_midi, disabled=True)
+        self._btn_midi.pack(side='left', padx=(0, 3))
         ToolTip(self._btn_midi, TOOLTIPS['advisor_save_midi'])
 
         # ⬇ VOCAL MIDI — enabled when vocal-ready was included in the preview
-        self._btn_vocal = _btn(
-            "⬇  VOCAL MIDI", S.PINK, self._on_save_vocal_midi, disabled=True
-        )
-        self._btn_vocal.pack(side='left', padx=(0, 4))
+        self._btn_vocal = _btn('vocal', '⬇  VOCAL MIDI', self._on_save_vocal_midi, disabled=True)
+        self._btn_vocal.pack(side='left', padx=(0, 3))
         ToolTip(self._btn_vocal, TOOLTIPS['advisor_save_vocal_midi'])
 
-        # ⬇ EXPORT PDF — present only when the app injects save_pdf_fn.
-        # Always enabled: the PDF is built from advisor state, not a render.
+        # ⬇ EXPORT PDF — present only when the app injects save_pdf_fn
         if self._save_pdf is not None:
-            self._btn_pdf = _btn(
-                "⬇  EXPORT PDF", S.YELLOW, self._save_pdf
-            )
+            self._btn_pdf = _btn('pdf', '⬇  EXPORT PDF', self._save_pdf)
             self._btn_pdf.pack(side='left')
             ToolTip(self._btn_pdf, TOOLTIPS['advisor_export_pdf'])
 
@@ -385,6 +451,36 @@ class AdvisorActionsBar(tk.Frame):
                 self.after(0, self._log,
                            "  [2/3] FluidSynth not available — using MIDI playback.")
 
+            # ── Phase 2b: built-in synth fallback ──────────────────────────
+            # When FluidSynth is unavailable or failed, render via the
+            # built-in synthesiser so the ⬇ EXPORT AUDIO button is enabled
+            # and playback is deterministic (same seed → same audio every time).
+            # Progress is logged every 500 events so the user sees activity
+            # during the (potentially slow) pure-Python synthesis pass.
+            if wav_path is None:
+                self.after(0, self._log,
+                           "  [2/3] Built-in synth fallback — rendering WAV "
+                           "(may take ~30 s without C++ extension)…")
+                _builtin_wav = str(temp_dir / "advisor_preview.wav")
+                _last_logged = [0]
+
+                def _adv_progress(done, total, _self=self, _ll=_last_logged):
+                    # Log at most once per 500 events to avoid flooding the panel
+                    if done - _ll[0] >= 500 or done == total:
+                        _ll[0] = done
+                        _self.after(0, _self._log,
+                                    f"  [2/3] Synthesising… {done}/{total} events")
+
+                try:
+                    _WAVRenderer().render_composition_to_wav(
+                        comp, _builtin_wav, progress_callback=_adv_progress)
+                    wav_path = _builtin_wav
+                    self.after(0, self._log,
+                               "  [2/3] Built-in synth WAV ready.")
+                except Exception as _e:
+                    self.after(0, self._log,
+                               f"  [2/3] Built-in synth render failed: {_e}")
+
             # ── Phase 3: vocal-ready MIDI ───────────────────────────────────
             vocal_mid_path: Optional[str] = None
             if want_vocal:
@@ -417,7 +513,7 @@ class AdvisorActionsBar(tk.Frame):
         """
         self._midi_path = mid_path
         if os.path.exists(mid_path):
-            self._btn_midi.config(state=tk.NORMAL)
+            self._enable_btn(self._btn_midi)
 
     def _on_render_done(
         self,
@@ -437,11 +533,11 @@ class AdvisorActionsBar(tk.Frame):
         self._wav_path         = wav_path
         self._vocal_midi_path  = vocal_mid_path
 
-        self._btn_preview.config(state=tk.NORMAL)
+        self._enable_btn(self._btn_preview)
 
         # WAV path is set → FluidSynth succeeded
         if wav_path and os.path.exists(wav_path):
-            self._btn_export.config(state=tk.NORMAL)
+            self._enable_btn(self._btn_export)
             self._player.play_wav(wav_path)
             self._status("ADVISOR PREVIEW  ▶  PLAYING (WAV)", self._S.CYAN)
 
@@ -469,12 +565,12 @@ class AdvisorActionsBar(tk.Frame):
 
         # Vocal MIDI
         if vocal_mid_path and os.path.exists(vocal_mid_path):
-            self._btn_vocal.config(state=tk.NORMAL)
+            self._enable_btn(self._btn_vocal)
             self._log("Vocal MIDI ready — click  ⬇ VOCAL MIDI  to save.")
 
     def _on_render_error(self, error: str) -> None:
         """Main-thread error handler: re-enables button and logs the exception."""
-        self._btn_preview.config(state=tk.NORMAL)
+        self._enable_btn(self._btn_preview)
         self._status("ADVISOR PREVIEW ERROR", self._S.RED)
         self._log(f"Advisor preview error: {error}")
 

@@ -55,6 +55,7 @@ from src.gui.styles import S
 from src.gui.constants import GM_INSTRUMENTS, DRUM_KITS, ROLE_INSTRUMENTS, NOTES, QUALITIES
 from src.gui.midi_preview_player import MIDIPreviewPlayer
 from src.gui.tooltips import ToolTip, TOOLTIPS
+from src.gui.scrollable_frame import ScrollableFrame
 from src.gui.collapsible_section import CollapsibleSection
 from src.gui.track_instrument_row import TrackInstrumentRow
 
@@ -147,7 +148,7 @@ except ImportError:
 class SeedComposerApp:
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("SEED COMPOSER - CYBERPUNK EDITION")
+        self.root.title("Seed Composer — Professional Music Generation Studio")
         self.root.geometry("1400x960")
         self.root.minsize(1100, 850)
         self.root.configure(bg=S.BG)
@@ -196,8 +197,8 @@ class SeedComposerApp:
         tf = tk.Frame(main, bg=S.BG2, height=50)
         tf.pack(fill='x', pady=(0, 6)); tf.pack_propagate(False)
         tk.Label(tf, text="SEED COMPOSER", font=S.FN_BIG,
-                 fg=S.CYAN, bg=S.BG2).pack(side='left', padx=15, pady=8)
-        tk.Label(tf, text="AI-POWERED MUSIC GENERATION STUDIO",
+                 fg=S.TXT_BRT, bg=S.BG2).pack(side='left', padx=15, pady=8)
+        tk.Label(tf, text="Professional Music Generation Studio",
                  font=S.FN_S, fg=S.TXT_DIM, bg=S.BG2).pack(side='left', padx=10)
         self.status_label = tk.Label(tf, text="● INIT", font=S.FN_S, fg=S.YELLOW, bg=S.BG2)
         self.status_label.pack(side='right', padx=15)
@@ -235,7 +236,28 @@ class SeedComposerApp:
         lc.configure(yscrollcommand=sb.set)
         lc.pack(side='left', fill='both', expand=True)
         sb.pack(side='right', fill='y')
-        lc.bind_all("<MouseWheel>", lambda e: lc.yview_scroll(int(-1*(e.delta/120)), "units"))
+        # Use Enter/Leave so left and right scroll areas don't fight for the
+        # global <MouseWheel> binding (last bind_all wins in Tkinter).
+        import sys as _sys
+        def _lp_enter(_e=None):
+            if _sys.platform == 'win32':
+                lc.bind_all('<MouseWheel>',
+                            lambda e: lc.yview_scroll(int(-1 * e.delta / 120), 'units'))
+            elif _sys.platform == 'darwin':
+                lc.bind_all('<MouseWheel>',
+                            lambda e: lc.yview_scroll(int(-1 * e.delta), 'units'))
+            else:
+                lc.bind_all('<Button-4>', lambda e: lc.yview_scroll(-3, 'units'))
+                lc.bind_all('<Button-5>', lambda e: lc.yview_scroll(3, 'units'))
+
+        def _lp_leave(_e=None):
+            lc.unbind_all('<MouseWheel>')
+            lc.unbind_all('<Button-4>')
+            lc.unbind_all('<Button-5>')
+
+        lc.bind('<Enter>', _lp_enter)
+        lc.bind('<Leave>', _lp_leave)
+        sf.bind('<Enter>', _lp_enter)   # also activate when over content widgets
 
         self._build_seed_section(sf)
         self._build_genre_section(sf)
@@ -830,9 +852,17 @@ class SeedComposerApp:
         self.progress_label.pack(fill='x', padx=4)
 
         # ── Tab 2: ADVISOR ──
+        # Outer frame holds the ScrollableFrame so the entire advisor panel
+        # (palette selector, instrument builder, action buttons, advisor text)
+        # can be scrolled as one unit — content below the visible area is no
+        # longer hidden.  The advisor text widget retains its own internal
+        # scrollbar for navigating long text independently.
         adv_tab = tk.Frame(self._out_nb, bg=S.BG2)
         self._out_nb.add(adv_tab, text=' ADVISOR ')
-        self._build_advisor_tab(adv_tab)
+        adv_sf = ScrollableFrame(adv_tab, bg=S.BG2,
+                                 scrollbar_bg=S.BG3, scrollbar_width=12)
+        adv_sf.pack(fill='both', expand=True)
+        self._build_advisor_tab(adv_sf.inner)
 
         bf = tk.Frame(parent, bg=S.BG2); bf.pack(fill='x', padx=6, pady=4)
         btn_play = self._cbtn(bf, "PLAY  Full Beat", self._play_preview, S.GREEN, wide=True)
@@ -986,14 +1016,15 @@ class SeedComposerApp:
         else:
             self._instrument_builder = None
 
-        # ── SoundFont picker (choose which .sf2 to use for preview) ──
-        # Visible only when FluidSynth is available — no SF picker needed
-        # when the renderer is absent because there is nothing to render.
-        if SF_PICKER_AVAILABLE and FLUIDSYNTH_AVAILABLE:
+        # ── SoundFont picker ─────────────────────────────────────────────────
+        # Always shown so users can configure a SoundFont path even when
+        # FluidSynth is not yet installed.  SoundFontPickerWidget handles the
+        # case where fluid_renderer is None by disabling renderer calls.
+        if SF_PICKER_AVAILABLE:
             self._sf_picker = SoundFontPickerWidget(
                 parent,
                 styles         = S,
-                fluid_renderer = _FLUID_RENDERER,
+                fluid_renderer = _FLUID_RENDERER,   # may be None — widget handles it
                 log_fn         = self._log,
             )
             self._sf_picker.pack(fill='x', padx=4, pady=(0, 4))
@@ -1024,16 +1055,24 @@ class SeedComposerApp:
         else:
             self._advisor_actions = None
 
-        # ── Advisor text widget ──
-        self.adv_text = tk.Text(parent, font=S.FN_X, bg=S.BG, fg=S.TXT,
-                                 insertbackground=S.CYAN, height=18, wrap='none',
-                                 state='disabled', bd=0, highlightthickness=1,
-                                 highlightbackground=S.BG3)
-        sb = tk.Scrollbar(parent, command=self.adv_text.yview, bg=S.BG3,
-                          troughcolor=S.BG_INPUT, activebackground=S.BG3)
+        # ── Advisor text widget ──────────────────────────────────────────────
+        # height=42 gives a tall but fixed block.  The outer ScrollableFrame
+        # handles scrolling the whole advisor panel; this widget's own
+        # scrollbar navigates within the (potentially very long) text output.
+        adv_text_row = tk.Frame(parent, bg=S.BG2)
+        adv_text_row.pack(fill='x', pady=(4, 4), padx=4)
+
+        self.adv_text = tk.Text(
+            adv_text_row, font=S.FN_X, bg=S.BG, fg=S.TXT,
+            insertbackground=S.CYAN, height=42, wrap='none',
+            state='disabled', bd=0, highlightthickness=1,
+            highlightbackground=S.BG3,
+        )
+        sb = tk.Scrollbar(adv_text_row, command=self.adv_text.yview,
+                          troughcolor=S.BG_INPUT)
         self.adv_text.configure(yscrollcommand=sb.set)
         sb.pack(side='right', fill='y')
-        self.adv_text.pack(fill='both', expand=True, pady=4, padx=(4, 0))
+        self.adv_text.pack(side='left', fill='x', expand=True)
         for tag, color, font in [
             ('header',  S.CYAN,    S.FN_H),
             ('section', S.PINK,    S.FN_S),
@@ -1988,6 +2027,45 @@ class SeedComposerApp:
                         if _FLUID_RENDERER.render(vocal_midi_path, _vr_wav_out, genre=_genre):
                             vocal_wav_path = _vr_wav_out
 
+                # ── Builtin-synth WAV fallback (macOS / no FluidSynth) ─────
+                # When FluidSynth is unavailable or failed, render via the
+                # built-in synthesiser so the waveform, export, and advisor
+                # export button all work correctly on every platform.
+                # Progress is forwarded to the UI so the bar moves during
+                # the (potentially slow) pure-Python synthesis pass.
+                if want_full and _wav_path is None and composition is not None:
+                    self.msg_queue.put(('gen_progress', 75,
+                                        'Rendering audio (built-in synth — may take ~30 s)…'))
+
+                    def _full_progress(done, total, _base=75, _span=20):
+                        if total > 0:
+                            pct = _base + int(_span * done / total)
+                            self.msg_queue.put((
+                                'gen_progress', pct,
+                                f'Rendering audio… {done}/{total} events'))
+
+                    _builtin_wav = str(temp_dir / f'preview_{gen_id}.wav')
+                    try:
+                        WAVRenderer().render_composition_to_wav(
+                            composition, _builtin_wav,
+                            progress_callback=_full_progress)
+                        _wav_path = _builtin_wav
+                    except Exception as _e:
+                        self.msg_queue.put(('gen_progress', 75,
+                                            f'Built-in synth render failed: {_e}'))
+
+                if want_vocal and vocal_wav_path is None and vr_composition is not None:
+                    self.msg_queue.put(('gen_progress', 95,
+                                        'Rendering vocal-ready audio (built-in synth)…'))
+                    _vr_builtin_wav = str(temp_dir / f'preview_{gen_id}_vocal.wav')
+                    try:
+                        WAVRenderer().render_composition_to_wav(
+                            vr_composition, _vr_builtin_wav)
+                        vocal_wav_path = _vr_builtin_wav
+                    except Exception as _e:
+                        self.msg_queue.put(('gen_progress', 95,
+                                            f'Built-in synth vocal render failed: {_e}'))
+
                 # Clean up old WAV previews
                 keep_wavs = {_wav_path, vocal_wav_path} - {None}
                 for old in temp_dir.glob('preview_*.wav'):
@@ -2856,20 +2934,83 @@ def main():
         except Exception:
             pass
 
-    style = ttk.Style(); style.theme_use('clam')
-    style.configure('TCombobox', fieldbackground=S.BG_INPUT, background=S.BG_BTN,
-                    foreground=S.TXT, arrowcolor=S.CYAN)
+    # ── ttk.Combobox popup-list colours ─────────────────────────────────────────
+    # The dropdown listbox is a plain tk.Listbox under the hood — ttk.Style
+    # cannot reach it.  The Tk option database is the only cross-platform way
+    # to dark-theme it; it must be populated before any widget is created.
+    root.option_add('*TCombobox*Listbox.background',        S.BG_INPUT)
+    root.option_add('*TCombobox*Listbox.foreground',        S.TXT)
+    root.option_add('*TCombobox*Listbox.selectBackground',  S.BG_BTN_ACT)
+    root.option_add('*TCombobox*Listbox.selectForeground',  S.TXT_BRT)
+    root.option_add('*TCombobox*Listbox.font',              ('Consolas', 9))
+
+    # ── ttk.Style — professional dark theme ─────────────────────────────────────
+    style = ttk.Style()
+    style.theme_use('clam')   # 'clam' gives full colour control on Win/Mac/Linux
+
+    # Combobox — dark field, accent arrow, subtle border
+    style.configure('TCombobox',
+        fieldbackground  = S.BG_INPUT,
+        background       = S.BG_BTN,
+        foreground       = S.TXT,
+        selectbackground = S.BG_BTN_ACT,
+        selectforeground = S.TXT_BRT,
+        arrowcolor       = S.CYAN,          # studio-blue arrow matches primary accent
+        arrowsize        = 14,
+        bordercolor      = S.BG3,
+        lightcolor       = S.BG3,
+        darkcolor        = S.BG3,
+        insertcolor      = S.CYAN,
+        padding          = (4, 3),
+    )
     style.map('TCombobox',
-              fieldbackground=[('disabled', S.BG_INPUT), ('readonly', S.BG_INPUT)],
-              foreground=[('disabled', S.CYAN), ('readonly', S.TXT)],
-              background=[('disabled', S.BG_BTN)])
-    style.configure('TProgressbar', troughcolor=S.BG_INPUT, background=S.CYAN)
-    style.configure('TNotebook', background=S.BG2, borderwidth=0)
-    style.configure('TNotebook.Tab', background=S.BG3, foreground=S.TXT_DIM,
-                    padding=[8, 3], font=S.FN_S)
+        fieldbackground = [('disabled', S.BG2),      ('readonly', S.BG_INPUT)],
+        foreground      = [('disabled', S.TXT_DIM),  ('readonly', S.TXT)],
+        background      = [('disabled', S.BG_BTN),   ('active', S.BG_BTN_HOV),
+                           ('pressed', S.BG_BTN_ACT)],
+        bordercolor     = [('focus', S.CYAN),         ('hover', S.BG_BTN_HOV)],
+        arrowcolor      = [('disabled', S.TXT_DIM),   ('pressed', S.TXT_BRT)],
+    )
+
+    # Progress bar — accent colour fill, dark trough
+    style.configure('TProgressbar',
+        troughcolor = S.BG_INPUT,
+        background  = S.CYAN,
+        bordercolor = S.BG3,
+        lightcolor  = S.CYAN,
+        darkcolor   = S.CYAN,
+    )
+
+    # Notebook tabs — clean studio look, accent on selected tab
+    style.configure('TNotebook',
+        background  = S.BG2,
+        borderwidth = 0,
+        tabmargins  = [0, 0, 0, 0],
+    )
+    style.configure('TNotebook.Tab',
+        background = S.BG3,
+        foreground = S.TXT_DIM,
+        padding    = [10, 4],
+        font       = S.FN_S,
+        borderwidth = 0,
+    )
     style.map('TNotebook.Tab',
-              background=[('selected', S.BG_BTN)],
-              foreground=[('selected', S.CYAN)])
+        background = [('selected', S.BG_BTN)],
+        foreground = [('selected', S.TXT_BRT)],
+    )
+
+    # Scrollbar — neutral, unobtrusive
+    style.configure('TScrollbar',
+        background  = S.BG3,
+        troughcolor = S.BG2,
+        bordercolor = S.BG3,
+        arrowcolor  = S.TXT_DIM,
+        relief      = 'flat',
+    )
+    style.map('TScrollbar',
+        background = [('active', S.BG_BTN_HOV)],
+        arrowcolor = [('active', S.TXT)],
+    )
 
     app = SeedComposerApp(root)
     root.protocol("WM_DELETE_WINDOW", lambda: (app.cleanup(), root.destroy()))
