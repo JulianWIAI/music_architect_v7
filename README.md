@@ -18,6 +18,8 @@ After 3 generations the best tracks automatically receive a `vocal_ready` siblin
 
 The **Production Advisor** tab (new in V7) closes the creative loop: after generating, the user can select instruments from a psychoacoustic compatibility matrix, audition the full beat in a different SoundFont, choose a timbral variant (BRIGHT / NEUTRAL / DARK), and export a printable 10-section PDF production guide — all without leaving the app.
 
+The **Groove & Mixer** panel (new in V7) exposes a per-track mixing and groove-processing layer on top of the composition engine. Each of the 10 tracks has a strip with Tier-1 deterministic controls (transpose, velocity curve, swing, nudge, pan, gain) and Tier-2 seeded humanisation (velocity jitter, timing jitter, random seed). Switching to **Advanced Mode** replaces the simplified controls with four 16-step raw grid editors — one each for velocity multiplier (V), timing offset (T), pan (P), and expression CC11 (E) — mapped to jazz notation beat positions (1, 1e, 1+, 1a, 2 …). A genre preset loads theory-correct defaults for all 10 tracks in one click; **Reset All → Identity** returns every strip to a pure MIDI pass-through in one click.
+
 ---
 
 ## Key Features
@@ -49,7 +51,13 @@ The **Production Advisor** tab (new in V7) closes the creative loop: after gener
 | **Custom SoundFont picker** | `SoundFontPickerWidget` lets the user browse to any `.sf2` on disk; selection persists across sessions via `data/user_sf_override.json`; falls back to genre-routing if the file is moved |
 | **PDF production guide** | `AdvisorPDFExporter` generates a 10-section printable A4 PDF: palette, instruments (GM table), BPM targets, gain staging, effect chains, frequency allocation, parallel compression, M/S mastering; falls back to UTF-8 TXT if fpdf2 is absent |
 | **GM sound descriptions** | `gm_descriptions.py` supplies one-line sound-character strings for all 128 General MIDI programs; shown in the PDF instrument table and the InstrumentBuilder tooltip |
-| **GUI** | Tkinter interface with AI prompt decoder, live SF2 indicator, dual beat/vocal-ready generation, FluidSynth WAV preview, and full Production Advisor tab |
+| **Groove & Mixer panel** | 10-track per-strip mixing with Tier-1 deterministic controls (transpose, vel curve, swing, nudge, pan, gain) + Tier-2 seeded humanisation; genre presets load theory-correct defaults; [Reset All → Identity] bypasses all processing in one click |
+| **Advanced Groove Mode** | Per-strip [ADVANCED ▸] toggle replaces simplified controls with four 16-step raw grids (V · T · P · E); jazz notation step labels (1, 1e, 1+, 1a … 4a); Ctrl+click resets a single step; [Export Grid JSON] saves all four arrays for corpus analysis or ML input |
+| **V/T/P/E grid editors** | V = velocity multiplier (0.0–2.0, neutral 1.0); T = timing offset ms (−50 to +50, neutral 0); P = pan per step (−63 L to +63 R, neutral 0); E = expression CC11 per step (0–127, neutral 64); injected as per-note CC10/CC11 events during MIDI processing |
+| **Lossless Advanced↔Simple conversion** | Switching back from Advanced to Simple warns the user if the current grids cannot be expressed exactly by the Tier-1 simplified controls; the nearest-equivalent curve and nudge values are offered as a fallback |
+| **Waveform renderer** | Bar chart waveform blends 65 % peak + 35 % RMS with perceptual gamma 0.55 — quiet passages remain visible against mastered audio; 800-bar minimum resolution avoids the flat-waveform problem on first load |
+| **PCM decoder** | `pcm_decoder.py` provides a NumPy-vectorised path with correct 24-bit sign extension and 32-bit IEEE-float support, plus a pure-stdlib fallback for NumPy-free environments |
+| **GUI** | Tkinter interface with AI prompt decoder, live SF2 indicator, dual beat/vocal-ready generation, FluidSynth WAV preview, Groove & Mixer panel, and full Production Advisor tab |
 
 ---
 
@@ -104,6 +112,14 @@ music_architect_v7/
 │   ├── core/                      # Orchestrator, quantizer, context manager
 │   ├── utils/                     # Humanizer, voice-leading, polyrhythm engine
 │   │   └── vocal_mask_math.py     # Open voicing + vocal register math (C4–C6)
+│   ├── audio/
+│   │   ├── pcm_decoder.py         # NumPy-vectorised + stdlib-fallback PCM decoder (8/16/24/32-bit)
+│   │   └── waveform_generator.py  # Peak+RMS blend with perceptual gamma → bar chart amplitudes
+│   ├── midi/
+│   │   ├── groove_settings.py     # TrackGrooveSettings / SongGrooveSettings dataclasses + is_identity()
+│   │   ├── groove_presets.py      # GroovePresetLibrary — theory-correct Tier-1 defaults per genre
+│   │   ├── groove_processor.py    # GrooveProcessor — applies V/T/P/E grids and CC injection to MIDI
+│   │   └── grid_to_preset.py      # VEL_CURVE_GRIDS · grids_to_simple() lossless-conversion check
 │   └── gui/                       # Tkinter GUI application
 │       ├── app.py                 # Main application window
 │       ├── advisor_actions.py     # Advisor action strip (preview / save WAV / MIDI / PDF)
@@ -112,6 +128,11 @@ music_architect_v7/
 │       ├── fx_variant_panel.py    # BRIGHT / NEUTRAL / DARK variant switcher
 │       ├── soundfont_picker.py    # Custom SF2 file picker with session persistence
 │       ├── midi_preview_player.py # WAV + MIDI playback (pygame)
+│       ├── mixer_panel.py         # Groove & Mixer collapsible panel (genre preset · Reset All)
+│       ├── mixer_strip.py         # Per-track strip: Tier-1 + Tier-2 controls + Advanced toggle
+│       ├── advanced_groove_view.py# Four-tab V/T/P/E notebook — raw 16-step grid editors
+│       ├── step_grid_editor.py    # 16-step vertical slider row with jazz notation labels
+│       ├── waveform_widget.py     # Interactive bar-chart waveform with live playhead + seek
 │       ├── collapsible_section.py # Reusable collapsible panel widget
 │       └── styles.py              # App-wide colour and font constants
 └── tests/
@@ -270,6 +291,60 @@ After adjusting instruments and variant, the action strip provides four one-clic
 10. Page footer on every page
 
 If `fpdf2` is not installed the exporter falls back to a UTF-8 formatted `.txt` file automatically — the workflow is never blocked.
+
+---
+
+## Groove & Mixer
+
+The **GROOVE & MIXER** collapsible panel in the ADVISOR tab applies post-composition groove processing to the generated MIDI before FluidSynth renders the WAV.
+
+### Track Strips
+
+Each of the 10 tracks has a `TrackMixerStrip` with two tiers of controls:
+
+**Tier 1 — Deterministic**
+
+| Control | Range | Effect |
+|---|---|---|
+| Transpose | −12 to +12 semitones | Shifts all notes on the track |
+| Gain | −12 to +12 dB | Scales note velocities |
+| Velocity curve | flat · accent_1 · accent_1_3 · crescendo · decrescendo | Per-step velocity multiplier pattern |
+| Velocity min / max | 0 – 127 | Hard velocity floor and ceiling |
+| Swing | 0 – 100 % | Off-beat step delay (50 % = no swing) |
+| Timing nudge | −50 to +50 ms | Uniform offset applied to every note on the track |
+| Pan | −63 L to +63 R | MIDI CC10 stereo placement |
+
+**Tier 2 — Seeded humanisation**
+
+| Control | Effect |
+|---|---|
+| Velocity jitter | Random ± scatter added to each note velocity |
+| Timing jitter | Random ± scatter in ms added to each note onset |
+| Seed | Locks the RNG for reproducible humanisation across renders |
+
+### Advanced Mode
+
+Clicking **[ADVANCED ▸]** on any strip replaces the simplified Tier-1 controls with four 16-step raw grid editors:
+
+| Grid | Range | Neutral | What it controls |
+|---|---|---|---|
+| **V** — Velocity | 0.0 – 2.0× | 1.0 | Per-step velocity multiplier — overrides vel_curve |
+| **T** — Timing | −50 to +50 ms | 0.0 | Per-step timing offset — overrides swing + nudge |
+| **P** — Pan | −63 L to +63 R | 0 | Per-step stereo placement injected as CC10 |
+| **E** — Expression | 0 – 127 | 64 | Per-step CC11 expression envelope |
+
+Each grid uses jazz/drum-rudiment notation for the 16 16th-note positions (`1  1e  1+  1a  2  2e  2+  2a  …  4a`). Hover over a slider to see its current value; Ctrl+click resets a single step to neutral; **[Reset all]** resets the whole grid.
+
+Switching back from Advanced to Simple checks whether the current grids are losslessly expressible by the Tier-1 controls. If not, the app warns the user and offers the nearest approximation.
+
+**[Export Grid JSON]** saves all four arrays for the current track as a JSON file — useful for corpus analysis, machine learning, or import into a third-party tool.
+
+### Preset & Reset
+
+| Button | Effect |
+|---|---|
+| **[Load Preset]** | Fills all 10 strips with theory-correct Tier-1 defaults for the selected genre; Tier-2 humanisation values are preserved |
+| **[Reset All]** | Returns every strip to identity — no velocity scaling, no swing, no nudge, no pan offset; MIDI output is unchanged (DAW "bypass" equivalent) |
 
 ---
 

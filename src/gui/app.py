@@ -144,6 +144,17 @@ except ImportError:
     ExportDialog = None             # type: ignore
     EXPORT_DIALOG_AVAILABLE = False
 
+try:
+    from src.gui.mixer_panel import MixerPanel
+    from src.midi.groove_processor import GrooveProcessor
+    from src.midi.groove_settings import SongGrooveSettings
+    GROOVE_AVAILABLE = True
+except ImportError:
+    MixerPanel       = None         # type: ignore
+    GrooveProcessor  = None         # type: ignore
+    SongGrooveSettings = None       # type: ignore
+    GROOVE_AVAILABLE = False
+
 
 class SeedComposerApp:
     def __init__(self, root: tk.Tk):
@@ -181,6 +192,9 @@ class SeedComposerApp:
         self._external_midi_notes: list | None = None
         self._external_midi_bpm: int = 120
         self._cipher = SemanticCipher() if PROMPT_DECODER_AVAILABLE else None
+        # Groove & Mixer panel — built inside _build_advisor_tab; None until then.
+        # Declared here so _on_genre_change is safe to call at any point during init.
+        self._mixer_panel = None
 
         self._build_gui()
         self._init_engine()
@@ -1016,6 +1030,22 @@ class SeedComposerApp:
         else:
             self._instrument_builder = None
 
+        # ── Groove & Mixer panel ─────────────────────────────────────────────
+        # Lives here in the ADVISOR tab so the user can generate once, then
+        # iterate on groove settings and click [APPLY GROOVE & RE-RENDER] to
+        # hear the result immediately without regenerating the composition.
+        if GROOVE_AVAILABLE:
+            try:
+                self._mixer_panel = MixerPanel(
+                    parent,
+                    on_apply_fn=self._apply_groove_and_rerender,
+                )
+            except Exception as _exc:
+                print(f'[GroovePanel] Construction failed: {_exc}')
+                self._mixer_panel = None
+        else:
+            self._mixer_panel = None
+
         # ── SoundFont picker ─────────────────────────────────────────────────
         # Always shown so users can configure a SoundFont path even when
         # FluidSynth is not yet installed.  SoundFontPickerWidget handles the
@@ -1739,6 +1769,9 @@ class SeedComposerApp:
             self._load_palettes_for(genre)
         if _FLUID_RENDERER is not None:
             _FLUID_RENDERER.set_genre(genre)
+        # Keep the groove mixer preset dropdown in sync with the genre selector
+        if self._mixer_panel is not None:
+            self._mixer_panel.set_genre(genre)
         self._log(f"Genre -> {genre.upper()}")
 
     def _random_seed(self):
@@ -2212,6 +2245,87 @@ class SeedComposerApp:
         self.player.stop()
         self._set_status("STOPPED", S.YELLOW)
 
+    # ── Groove re-render ──────────────────────────────────────────────────────
+
+    def _apply_groove_and_rerender(self) -> None:
+        """
+        Apply the current groove settings to the cached MIDI and re-render.
+
+        Called when the user clicks [APPLY GROOVE & RE-RENDER] in MixerPanel.
+        The composition engine is NOT invoked — the existing MIDI is reused,
+        so this is fast (~3-5 s with FluidSynth) and non-destructive: the
+        original clean MIDI is always preserved for further iterations.
+
+        Flow:
+          current_midi_path  →  GrooveProcessor  →  grooved temp MIDI
+                             →  FluidSynth        →  grooved WAV
+                             →  waveform widget updated, current_wav_path updated
+        """
+        if not self.current_midi_path or not os.path.exists(self.current_midi_path):
+            self._log("Groove: no MIDI available — generate a song first.")
+            return
+        if self.is_generating:
+            self._log("Groove: render already in progress — please wait.")
+            return
+        if not GROOVE_AVAILABLE or self._mixer_panel is None:
+            self._log("Groove: groove module not available.")
+            return
+
+        # Capture settings on the main thread before the worker starts.
+        groove_settings = self._mixer_panel.get_settings()
+        bpm = 120.0
+        if self.current_composition:
+            bpm = float(self.current_composition.get('config', {}).get('bpm', 120.0))
+        genre = self.genre_var.get()
+
+        self.is_generating = True
+        self._mixer_panel.set_busy(True)
+        self._set_status("APPLYING GROOVE...", S.ORANGE)
+        self._log("Groove: processing MIDI and re-rendering...")
+
+        def _worker():
+            try:
+                temp_dir = Path(APP_DIR) / "temp_output"
+                temp_dir.mkdir(exist_ok=True)
+
+                midi_to_render = self.current_midi_path
+
+                # Apply groove transforms if any settings differ from identity.
+                if groove_settings.has_any_effect():
+                    grooved_mid = str(temp_dir / "groove_preview.mid")
+                    ok = GrooveProcessor().process(
+                        midi_to_render, grooved_mid, groove_settings, bpm
+                    )
+                    if ok:
+                        midi_to_render = grooved_mid
+
+                # Render with FluidSynth (preferred) or built-in synth fallback.
+                wav_out = str(temp_dir / "groove_preview.wav")
+                rendered = False
+
+                if FLUIDSYNTH_AVAILABLE and _FLUID_RENDERER is not None:
+                    rendered = _FLUID_RENDERER.render(midi_to_render, wav_out, genre=genre)
+
+                if not rendered and self.current_composition is not None:
+                    # Built-in synth fallback — slower but always available.
+                    try:
+                        WAVRenderer().render_composition_to_wav(
+                            self.current_composition, wav_out
+                        )
+                        rendered = True
+                    except Exception:
+                        pass
+
+                if rendered and os.path.exists(wav_out):
+                    self.msg_queue.put(('groove_done', wav_out))
+                else:
+                    self.msg_queue.put(('groove_fail', 'Render produced no output'))
+
+            except Exception as exc:
+                self.msg_queue.put(('groove_fail', str(exc)))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
     def _open_export_dialog(self) -> None:
         """Open the multi-format audio export dialog."""
         if not EXPORT_DIALOG_AVAILABLE:
@@ -2356,6 +2470,23 @@ class SeedComposerApp:
             self.progress_var.set(msg[1])
             self.progress_label.configure(text=msg[2])
             self._info_add(f"  {msg[2]}\n", 'dim')
+        elif t == 'groove_done':
+            # Groove re-render succeeded — update waveform and current WAV path.
+            wav = msg[1]
+            self.current_wav_path = wav
+            self.is_generating = False
+            if self._mixer_panel is not None:
+                self._mixer_panel.set_busy(False)
+            if PLAYER_WIDGETS_AVAILABLE and self._waveform_widget is not None:
+                self._waveform_widget.load_wav(wav)
+            self._set_status("GROOVE APPLIED — ready to play / export", S.GREEN)
+            self._log("Groove: re-render complete.")
+        elif t == 'groove_fail':
+            self.is_generating = False
+            if self._mixer_panel is not None:
+                self._mixer_panel.set_busy(False)
+            self._set_status("GROOVE RENDER FAILED", S.RED)
+            self._log(f"Groove error: {msg[1] if len(msg) > 1 else 'unknown'}")
         elif t == 'gen_done':
             _, comp, midi, wav, vocal_midi, vocal_wav, vr_comp = msg
             self.current_composition    = comp

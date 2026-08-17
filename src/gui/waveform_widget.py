@@ -141,9 +141,12 @@ class WaveformWidget(tk.Frame):
         self._lbl_current.config(text='00:00')
         self._lbl_total.config(text='00:00')
 
-        # Calculate bar count from current canvas width; fall back to 300
-        w        = max(1, self._canvas.winfo_width())
-        num_bars = max(50, w // 3)
+        # Calculate bar count from the canvas pixel width.
+        # winfo_width() returns 1 when the canvas hasn't been drawn yet (e.g.
+        # on the first render after launch).  Fall back to 800 bars so the
+        # waveform is always high-resolution regardless of timing.
+        w        = self._canvas.winfo_width()
+        num_bars = max(800, w // 3) if w > 10 else 800
 
         thread = threading.Thread(
             target = self._compute_in_background,
