@@ -31,8 +31,10 @@
 
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>   // py::array_t — must be included for numpy return types
+#include <pybind11/stl.h>     // automatic std::vector ↔ Python list conversion
 
 #include "synth_core.hpp"
+#include "saturation.hpp"     // SaturationProcessor — DSP saturation + de-clicking
 
 namespace py = pybind11;
 
@@ -40,13 +42,13 @@ namespace py = pybind11;
 
 PYBIND11_MODULE(synth_core, m) {
     m.doc() =
-        "synth_core — C++ synthesizer core for Music Architect.\n\n"
-        "Provides additive harmonic synthesis (synthesize_note) and\n"
-        "percussion synthesis (synthesize_drum) that replace the pure\n"
-        "Python hot-path in src/rendering/builtin_synthesizer.py.\n\n"
-        "Both methods are 50–200× faster than the equivalent Python\n"
-        "implementation; the API is identical so the Python wrapper\n"
-        "in builtin_synthesizer.py can call either transparently.";
+        "synth_core — C++ synthesizer and DSP core for Music Architect.\n\n"
+        "Provides:\n"
+        "  SynthCore          — additive harmonic synthesis (note + drum).\n"
+        "  SaturationProcessor — saturation/drive with built-in de-clicking.\n\n"
+        "Audio buffers are passed as numpy.ndarray[float32] — zero-copy\n"
+        "via pybind11 buffer protocol (satisfies the numpy.ctypeslib\n"
+        "constraint from the project's architecture notes).";
 
     // ── SynthCore class ───────────────────────────────────────────────────────
 
@@ -116,4 +118,69 @@ PYBIND11_MODULE(synth_core, m) {
              "    midi_note: MIDI note number (e.g. 69 → 440.0 Hz).\n\n"
              "Returns:\n"
              "    float: Frequency in Hz.");
+
+    // ── SaturationProcessor class ─────────────────────────────────────────────
+    //
+    // Exposes the saturation/drive DSP processor to Python.  Buffers are
+    // exchanged as numpy float32 arrays — no Python list conversion needed,
+    // satisfying the architecture's zero-copy buffer-handoff constraint.
+
+    // Expose the Type enum so Python callers can use synth_core.SaturationType.TAPE_SOFT
+    py::enum_<SaturationProcessor::Type>(m, "SaturationType",
+        "Saturation algorithm identifier for SaturationProcessor.")
+        .value("NONE",           SaturationProcessor::Type::NONE)
+        .value("TAPE_SOFT",      SaturationProcessor::Type::TAPE_SOFT)
+        .value("TUBE_TANH",      SaturationProcessor::Type::TUBE_TANH)
+        .value("HARD_CLIP",      SaturationProcessor::Type::HARD_CLIP)
+        .value("ASYMMETRIC_SOFT",SaturationProcessor::Type::ASYMMETRIC_SOFT)
+        .value("VINYL_TAPE",     SaturationProcessor::Type::VINYL_TAPE)
+        .value("WAVESHAPER",     SaturationProcessor::Type::WAVESHAPER)
+        .export_values();
+
+    py::class_<SaturationProcessor>(m, "SaturationProcessor",
+        "Saturation / drive processor with built-in per-sample parameter smoothing.\n\n"
+        "Drive changes applied via set_drive() are smoothed over smoothing_ms\n"
+        "milliseconds so no click is produced even during live automation.\n\n"
+        "Audio buffers are numpy.ndarray[float32, ndim=1] — zero-copy handoff.")
+
+        .def(py::init<int, float>(),
+             py::arg("sample_rate")  = 48'000,
+             py::arg("smoothing_ms") = 5.0f,
+             "Construct a SaturationProcessor.\n\n"
+             "Args:\n"
+             "    sample_rate:  Audio sample rate in Hz (default 48000).\n"
+             "    smoothing_ms: Drive-change smoothing window in ms (default 5.0).")
+
+        .def("set_type",
+             &SaturationProcessor::set_type,
+             py::arg("type"),
+             "Select the saturation algorithm via SaturationType enum.")
+
+        .def("set_type_from_string",
+             &SaturationProcessor::set_type_from_string,
+             py::arg("name"),
+             "Select saturation algorithm by name string.\n\n"
+             "Accepted: 'none','tape_soft','tube_tanh','hard_clip',\n"
+             "'asymmetric_soft','vinyl_tape','waveshaper'.")
+
+        .def("set_drive",
+             &SaturationProcessor::set_drive,
+             py::arg("drive_pct"),
+             "Set target drive level (0.0–100.0 %).\n\n"
+             "The change is smoothed internally — no click on rapid calls.")
+
+        .def("process",
+             &SaturationProcessor::process,
+             py::arg("input"),
+             "Process one block of audio samples.\n\n"
+             "Args:\n"
+             "    input: numpy.ndarray[float32, ndim=1]  (read-only).\n\n"
+             "Returns:\n"
+             "    numpy.ndarray[float32, ndim=1] — processed block.")
+
+        .def_property_readonly("sample_rate", &SaturationProcessor::sample_rate,
+             "Sample rate this processor was constructed with.")
+
+        .def_property_readonly("current_drive", &SaturationProcessor::current_drive,
+             "Current smoothed drive value in percent (not the target).");
 }
