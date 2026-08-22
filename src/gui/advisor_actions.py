@@ -148,6 +148,7 @@ class AdvisorActionsBar(tk.Frame):
         save_pdf_fn:        Optional[Callable[[], None]] = None,
         export_audio_fn:    Optional[Callable[[str], None]] = None,
         get_muted_tracks_fn: Optional[Callable[[], set]] = None,
+        apply_groove_fn:    Optional[Callable] = None,
     ) -> None:
         super().__init__(parent, bg=styles.BG2)
 
@@ -165,6 +166,11 @@ class AdvisorActionsBar(tk.Frame):
         self._export_audio       = export_audio_fn
         # Returns set of track keys to silence in the next preview render.
         self._get_muted_tracks   = get_muted_tracks_fn or (lambda: set())
+        # Called after compose+export to apply current groove/mixer gains to
+        # both the composition dict (built-in synth) and the MIDI (FluidSynth).
+        # Signature: fn(comp: dict, mid_path: str, genre: str, bpm: float) -> str
+        # Returns (possibly modified) mid_path.
+        self._apply_groove_fn    = apply_groove_fn
 
         # Seed cached by App.set_seed() after every generation.
         # None → a fresh random seed is used for that preview session.
@@ -408,6 +414,17 @@ class AdvisorActionsBar(tk.Frame):
             comp     = engine.compose(config)
             mid_path = str(temp_dir / "advisor_preview.mid")
             engine.export_midi(comp, mid_path)
+
+            # Apply the current Groove & Mixer settings so the advisor preview
+            # reflects any gain/mute changes the user made in that panel.
+            # _apply_groove_fn injects gains into comp (built-in synth path)
+            # and re-processes the MIDI with GrooveProcessor (FluidSynth path).
+            if self._apply_groove_fn is not None:
+                try:
+                    _bpm = float(comp.get('config', {}).get('bpm', 120.0))
+                    mid_path = self._apply_groove_fn(comp, mid_path, genre, _bpm)
+                except Exception:
+                    pass   # non-fatal — render continues with ungrooved MIDI
 
             # Verify the MIDI file was actually written
             midi_ok = os.path.exists(mid_path) and os.path.getsize(mid_path) > 0

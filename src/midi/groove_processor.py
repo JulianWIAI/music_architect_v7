@@ -41,6 +41,13 @@ except ImportError:
 from src.midi.groove_settings import SongGrooveSettings, TrackGrooveSettings
 from src.midi.grid_to_preset import VEL_CURVE_GRIDS
 
+try:
+    from src.midi.genre_profiles import GenreProfileLibrary as _GenreProfileLibrary
+    from src.midi.micro_timing_engine import MicroTimingEngine as _MicroTimingEngine
+    _MICRO_TIMING_AVAILABLE = True
+except ImportError:
+    _MICRO_TIMING_AVAILABLE = False
+
 
 # ── MIDI track-name → GUI track key mapping ────────────────────────────────────
 # The composition engine names MIDI tracks '01_Kick', '03_Bass', etc.
@@ -67,12 +74,14 @@ def _db_to_cc7(gain_db: float) -> int:
     """
     Convert a gain in dB to a MIDI CC7 (volume) value 0-127.
 
-    0 dB maps to CC7=100 (standard nominal level for GM); ±6 dB scales
-    linearly in the amplitude domain and is then mapped to the 0-127 range.
+    0 dB maps to CC7=100 (standard nominal level for GM).  Values at or
+    below -59.9 dB are treated as −∞ and return CC7=0 (silence).
     The nominal (0 dB) point is anchored at CC7=100 so there is headroom
-    above for boosts.
+    above for boosts up to +6 dB.
     """
-    nominal_cc7   = 100
+    if gain_db <= -59.9:
+        return 0   # −∞ / silence
+    nominal_cc7    = 100
     amplitude_mult = 10 ** (gain_db / 20.0)
     cc7 = int(nominal_cc7 * amplitude_mult)
     return max(0, min(127, cc7))
@@ -273,8 +282,14 @@ def _apply_track(
             ))
 
         else:
-            # Pass non-note messages (CC, meta, etc.) through unchanged,
-            # unless we injected CC7/CC10 above — those are already in abs_msgs.
+            # Pass non-note messages (CC, meta, etc.) through unchanged.
+            # Skip CC7 and CC10 — we inject fresh values at tick 0 so any
+            # original CC7/CC10 in the MIDI must be removed to prevent them
+            # from overriding our values at playback time.
+            if msg.type == 'control_change' and msg.control == 7:
+                continue   # replaced by our gain_db → CC7 at tick 0
+            if msg.type == 'control_change' and msg.control == 10 and not _adv_p:
+                continue   # replaced by our pan → CC10 at tick 0
             abs_msgs.append((abs_tick, msg))
 
     # ── Reassemble track with delta times ─────────────────────────────────────
@@ -335,6 +350,21 @@ class GrooveProcessor:
             midi_tempo = _get_tempo_from_midi(mid)
             effective_bpm = 60_000_000 / midi_tempo if midi_tempo > 0 else bpm
 
+            # ── Genre-aware micro-timing grids ────────────────────────────────
+            # When SongGrooveSettings.genre is set, derive a 16-step V grid and
+            # T grid from MicroTimingEngine (genre-aware velocity curves + swing +
+            # jitter).  These replace the flat curve / simple swing path for any
+            # track the user has not manually configured in advanced mode.
+            _micro_v_grid = None
+            _micro_t_grid = None
+            if _MICRO_TIMING_AVAILABLE and settings.genre:
+                try:
+                    _profile = _GenreProfileLibrary().get(settings.genre, effective_bpm)
+                    _engine  = _MicroTimingEngine(_profile)
+                    _micro_v_grid, _micro_t_grid = _engine.get_bar_params()
+                except Exception:
+                    pass  # silently fall back to the existing flat/swing path
+
             new_mid = mido.MidiFile(type=mid.type, ticks_per_beat=ticks_per_beat)
 
             for track in mid.tracks:
@@ -353,8 +383,25 @@ class GrooveProcessor:
                     new_mid.tracks.append(track)
                     continue
 
+                # Inject genre micro-timing grids for tracks the user has not
+                # manually configured (no advanced mode, no custom v_grid).
+                # dataclasses.replace() creates a shallow copy — original unchanged.
+                applied_settings = track_settings
+                if (
+                    _micro_v_grid is not None
+                    and not track_settings.use_advanced
+                    and track_settings.v_grid is None
+                ):
+                    from dataclasses import replace as _dc_replace
+                    applied_settings = _dc_replace(
+                        track_settings,
+                        use_advanced = True,
+                        v_grid       = _micro_v_grid,
+                        t_grid       = _micro_t_grid,
+                    )
+
                 new_mid.tracks.append(
-                    _apply_track(track, track_settings, ticks_per_beat, effective_bpm)
+                    _apply_track(track, applied_settings, ticks_per_beat, effective_bpm)
                 )
 
             new_mid.save(midi_out)

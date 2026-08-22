@@ -527,7 +527,7 @@ def _build_all_profiles() -> List[GenreProfile]:
            "dense",
            ["drum_fill_2bar", "snare_roll", "stutter", "synth_arp_fill"],
            "double_bass_fill_into_chorus", False,
-           "tube_hard_blend", 8.0, 18.0,
+           "hard_clip", 8.0, 18.0,
            "small", 0.6, 1.2, 0.03125, "wide",
            ["guitar_tremolo", "lead_pitch_drift"], 0.5, 2.0, "sine"),
 

@@ -35,6 +35,7 @@
 
 #include "synth_core.hpp"
 #include "saturation.hpp"     // SaturationProcessor — DSP saturation + de-clicking
+#include "sidechain.hpp"      // SidechainFollower  — kick-triggered gain reduction
 
 namespace py = pybind11;
 
@@ -183,4 +184,66 @@ PYBIND11_MODULE(synth_core, m) {
 
         .def_property_readonly("current_drive", &SaturationProcessor::current_drive,
              "Current smoothed drive value in percent (not the target).");
+
+    // ── SidechainFollower class ───────────────────────────────────────────────
+    //
+    // Kick/808-triggered sidechain gain reduction.  Trigger positions are
+    // supplied as absolute sample indices extracted from the composition's
+    // drum track, so no real-time envelope detection is needed.
+
+    py::class_<SidechainFollower>(m, "SidechainFollower",
+        "Sidechain envelope follower for kick/808-triggered gain reduction.\n\n"
+        "Supply kick trigger positions via set_triggers(), then call process()\n"
+        "once per audio block.  The envelope state persists across calls.\n\n"
+        "Audio buffers are numpy.ndarray[float32, ndim=1] — zero-copy handoff.")
+
+        .def(py::init<int, float, float, float>(),
+             py::arg("sample_rate") = 48'000,
+             py::arg("attack_ms")   = 1.0f,
+             py::arg("release_ms")  = 100.0f,
+             py::arg("depth")       = 0.5f,
+             "Construct a SidechainFollower.\n\n"
+             "Args:\n"
+             "    sample_rate: Audio sample rate in Hz (default 48000).\n"
+             "    attack_ms:   Attack time in ms.  Near-0 for instant pump onset.\n"
+             "    release_ms:  Release time constant in ms.  Controls pump length.\n"
+             "    depth:       Gain reduction depth 0–1 (0=none, 1=full mute).")
+
+        .def("set_triggers",
+             &SidechainFollower::set_triggers,
+             py::arg("trigger_samples"),
+             "Set kick trigger positions.\n\n"
+             "Args:\n"
+             "    trigger_samples: List[int] of absolute sample indices (unsorted ok).\n"
+             "                     Resets envelope and cursor to start.")
+
+        .def("set_depth",
+             &SidechainFollower::set_depth,
+             py::arg("depth"),
+             "Update gain reduction depth (0–1) — takes effect immediately.")
+
+        .def("set_release_ms",
+             &SidechainFollower::set_release_ms,
+             py::arg("release_ms"),
+             "Recompute the release IIR coefficient from a new release_ms value.")
+
+        .def("process",
+             &SidechainFollower::process,
+             py::arg("input"),
+             py::arg("sample_offset"),
+             "Process one audio block.\n\n"
+             "Args:\n"
+             "    input:         numpy.ndarray[float32, ndim=1].\n"
+             "    sample_offset: Absolute sample index of input[0] in the song.\n\n"
+             "Returns:\n"
+             "    numpy.ndarray[float32, ndim=1] — gain-reduced block.")
+
+        .def_property_readonly("sample_rate", &SidechainFollower::sample_rate,
+             "Sample rate this instance was constructed with.")
+
+        .def_property_readonly("depth", &SidechainFollower::depth,
+             "Current gain reduction depth.")
+
+        .def_property_readonly("envelope", &SidechainFollower::envelope,
+             "Current envelope value in [0, 1] — 1 = maximum gain reduction.");
 }

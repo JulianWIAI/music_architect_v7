@@ -223,4 +223,6 @@ class GroovePresetLibrary:
         tracks = {}
         for track_key, overrides in table.items():
             tracks[track_key] = TrackGrooveSettings(**overrides)
-        return SongGrooveSettings(tracks=tracks, apply_enabled=True)
+        # Pass genre so GrooveProcessor can activate MicroTimingEngine grids
+        # for any track the user has not manually configured in advanced mode.
+        return SongGrooveSettings(tracks=tracks, apply_enabled=True, genre=genre)

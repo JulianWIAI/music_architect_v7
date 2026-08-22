@@ -222,6 +222,7 @@ class BuiltinSynthesizer:
             info     = track_info.get(track_name, {})
             program  = info.get('program', 0)
             is_drum  = info.get('channel', 0) == 9
+            gain     = float(info.get('gain', 1.0))
 
             for event in events:
                 if len(event) < 4:
@@ -245,15 +246,19 @@ class BuiltinSynthesizer:
                 b_end   = min(start_idx + n, total_samples)
                 actual  = b_end - b_start
                 if actual > 0:
-                    buffer[b_start:b_end] += samples[s_start:s_start + actual]
+                    buffer[b_start:b_end] += (
+                        np.asarray(samples[s_start:s_start + actual], dtype=np.float32) * gain
+                    )
 
                 processed += 1
                 if progress_callback and processed % 200 == 0:
                     progress_callback(processed, total_events)
 
-        # Peak normalise to 0.85 ceiling (matches Python path)
+        # Soft-clip to 0.85 ceiling — only reduce if clipping, never boost.
+        # Boosting would undo per-track gain adjustments made by the user or
+        # the groove section, making volume faders appear to have no effect.
         peak = float(np.max(np.abs(buffer)))
-        if peak > 0.0:
+        if peak > 0.85:
             buffer *= 0.85 / peak
 
         # Return list for API compatibility with wav_writer / wav_renderer
@@ -287,6 +292,7 @@ class BuiltinSynthesizer:
             info    = track_info.get(track_name, {})
             program = info.get('program', 0)
             is_drum = info.get('channel', 0) == 9
+            gain    = float(info.get('gain', 1.0))
 
             for event in events:
                 if len(event) < 4:
@@ -304,14 +310,14 @@ class BuiltinSynthesizer:
                 for i, s in enumerate(samples):
                     idx = start_idx + i
                     if 0 <= idx < total_samples:
-                        buffer[idx] += s
+                        buffer[idx] += s * gain
 
                 processed += 1
                 if progress_callback and processed % 200 == 0:
                     progress_callback(processed, total_events)
 
-        peak = max(abs(s) for s in buffer) if buffer else 1.0
-        if peak > 0:
+        peak = max(abs(s) for s in buffer) if buffer else 0.0
+        if peak > 0.85:
             scale  = 0.85 / peak
             buffer = [s * scale for s in buffer]
 

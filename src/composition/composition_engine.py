@@ -84,6 +84,28 @@ try:
 except ImportError:
     _DRUM_PATTERN_ARCHITECT_AVAILABLE = False
 
+try:
+    from src.midi.markov_harmony import (
+        MarkovHarmonyEngine as _MarkovHarmonyEngine,
+        _SEMITONE_OFFSETS as _MARKOV_SEMITONE_OFFSETS,
+        _DIATONIC_QUALITY as _MARKOV_DIATONIC_QUALITY,
+    )
+    _MARKOV_HARMONY_AVAILABLE = True
+except ImportError:
+    _MARKOV_HARMONY_AVAILABLE = False
+
+try:
+    from src.arrangement.state_machine import SongStateMachine as _SongStateMachine
+    _STATE_MACHINE_AVAILABLE = True
+except ImportError:
+    _STATE_MACHINE_AVAILABLE = False
+
+try:
+    from src.arrangement.fill_generator import FillGenerator as _FillGenerator
+    _FILL_GENERATOR_AVAILABLE = True
+except ImportError:
+    _FILL_GENERATOR_AVAILABLE = False
+
 from src.composition.edm_cipher import (
     SidechainMatrix, StochasticBuildUp, PreDropVoid,
     AntiDropFakeOut, PolyrhythmicFilterSweep,
@@ -451,7 +473,13 @@ class CompositionEngine:
     ) -> List[str]:
         self._ensure_loaded()
         matrix = self.genre_matrices.get(config.genre, self.global_matrix)
-        if not matrix: return self._theory_fallback_progression(config, num_chords)
+        if not matrix:
+            # Prefer the MarkovHarmonyEngine (genre-aware, voice-led) over the
+            # plain theory fallback when the engine was instantiated in compose().
+            mhe = getattr(config, '_markov_harmony', None)
+            if mhe is not None:
+                return self._markov_progression_strings(mhe, config, num_chords)
+            return self._theory_fallback_progression(config, num_chords)
 
         current = config.starting_chord or weighted_choice({k: sum(v.values()) for k, v in matrix.items()})
         progression = [current]
@@ -509,6 +537,67 @@ class CompositionEngine:
                 current = weighted_choice(working)
 
             progression.append(current)
+        return progression
+
+    def _markov_progression_strings(
+        self,
+        mhe: object,
+        config: CompositionConfig,
+        num_chords: int,
+    ) -> List[str]:
+        """
+        Convert MarkovHarmonyEngine output to chord-name strings.
+
+        The MarkovHarmonyEngine returns Roman-numeral degree labels.  This
+        helper maps each label back to a note name + chord-quality suffix
+        (e.g. ``"Am7"``) that the existing generate_chord_track() pipeline
+        can consume via parse_chord_string().
+
+        Quality mapping (CHORD_INTERVALS key → suffix used in the string):
+          major → maj7  |  minor → min7  |  dim → dim7
+        """
+        _QUALITY_SUFFIX = {"major": "maj7", "minor": "min7", "dim": "dim7"}
+
+        # Which mode is active — needed to look up diatonic chord quality.
+        kp   = (config.key or "C major").split()
+        mode = kp[1] if len(kp) > 1 else "major"
+
+        # Degree-to-scale-step-index mapping (mirrors MarkovHarmonyEngine._degree_to_intervals).
+        _STEP_MAP: Dict[str, int] = {
+            "I": 0, "i": 0, "bII": 0,
+            "II": 1, "ii": 1,
+            "bIII": 2, "iii": 2, "III": 2,
+            "IV": 3, "iv": 3,
+            "bV": 4, "#IV": 4, "V": 4, "v": 4,
+            "bVI": 5, "vi": 5, "VI": 5,
+            "bVII": 6, "vii": 6, "VII": 6,
+        }
+
+        allow_ic = bool(
+            getattr(config, 'genre_profile', None)
+            and getattr(config.genre_profile, 'modal_interchange', False)
+        )
+        quality_table = _MARKOV_DIATONIC_QUALITY.get(mode, _MARKOV_DIATONIC_QUALITY["major"])
+        progression: List[str] = []
+
+        for _ in range(num_chords):
+            try:
+                _, degree = mhe.next_chord(allow_interchange=allow_ic)
+                offset     = _MARKOV_SEMITONE_OFFSETS.get(degree, 0)
+                root_pc    = (mhe._root_midi + offset) % 12
+                note_name  = MIDI_TO_NOTE.get(root_pc, "C")
+
+                # Resolve chord quality from the diatonic table.
+                step_idx = _STEP_MAP.get(degree)
+                if step_idx is not None and step_idx < len(quality_table):
+                    quality = _QUALITY_SUFFIX.get(quality_table[step_idx], "maj7")
+                else:
+                    quality = "maj7" if (degree and degree[0].isupper()) else "min7"
+
+                progression.append(f"{note_name}{quality}")
+            except Exception:
+                progression.append("Cmaj7")   # safe fallback for a single chord
+
         return progression
 
     def _theory_fallback_progression(self, config: CompositionConfig,
@@ -571,8 +660,13 @@ class CompositionEngine:
         else:
             raw_result = None
 
+        # Fallback 1: SongStateMachine — genre-aware Markov section transitions
+        # using the active GenreProfile's section_bars for accurate bar counts.
         if raw_result is None:
-            # Fallback: fixed template with ±4-bar jitter (original behaviour).
+            raw_result = self._build_structure_via_state_machine(config)
+
+        if raw_result is None:
+            # Fallback 2: fixed template with ±4-bar jitter (original behaviour).
             template = STRUCTURE_TEMPLATES.get(config.genre, STRUCTURE_TEMPLATES['pop'])
             raw_result = []
             for s, b in template:
@@ -603,6 +697,151 @@ class CompositionEngine:
 
         return self._apply_structural_sanity(raw_result)
 
+    def _build_structure_via_state_machine(
+        self, config: CompositionConfig
+    ) -> Optional[List[Tuple[str, int]]]:
+        """
+        Pre-compute the full song structure by simulating SongStateMachine.
+
+        The machine steps section-by-section using its Markov transition matrix
+        (genre-aware, from section_constants.DEFAULT_TRANSITIONS).  Bar counts
+        come from the active GenreProfile's section_bars dict, falling back to
+        SECTION_BAR_RANGES midpoints when the profile is unavailable.
+
+        Returns the structure list on success, None on any failure so the caller
+        can transparently fall back to the template path.
+        """
+        if not _STATE_MACHINE_AVAILABLE:
+            return None
+        try:
+            seed_val = getattr(config, 'seed_value', None) or None
+            profile  = getattr(config, 'genre_profile', None)
+            sm       = _SongStateMachine(config.genre, seed=seed_val)
+
+            def _bars(section: str) -> int:
+                if profile:
+                    return sm.get_section_length(section, profile)
+                from src.arrangement.section_constants import SECTION_BAR_RANGES as _SBR
+                lo, hi = _SBR.get(section, (8, 16))
+                return (lo + hi) // 2
+
+            # Initialise first section with profile-aware bar count.
+            current = sm.current_section()
+            bars    = _bars(current)
+            sm._bars_left = bars
+            result: List[Tuple[str, int]] = [(current, bars)]
+
+            # Simulate the rest of the song (cap at 20 sections for safety).
+            for _ in range(20):
+                new_section: Optional[str] = None
+                for _ in range(bars):
+                    new_section = sm.advance_bar()
+                    if new_section:
+                        break
+                if sm.is_finished() or new_section is None:
+                    break
+                bars = _bars(new_section)
+                sm._bars_left = bars
+                result.append((new_section, bars))
+
+            return result if len(result) >= 2 else None
+
+        except Exception:
+            return None
+
+    # ─────────────────────────────────────────────────────────────────
+    #  FILL EVENT ATTACHMENT
+    # ─────────────────────────────────────────────────────────────────
+
+    def _attach_fill_events(
+        self,
+        config: CompositionConfig,
+        structure: List[Tuple[str, int]],
+    ) -> None:
+        """
+        Detect section-transition fill windows and populate config._fill_events.
+
+        config._fill_events is a Dict[int, List[dict]] keyed by the absolute
+        bar index (0-based) where the fill begins.  Each value is a list of
+        FillGenerator event dicts (bar_offset, beat_offset, event_type, …).
+
+        The dict is always attached to config (even when empty) so downstream
+        track generators can query it unconditionally with a simple .get().
+        """
+        config._fill_events: Dict[int, List[dict]] = {}
+
+        if not _FILL_GENERATOR_AVAILABLE:
+            return
+
+        profile = getattr(config, 'genre_profile', None)
+        if profile is None:
+            return
+
+        density    = getattr(profile, 'fill_density', 'none')
+        fill_types = getattr(profile, 'fill_types', None) or []
+        if density == 'none' or not fill_types:
+            return
+
+        # Base trigger probability per density label.
+        _DENSITY_PROB: Dict[str, float] = {
+            "very_sparse":    0.30,
+            "sparse":         0.50,
+            "moderate":       0.60,
+            "dense":          0.85,
+            "dense_in_build": 0.70,
+        }
+
+        # Only very_sparse and sparse are selective about the next section.
+        _SPARSE_DENSITIES = {"very_sparse", "sparse"}
+        # These next-section types always warrant a fill regardless of density.
+        _IMPORTANT_NEXT = {"drop", "chorus", "bridge", "climax", "pre_chorus"}
+
+        seed = getattr(config, 'seed_value', None)
+        fg  = _FillGenerator(seed=seed)
+        rng = random.Random(seed)
+
+        abs_bar = 0
+        for i, (section, bars) in enumerate(structure):
+            next_section = structure[i + 1][0] if i + 1 < len(structure) else None
+
+            # No fill on the last section or trivially short sections.
+            if next_section is None or bars < 2:
+                abs_bar += bars
+                continue
+
+            # Sparse fills are selective: skip non-important transitions.
+            if density in _SPARSE_DENSITIES and next_section not in _IMPORTANT_NEXT:
+                abs_bar += bars
+                continue
+
+            # Resolve effective probability (dense_in_build spikes during builds).
+            base_prob = _DENSITY_PROB.get(density, 0.0)
+            if density == "dense_in_build" and section == "build":
+                base_prob = 1.0
+
+            if rng.random() > base_prob:
+                abs_bar += bars
+                continue
+
+            # Pick a fill type from the profile's list.
+            fill_type = rng.choice(fill_types)
+
+            # Fill window: last 2 bars for sections ≥ 4 bars, else last 1 bar.
+            fill_len     = 2 if bars >= 4 else 1
+            position_bar = bars - fill_len
+
+            events = fg.generate(
+                fill_type    = fill_type,
+                section_bars = bars,
+                position_bar = position_bar,
+                profile      = profile,
+            )
+            if events:
+                fill_abs_bar = abs_bar + position_bar
+                config._fill_events[fill_abs_bar] = events
+
+            abs_bar += bars
+
     # ─────────────────────────────────────────────────────────────────
     #  V4 CINEMATIC DRUM TRACK GENERATION
     # ─────────────────────────────────────────────────────────────────
@@ -612,6 +851,9 @@ class CompositionEngine:
         Cinematic Drum Engine: Focuses on heavy toms, impacts, tribal grooves,
         and loop-safe probabilistic fills for epic game audio.
         """
+        if config.tracks.get('drums', {}).get('volume', 1.0) <= 0.0:
+            return []
+
         has_seed = seed_patterns and 'drum_patterns' in seed_patterns
         pdmx_kick = seed_patterns['drum_patterns'].get('kick', []) if has_seed else []
         pdmx_snare = seed_patterns['drum_patterns'].get('snare', []) if has_seed else []
@@ -675,6 +917,17 @@ class CompositionEngine:
         bar_offset = 0
         section_index = 0
         verse_count = 0
+
+        # Flatten config._fill_events (fill_start_bar → events) into a per-absolute-bar
+        # lookup so injection inside the bar loop is a single O(1) dict.get().
+        # Each event's bar_offset gives its position within the multi-bar fill window;
+        # adding it to fill_start_bar gives the absolute bar where that note belongs.
+        _raw_fills = getattr(config, '_fill_events', None) or {}
+        _fill_by_bar: dict = {}
+        for _fstart, _fevts in _raw_fills.items():
+            for _fe in _fevts:
+                _tbar = _fstart + int(_fe.get('bar_offset', 0))
+                _fill_by_bar.setdefault(_tbar, []).append(_fe)
 
         for section_type, section_bars in structure:
             energy = self._section_energy(section_type)
@@ -788,6 +1041,21 @@ class CompositionEngine:
                     bo = (bar_offset + bar) * 4
                     if complexity > 5 and random.random() < 0.5:
                         notes.append((humanize(bo + 2.0, 0.01 * h_amt), 0.1, HIHAT_CLOSED, 40))
+                    for _fe in _fill_by_bar.get(bar_offset + bar, []):
+                        if _fe.get('event_type') != 'note':
+                            continue
+                        _tgt = _fe.get('target', '')
+                        if   _tgt == 'snare':               _fn = SNARE
+                        elif _tgt in ('hat', 'hat_closed'): _fn = HIHAT_CLOSED
+                        elif _tgt == 'hat_open':            _fn = HIHAT_OPEN
+                        elif _tgt == 'kick':                _fn = KICK
+                        elif _tgt == 'noise':               _fn = SNARE
+                        else:                               continue
+                        _fb  = bo + float(_fe.get('beat_offset', 0.0))
+                        _fv  = max(1, min(127, int(float(_fe.get('value', 80.0)))))
+                        _fdr = float(_fe.get('duration_beats', 0.25))
+                        notes.append((humanize(_fb, 0.008 * h_amt), _fdr, _fn,
+                                      humanize_velocity(_fv, 6)))
 
             elif section_type == 'build':
                 for bar in range(section_bars):
@@ -803,6 +1071,23 @@ class CompositionEngine:
 
                     if bar == section_bars - 1 and random.random() < 0.8:
                         self._add_cinematic_fill(notes, bo, complexity, 1.0, h_amt)
+
+                    # Inject genre-scheduled fill events for this build bar.
+                    for _fe in _fill_by_bar.get(bar_offset + bar, []):
+                        if _fe.get('event_type') != 'note':
+                            continue
+                        _tgt = _fe.get('target', '')
+                        if   _tgt == 'snare':               _fn = SNARE
+                        elif _tgt in ('hat', 'hat_closed'): _fn = HIHAT_CLOSED
+                        elif _tgt == 'hat_open':            _fn = HIHAT_OPEN
+                        elif _tgt == 'kick':                _fn = KICK
+                        elif _tgt == 'noise':               _fn = SNARE
+                        else:                               continue
+                        _fb  = bo + float(_fe.get('beat_offset', 0.0))
+                        _fv  = max(1, min(127, int(float(_fe.get('value', 80.0)))))
+                        _fdr = float(_fe.get('duration_beats', 0.25))
+                        notes.append((humanize(_fb, 0.008 * h_amt), _fdr, _fn,
+                                      humanize_velocity(_fv, 6)))
 
             else:
                 # ── Resolve section-specific drum pattern ─────────────────────
@@ -925,6 +1210,25 @@ class CompositionEngine:
                         # ── Ghost note injection (fills acoustic pocket) ───────────
                         self._inject_ghost_notes(notes, occupied_steps, bo, bpm, energy)
 
+                        # ── Genre-scheduled fill events ────────────────────────────
+                        # FillGenerator events placed by _attach_fill_events() are
+                        # injected here so they land alongside the regular bar notes.
+                        for _fe in _fill_by_bar.get(absolute_bar, []):
+                            if _fe.get('event_type') != 'note':
+                                continue
+                            _tgt = _fe.get('target', '')
+                            if   _tgt == 'snare':               _fn = SNARE
+                            elif _tgt in ('hat', 'hat_closed'): _fn = HIHAT_CLOSED
+                            elif _tgt == 'hat_open':            _fn = HIHAT_OPEN
+                            elif _tgt == 'kick':                _fn = KICK
+                            elif _tgt == 'noise':               _fn = SNARE
+                            else:                               continue
+                            _fb  = bo + float(_fe.get('beat_offset', 0.0))
+                            _fv  = max(1, min(127, int(float(_fe.get('value', 80.0)))))
+                            _fdr = float(_fe.get('duration_beats', 0.25))
+                            notes.append((humanize(_fb, 0.008 * h_amt), _fdr, _fn,
+                                          humanize_velocity(_fv, 6)))
+
                         # ── Hi-Hat Ratchet (Trap / Hip-Hop) ───────────────────────
                         if config.genre in ('trap', 'hiphop', 'phonk'):
                             ratchet = HiHatRatchetEngine.maybe_roll(absolute_bar, bo, bpm)
@@ -959,6 +1263,8 @@ class CompositionEngine:
             _drop_zones = SilenceMatrix.compute_zones(total_bars, seed=_drop_seed)
             notes       = SilenceMatrix.apply(notes, _drop_zones)
 
+        drum_vol = config.tracks.get('drums', {}).get('volume', 1.0)
+        notes = [(t, d, p, max(1, min(127, int(v * drum_vol)))) for t, d, p, v in notes]
         return notes
 
     def _add_cinematic_fill(self, notes, beat_offset, complexity, energy, h_amt):
@@ -1177,6 +1483,9 @@ class CompositionEngine:
         variants (re-selected every 4 bars) and routes through _apply_groove_variation
         for density governance, swing, and inter-layer choking.
         """
+        if config.tracks.get('drums', {}).get('volume', 1.0) <= 0.0:
+            return []
+
         notes: List[Tuple[float, float, int, int]] = []
         complexity = config.complexity
         mutation   = getattr(config, 'mutation', 0.0)
@@ -1244,6 +1553,8 @@ class CompositionEngine:
                 beat_pos   += 4.0
                 bar_global += 1
 
+        drum_vol = config.tracks.get('drums', {}).get('volume', 1.0)
+        notes = [(t, d, p, max(1, min(127, int(v * drum_vol)))) for t, d, p, v in notes]
         return notes
 
     def _generate_dnb_bass(
@@ -1265,12 +1576,14 @@ class CompositionEngine:
         30 % : two-note movement — root for 2 beats, then root or perfect 5th
                for the remaining 2 beats (common Reese modulation gesture).
         """
+        volume   = config.tracks.get('bass', {}).get('volume', 0.8)
+        base_vel = int(102 * volume)
+        if base_vel == 0:
+            return []
+
         notes: List[Tuple[float, float, int, int]] = []
         beat_pos = 0.0
         chord_idx = 0
-
-        volume   = config.tracks.get('bass', {}).get('volume', 0.8)
-        base_vel = int(102 * volume)
 
         for section_type, section_bars in structure:
             energy = self._section_energy(section_type)
@@ -1315,6 +1628,8 @@ class CompositionEngine:
         notes = []
         volume = config.tracks.get('bass', {}).get('volume', 0.8)
         base_vel = int(90 * volume)
+        if base_vel == 0:
+            return []
         h_amt = config.humanize_amount
         mutation = getattr(config, 'mutation', 0.0)
         bpm = getattr(config, 'bpm', None) or 120.0
@@ -1502,6 +1817,8 @@ class CompositionEngine:
         complexity = config.complexity
         volume = config.tracks.get('bass', {}).get('volume', 0.8)
         base_vel = int(90 * volume)
+        if base_vel == 0:
+            return []
         bpm = getattr(config, 'bpm', None) or 120.0
 
         # Pull archetype + palette from BassArchitect selection if available.
@@ -1680,7 +1997,9 @@ class CompositionEngine:
         notes = []
         complexity = config.complexity
         volume = config.tracks.get('chords', {}).get('volume', 0.7)
-        base_vel = int(80 * volume)
+        base_vel = int(60 * volume)
+        if base_vel == 0:
+            return []
         h_amt = config.humanize_amount
 
         # Parse key once for Billboard archetypes that build chords from root.
@@ -1827,7 +2146,7 @@ class CompositionEngine:
                                 src_notes = chord_notes  # fallback on parse error
                         else:
                             src_notes = chord_notes
-                        chord_vel = PhraseVelocityMapper.velocity(0, energy)
+                        chord_vel = max(0, min(127, int(PhraseVelocityMapper.velocity(0, energy) * base_vel / 60)))
                         chord_dur = GateLengthHumanizer.apply(3.8)
                         for note in src_notes:
                             notes.append((beat_pos, chord_dur, note, chord_vel))
@@ -1898,7 +2217,7 @@ class CompositionEngine:
                                 humanize(beat_pos + offset, 0.015 * h_amt),
                                 GateLengthHumanizer.apply(random.uniform(0.28, 0.46)),
                                 note,
-                                PhraseVelocityMapper.velocity(i * 2, energy),
+                                max(0, min(127, int(PhraseVelocityMapper.velocity(i * 2, energy) * base_vel / 60))),
                             ))
 
                 elif section_type == 'chorus':
@@ -1909,7 +2228,7 @@ class CompositionEngine:
                         [0.0, 0.5,  2.0, 3.5],    # hybrid push
                     ])
                     for i, offset in enumerate(grid):
-                        chord_vel = PhraseVelocityMapper.velocity(int(offset * 4) % 16, energy)
+                        chord_vel = max(0, min(127, int(PhraseVelocityMapper.velocity(int(offset * 4) % 16, energy) * base_vel / 60)))
                         for note in chord_notes:
                             notes.append((
                                 humanize(beat_pos + offset, 0.015 * h_amt),
@@ -1922,7 +2241,7 @@ class CompositionEngine:
                     build_frac = (bar + 1) / max(1, section_bars)
                     n_hits     = max(1, round(4 * build_frac))
                     gate       = GateLengthHumanizer.apply(max(0.28, 3.5 - 3.0 * build_frac))
-                    chord_vel  = PhraseVelocityMapper.velocity(0, energy * (0.5 + 0.5 * build_frac))
+                    chord_vel  = max(0, min(127, int(PhraseVelocityMapper.velocity(0, energy * (0.5 + 0.5 * build_frac)) * base_vel / 60)))
                     for offset in [0.0, 1.0, 2.0, 3.0][:n_hits]:
                         for note in chord_notes:
                             notes.append((
@@ -1944,19 +2263,19 @@ class CompositionEngine:
                 # ── Remaining sections (verse, pre_chorus, bridge, tension,
                 #    resolution, …): complexity-gated fallback ───────────────
                 elif energy < 0.15:
-                    chord_vel = PhraseVelocityMapper.velocity(0, energy * 0.5)
+                    chord_vel = max(0, min(127, int(PhraseVelocityMapper.velocity(0, energy * 0.5) * base_vel / 60)))
                     chord_dur = GateLengthHumanizer.apply(3.8)
                     for note in chord_notes:
                         notes.append((humanize(beat_pos, 0.01), chord_dur, note, chord_vel))
                 elif complexity <= 3:
-                    chord_vel = PhraseVelocityMapper.velocity(0, energy)
+                    chord_vel = max(0, min(127, int(PhraseVelocityMapper.velocity(0, energy) * base_vel / 60)))
                     chord_dur = GateLengthHumanizer.apply(3.8)
                     for note in chord_notes:
                         notes.append((beat_pos, chord_dur, note, chord_vel))
                 elif complexity <= 6:
                     for beat_offset in [0, 2]:
                         s         = int(beat_offset * 4)
-                        chord_vel = PhraseVelocityMapper.velocity(s, energy)
+                        chord_vel = max(0, min(127, int(PhraseVelocityMapper.velocity(s, energy) * base_vel / 60)))
                         chord_dur = GateLengthHumanizer.apply(1.5)
                         for note in chord_notes:
                             notes.append((
@@ -1972,7 +2291,7 @@ class CompositionEngine:
                             notes.append((
                                 humanize(beat_pos + offset, 0.02 * h_amt),
                                 GateLengthHumanizer.apply(0.6), note,
-                                PhraseVelocityMapper.velocity(s, energy),
+                                max(0, min(127, int(PhraseVelocityMapper.velocity(s, energy) * base_vel / 60))),
                             ))
 
                 beat_pos += 4
@@ -1996,7 +2315,9 @@ class CompositionEngine:
                                     structure: List[Tuple[str, int]]) -> List[Tuple[float, float, int, int]]:
         notes = []
         volume = config.tracks.get('lead', {}).get('volume', 0.75)
-        base_vel = int(85 * volume)
+        base_vel = int(29 * volume)
+        if base_vel == 0:
+            return []
         h_amt = config.humanize_amount
         complexity = config.complexity
 
@@ -2094,7 +2415,8 @@ class CompositionEngine:
                         duration = max(0.1, min(duration, 2.0))
 
                         h_offset = (random.random() - 0.5) * 0.025 * h_amt
-                        velocity = PhraseVelocityMapper.velocity(step, section_energy)
+                        _raw_vel = PhraseVelocityMapper.velocity(step, section_energy)
+                        velocity = max(0, min(127, int(_raw_vel * base_vel / 57.0)))
                         notes.append((
                             step_time + h_offset,
                             GateLengthHumanizer.apply(duration),
@@ -2113,7 +2435,9 @@ class CompositionEngine:
         notes = []
         complexity = config.complexity
         volume = config.tracks.get('lead', {}).get('volume', 0.75)
-        base_vel = int(85 * volume)
+        base_vel = int(29 * volume)
+        if base_vel == 0:
+            return []
 
         key = config.key or 'C major'
         parts = key.split()
@@ -2185,10 +2509,11 @@ class CompositionEngine:
                             continue
 
                         step_pos = int(pos * 4) % 16
+                        _raw_vel = PhraseVelocityMapper.velocity(step_pos, energy)
                         notes.append((
                             humanize(beat_pos + pos, 0.02 * config.humanize_amount),
                             GateLengthHumanizer.apply(dur), note,
-                            PhraseVelocityMapper.velocity(step_pos, energy),
+                            max(0, min(127, int(_raw_vel * base_vel / 57.0))),
                         ))
                         prev_note = note
 
@@ -2208,6 +2533,8 @@ class CompositionEngine:
         notes = []
         volume = config.tracks.get('pad', {}).get('volume', 0.6)
         base_vel = int(65 * volume)
+        if base_vel == 0:
+            return []
         mutation = getattr(config, 'mutation', 0.0)
 
         has_seed = seed_patterns and 'pad_patterns' in seed_patterns
@@ -2321,6 +2648,8 @@ class CompositionEngine:
         complexity = config.complexity
         volume = config.tracks.get('arp', {}).get('volume', 0.5)
         base_vel = int(70 * volume)
+        if base_vel == 0:
+            return []
 
         arp_patterns = [
             [0, 1, 2, 1],
@@ -2379,7 +2708,7 @@ class CompositionEngine:
                                 humanize(beat_pos + pos, 0.008 * config.humanize_amount),
                                 GateLengthHumanizer.apply(step * 0.8),
                                 note,
-                                PhraseVelocityMapper.velocity(step_pos, energy),
+                                int(PhraseVelocityMapper.velocity(step_pos, energy) * volume),
                             ))
                     pos += step
                     arp_idx += 1
@@ -2440,6 +2769,9 @@ class CompositionEngine:
     # ─────────────────────────────────────────────────────────────────
 
     def _generate_fused_drums(self, fusion_config, structure, config):
+        if config.tracks.get('drums', {}).get('volume', 1.0) <= 0.0:
+            return []
+
         KICK, SNARE, HIHAT_CLOSED, HIHAT_OPEN, CRASH = 36, 38, 42, 46, 49
         notes = []
         total_bars = sum(bars for _, bars in structure)
@@ -2469,6 +2801,8 @@ class CompositionEngine:
                         hat = HIHAT_OPEN if random.random() < 0.08 else HIHAT_CLOSED
                         notes.append((step_time + h_off, 0.15, hat, max(30, min(127, int(70 * energy)))))
                 bar_idx += 1
+        drum_vol = config.tracks.get('drums', {}).get('volume', 1.0)
+        notes = [(t, d, p, max(1, min(127, int(v * drum_vol)))) for t, d, p, v in notes]
         return notes
 
     def _generate_fused_bass(self, fusion_config, chord_progression, structure, config):
@@ -2497,7 +2831,7 @@ class CompositionEngine:
         notes = []
         total_bars = sum(bars for _, bars in structure)
         complexity_float = config.complexity / 10.0
-        base_vel = int(85 * config.tracks.get('lead', {}).get('volume', 0.75))
+        base_vel = int(43 * config.tracks.get('lead', {}).get('volume', 0.75))
         lead_patterns = self.fusion_engine.get_fused_patterns(fusion_config, 'synth', total_bars, complexity_float)
 
         bar_idx = 0
@@ -2511,7 +2845,7 @@ class CompositionEngine:
                 rhythm = lead_patterns[bar_idx]
                 for step in range(16):
                     if rhythm[step] == 1:
-                        notes.append((bar_idx * 4 + step / 4, 0.3, root_midi, max(40, int(base_vel * energy))))
+                        notes.append((bar_idx * 4 + step / 4, 0.3, root_midi, max(20, int(base_vel * energy))))
                 bar_idx += 1
         return notes
 
@@ -2569,8 +2903,52 @@ class CompositionEngine:
             _scale = random.choice(GENRE_SCALES.get(config.genre, ['major', 'minor']))
             config.key = f"{_root} {_scale}"
 
+        # ── Genre profile lookup ──────────────────────────────────────────────
+        # Resolves the active GenreProfile for the current genre + BPM pair and
+        # stores it on config so downstream stages (WAV renderer, DspSession,
+        # future track generators) can access genre-specific parameters without
+        # re-importing or re-instantiating the library.
+        try:
+            from src.midi.genre_profiles import GenreProfileLibrary as _GPL
+            config.genre_profile = _GPL().get(config.genre, config.bpm)
+        except Exception:
+            config.genre_profile = None  # graceful fallback — stages check for None
+
+        # ── MarkovHarmonyEngine instantiation ─────────────────────────────────
+        # Provides theory-grounded chord progressions with voice-leading output.
+        # Stored on config so both generate_chord_progression() (for the string
+        # fallback) and future track generators (for voiced MIDI) can share it.
+        config._markov_harmony = None
+        if _MARKOV_HARMONY_AVAILABLE:
+            try:
+                _kp        = (config.key or "C major").split()
+                _mode      = _kp[1] if len(_kp) > 1 else "major"
+                _root_pc   = NOTE_TO_MIDI.get(_kp[0], 0)
+                _root_midi = 48 + _root_pc   # C4-based octave anchor
+                _mhe = _MarkovHarmonyEngine(
+                    genre     = config.genre,
+                    mode      = _mode,
+                    root_midi = _root_midi,
+                    n_voices  = 4,
+                    seed      = getattr(config, 'seed_value', None),
+                )
+                # Inject borrowed chords from the genre profile when available.
+                _gp = config.genre_profile
+                if _gp and _gp.modal_interchange and _gp.modal_interchange_chords:
+                    _mhe.set_interchange_chords(_gp.modal_interchange_chords)
+                config._markov_harmony = _mhe
+            except Exception:
+                pass  # leave as None — theory fallback handles this gracefully
+
         structure = list(config.structure_override) if config.structure_override else self.generate_structure(config)
         total_bars = sum(b for _, b in structure)
+
+        # ── Fill event scheduling ─────────────────────────────────────────────
+        # Attaches config._fill_events: Dict[int, List[dict]] — fill descriptors
+        # keyed by absolute bar index.  Downstream track generators (drum, bass,
+        # synth) can query this dict to insert fills at section boundaries.
+        self._attach_fill_events(config, structure)
+
         chord_progression = self.generate_chord_progression(config, total_bars + 4, structure=structure)
 
         fusion_config = getattr(config, 'fusion', None)
@@ -2709,9 +3087,9 @@ class CompositionEngine:
                 chord_notes_fn    = get_chord_midi_notes,
                 parse_chord_fn    = parse_chord_string,
                 anchor_pitch      = anchor_pitch,
-                arp_volume        = config.tracks.get('arp', {}).get('volume', 0.5),
-                stab_volume       = 0.8,
-                fx_volume         = 0.9,
+                arp_volume        = config.tracks.get('arp',     {}).get('volume', 0.5),
+                stab_volume       = config.tracks.get('stabs',   {}).get('volume', 0.8),
+                fx_volume         = config.tracks.get('fx',      {}).get('volume', 0.9),
             )
 
         # ── Vocal mask post-pass on omni arp (07_Arp) ────────────────
@@ -2741,6 +3119,11 @@ class CompositionEngine:
             melody_notes = [r for r in map(_mask_note, melody_notes) if r is not None]
 
         # ── Assemble final 10-track output ───────────────────────────
+        # Clear texture if user has set its volume to zero (texture generator
+        # doesn't accept a volume parameter — gate it here instead).
+        _tex_vol = config.tracks.get('texture', {}).get('volume', 0.7)
+        _texture_notes = [] if _tex_vol <= 0.0 else omni_tracks.get('09_Texture', [])
+
         tracks = {
             '01_Kick':     kick_notes,
             '02_Percussion': perc_notes,
@@ -2750,7 +3133,7 @@ class CompositionEngine:
             '06_Pad':      raw_pad,
             '07_Arp':      omni_tracks.get('07_Arp',     []),
             '08_Stabs':    omni_tracks.get('08_Stabs',   []),
-            '09_Texture':  omni_tracks.get('09_Texture', []),
+            '09_Texture':  _texture_notes,
             '10_FX':       omni_tracks.get('10_FX',      []),
         }
 

@@ -37,6 +37,9 @@ from src.gui.styles import S
 from src.gui.constants import GM_INSTRUMENTS, DRUM_KITS, ROLE_INSTRUMENTS
 from src.gui.tooltips import ToolTip, TOOLTIPS
 from src.gui.instrument_description_label import InstrumentDescriptionLabel
+from src.gui.fader_utils import (
+    _pos_to_db, _db_to_pos, _GAIN_STEPS, _GAIN_INF_FLOOR,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -58,11 +61,13 @@ class TrackInstrumentRow:
         One of 'drums' | 'pitched' | 'fx_sounds' | 'percussion'.
     color           : str
         Hex accent colour used for the label and the Rand button outline.
-    default_enabled : bool
+    default_enabled  : bool
         Initial state of the enabled checkbox.
-    default_volume  : int
-        Initial volume slider value (0 – 100).
-    default_program : int | None
+    default_gain_db  : float
+        Initial fader position in dB.  0.0 = unity (no velocity scaling),
+        −∞ (≤ −60) = silence.  Displayed with the same log taper as the
+        Groove & Mixer panel gain fader.
+    default_program  : int | None
         Initial GM program number shown in the combobox.
         Ignored for 'drums' (always starts on "0: Standard Kit")
         and 'percussion' (no combobox).
@@ -82,9 +87,9 @@ class TrackInstrumentRow:
         track: str,
         mode: str,
         color: str,
-        default_enabled: bool = True,
-        default_volume: int = 80,
-        default_program: Optional[int] = None,
+        default_enabled:  bool           = True,
+        default_gain_db:  float          = -3.0,
+        default_program:  Optional[int]  = None,
         log_fn: Optional[Callable[[str], None]] = None,
         tip_fn: Optional[Callable[[tk.Widget, str], None]] = None,
     ) -> None:
@@ -104,7 +109,7 @@ class TrackInstrumentRow:
         self.instrument: Optional[ttk.Combobox] = None
 
         # Build all widgets — two sub-rows inside a container frame
-        self._build(parent, default_volume, default_program)
+        self._build(parent, default_gain_db, default_program)
 
     # ------------------------------------------------------------------
     # Widget construction
@@ -112,8 +117,8 @@ class TrackInstrumentRow:
 
     def _build(
         self,
-        parent: tk.Frame,
-        default_volume: int,
+        parent:          tk.Frame,
+        default_gain_db: float,
         default_program: Optional[int],
     ) -> None:
         """
@@ -143,14 +148,20 @@ class TrackInstrumentRow:
         en_cb.pack(side='left')
         self._attach_tip(en_cb, 'track_enabled')
 
-        # ── Volume slider ─────────────────────────────────────────────
+        # ── Volume fader (−∞ to +6 dB, log taper) ───────────────────
+        # Uses the same DAW fader curve as the Groove & Mixer panel:
+        # 0 dB (unity) sits at 80 % of travel; double-click resets.
         tk.Label(
             row1, text="Vol:", font=S.FN_X, fg=S.TXT_DIM, bg=S.BG2
         ).pack(side='left')
 
+        _init_pos = int(_db_to_pos(max(-60.0, min(6.0, default_gain_db))) * _GAIN_STEPS)
+        self._vol_pos_var = tk.IntVar(value=_init_pos)
+
         self.volume = tk.Scale(
             row1,
-            from_=0, to=100,
+            variable=self._vol_pos_var,
+            from_=0, to=_GAIN_STEPS, resolution=1,
             orient='horizontal',
             font=S.FN_X,
             fg=self._color,
@@ -160,9 +171,26 @@ class TrackInstrumentRow:
             length=80,
             showvalue=0,
         )
-        self.volume.set(default_volume)
         self.volume.pack(side='left', padx=2)
         self._attach_tip(self.volume, 'track_volume')
+
+        # Live dB readout label
+        self._vol_lbl = tk.Label(row1, text='', font=S.FN_X, fg=S.TXT, bg=S.BG2, width=7)
+        self._vol_lbl.pack(side='left')
+
+        def _refresh_vol_lbl(*_):
+            db = _pos_to_db(self._vol_pos_var.get() / _GAIN_STEPS)
+            self._vol_lbl.configure(
+                text='-∞ dB' if db <= _GAIN_INF_FLOOR else f'{db:+.1f} dB'
+            )
+
+        self._vol_pos_var.trace_add('write', _refresh_vol_lbl)
+        # Double-click resets to 0 dB
+        self.volume.bind(
+            '<Double-Button-1>',
+            lambda _: self._vol_pos_var.set(int(_db_to_pos(0.0) * _GAIN_STEPS)),
+        )
+        _refresh_vol_lbl()  # set initial text
 
         # ── Instrument combobox (skipped for percussion) ──────────────
         if self._mode == 'percussion':

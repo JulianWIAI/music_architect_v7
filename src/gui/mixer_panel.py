@@ -4,9 +4,11 @@ src/gui/mixer_panel.py
 Container panel for the Groove & Mixer section.
 
 Holds:
-  - An "Apply groove to render" enable toggle
-  - A genre preset dropdown with [Load Preset] button
+  - A compact genre preset row with [Load Preset] and [Reset All] buttons
   - 10 TrackMixerStrip widgets (one per track, all collapsed by default)
+
+Each strip's header always shows the gain fader and pan slider so the
+user can adjust volume and stereo position without expanding the strip.
 
 When the user selects a genre and clicks Load Preset, all 10 strips are
 populated with theory-correct Tier-1 defaults from GroovePresetLibrary.
@@ -26,9 +28,13 @@ Public API::
 
 from __future__ import annotations
 
+import threading
 import tkinter as tk
+from pathlib import Path
 from tkinter import ttk
-from typing import Dict
+from typing import Callable, Dict, Optional
+
+import numpy as np
 
 from src.gui.styles import S
 from src.gui.mixer_strip import TrackMixerStrip
@@ -36,12 +42,36 @@ from src.gui.tooltips import ToolTip
 from src.midi.groove_settings import SongGrooveSettings, TrackGrooveSettings, TRACK_KEYS
 from src.midi.groove_presets import GroovePresetLibrary
 
+try:
+    from src.gui.midi_preview_player import MIDIPreviewPlayer
+    _PLAYER_AVAILABLE = True
+except Exception:
+    MIDIPreviewPlayer = None   # type: ignore
+    _PLAYER_AVAILABLE = False
+
 
 # Track keys in display order — matches the left panel track list.
 _DISPLAY_ORDER = [
     'drums', 'bass', 'chords', 'lead', 'pad',
     'arp', 'stabs', 'texture', 'fx', 'percussion',
 ]
+
+# Composition track name → groove key (mirrors app.py's _COMP_TRACK_TO_GROOVE_KEY).
+_COMP_TO_GROOVE = {
+    '01_Kick':       'drums',
+    '02_Percussion': 'percussion',
+    '03_Bass':       'bass',
+    '04_Melody':     'lead',
+    '05_Chords':     'chords',
+    '06_Pad':        'pad',
+    '07_Arp':        'arp',
+    '08_Stabs':      'stabs',
+    '09_Texture':    'texture',
+    '10_FX':         'fx',
+}
+
+_SOLO_DIR  = Path(__file__).resolve().parent.parent.parent / 'temp_output'
+_WAVE_W    = 120   # must match mixer_strip._WAVE_W
 
 
 class MixerPanel:
@@ -62,12 +92,22 @@ class MixerPanel:
 
     def __init__(
         self,
-        parent:       tk.Frame,
+        parent:              tk.Frame,
         on_apply_fn=None,
+        get_composition_fn:  Optional[Callable] = None,
     ) -> None:
         self._library    = GroovePresetLibrary()
         self._strips: Dict[str, TrackMixerStrip] = {}
-        self._on_apply_fn = on_apply_fn
+        self._on_apply_fn        = on_apply_fn
+        self._get_composition_fn = get_composition_fn
+
+        # Shared solo player — one track plays at a time.
+        self._solo_player      = MIDIPreviewPlayer() if _PLAYER_AVAILABLE else None
+        self._active_solo_strip: Optional[TrackMixerStrip] = None
+
+        # Hidden state — groove processing is always enabled.
+        # Kept as a variable so get_settings() continues to work unchanged.
+        self._apply_var = tk.BooleanVar(value=True)
 
         # ── Outer collapsible wrapper ──────────────────────────────────────────
         # Mirrors the style of CollapsibleSection but is self-contained so
@@ -119,25 +159,10 @@ class MixerPanel:
     # ── Content construction ──────────────────────────────────────────────────
 
     def _build_content(self) -> None:
-        """Build the enable toggle, preset row, and all track strips."""
+        """Build the preset row and all track strips."""
         c = self._content
 
-        # ── Enable toggle ─────────────────────────────────────────────────────
-        top = tk.Frame(c, bg=S.BG2); top.pack(fill='x', pady=(0, 4))
-        self._apply_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(
-            top,
-            text='Apply groove processing to every render',
-            variable=self._apply_var,
-            font=S.FN_S,
-            fg=S.ORANGE,
-            bg=S.BG2,
-            selectcolor=S.BG3,
-            activebackground=S.BG2,
-            activeforeground=S.ORANGE,
-        ).pack(side='left')
-
-        # ── Genre preset row ──────────────────────────────────────────────────
+        # ── Genre preset row (compact) ────────────────────────────────────────
         preset_row = tk.Frame(c, bg=S.BG2); preset_row.pack(fill='x', pady=(0, 6))
         tk.Label(
             preset_row,
@@ -193,19 +218,61 @@ class MixerPanel:
                 'Use this to hear the raw MIDI before any groove processing,\n'
                 'or as a clean starting point before tweaking individual tracks.')
 
-        tk.Label(
-            preset_row,
-            text='← loads theory-correct defaults',
-            font=S.FN_X, fg=S.TXT_DIM, bg=S.BG2,
-        ).pack(side='left', padx=6)
-
         # ── Thin divider before track strips ─────────────────────────────────
         tk.Frame(c, bg=S.BG3, height=1).pack(fill='x', pady=(2, 4))
 
+        # ── Solo batch controls ───────────────────────────────────────────────
+        if self._solo_player is not None:
+            solo_ctrl = tk.Frame(c, bg=S.BG2)
+            solo_ctrl.pack(fill='x', pady=(0, 4))
+
+            self._btn_render_all = tk.Button(
+                solo_ctrl,
+                text='▶  RENDER ALL SOLOS',
+                font=S.FN_X,
+                fg=S.CYAN, bg=S.BG_BTN,
+                activeforeground=S.TXT_BRT, activebackground=S.BG_BTN_ACT,
+                bd=0, padx=10, pady=4, cursor='hand2', relief='flat',
+                command=self._render_all_solos,
+            )
+            self._btn_render_all.pack(side='left', padx=(0, 4))
+            ToolTip(self._btn_render_all,
+                    'Render every track in isolation, one at a time.\n'
+                    'Each strip\'s waveform appears as its render completes.\n'
+                    'Reflects the composition as generated — raw preview,\n'
+                    'no Groove & Mix post-processing applied.')
+
+            self._btn_reset_solos = tk.Button(
+                solo_ctrl,
+                text='✕  RESET SOLOS',
+                font=S.FN_X,
+                fg=S.TXT_DIM, bg=S.BG_BTN,
+                activeforeground=S.TXT_BRT, activebackground=S.BG_BTN_ACT,
+                bd=0, padx=10, pady=4, cursor='hand2', relief='flat',
+                command=self._reset_all_solos,
+            )
+            self._btn_reset_solos.pack(side='left')
+            ToolTip(self._btn_reset_solos,
+                    'Clear all cached solo renders.\n'
+                    'Use this after re-generating or changing instrument\n'
+                    'settings so you don\'t hear stale audio.')
+        else:
+            self._btn_render_all  = None
+            self._btn_reset_solos = None
+
         # ── Track strips ──────────────────────────────────────────────────────
+        _has_solo = self._solo_player is not None
         for track_key in _DISPLAY_ORDER:
             color = S.TRACK_CLR.get(track_key, S.CYAN)
-            strip = TrackMixerStrip(c, track_key=track_key, color=color)
+            strip = TrackMixerStrip(
+                c,
+                track_key=track_key,
+                color=color,
+                solo_fn    = self._start_solo_render if _has_solo else None,
+                stop_fn    = self._stop_solo         if _has_solo else None,
+                play_fn    = self._play_solo_wav     if _has_solo else None,
+                get_pos_fn = self._get_solo_pos      if _has_solo else None,
+            )
             self._strips[track_key] = strip
 
         # ── Apply & Re-render button ───────────────────────────────────────────
@@ -251,7 +318,7 @@ class MixerPanel:
         if genre in genres:
             self._genre_var.set(genre)
 
-    def get_settings(self) -> SongGrooveSettings:
+    def get_settings(self, genre: Optional[str] = None) -> SongGrooveSettings:
         """
         Read all track strips and return a SongGrooveSettings.
 
@@ -259,6 +326,13 @@ class MixerPanel:
         state before processing starts.  All Tkinter variable reads happen
         on the main thread — this method must be called before spawning
         the worker thread, not from inside it.
+
+        Parameters
+        ----------
+        genre : str | None
+            Active genre string (e.g. 'trap').  When provided it is stored on
+            SongGrooveSettings so GrooveProcessor can derive genre-aware
+            MicroTimingEngine grids for unconfigured tracks.
         """
         tracks = {
             key: strip.get_settings()
@@ -267,6 +341,7 @@ class MixerPanel:
         return SongGrooveSettings(
             tracks=tracks,
             apply_enabled=self._apply_var.get(),
+            genre=genre,
         )
 
     # ── Private helpers ───────────────────────────────────────────────────────
@@ -315,6 +390,170 @@ class MixerPanel:
             track_settings.timing_humanize_ms = current.timing_humanize_ms
             track_settings.seed               = current.seed
             strip.load(track_settings)
+
+    # ── Solo preview ──────────────────────────────────────────────────────────
+
+    def _render_all_solos(self) -> None:
+        """Sequentially render all 10 tracks in isolation in a single background thread."""
+        comp = self._get_composition_fn() if self._get_composition_fn else None
+        if comp is None:
+            return
+
+        self._stop_solo()
+        if self._active_solo_strip is not None:
+            self._active_solo_strip.set_solo_stopped()
+            self._active_solo_strip = None
+
+        keys = list(self._strips.keys())
+        total = len(keys)
+
+        if self._btn_render_all:
+            self._btn_render_all.configure(state='disabled', fg=S.TXT_DIM)
+        if self._btn_reset_solos:
+            self._btn_reset_solos.configure(state='disabled')
+
+        def _worker() -> None:
+            for i, track_key in enumerate(keys):
+                # Update button label on main thread
+                label = f'Rendering {i + 1} / {total}…'
+                if self._btn_render_all:
+                    self._content.after(0, lambda l=label: self._btn_render_all.configure(text=l))
+
+                strip = self._strips.get(track_key)
+                if strip is None:
+                    continue
+
+                try:
+                    solo_comp = self._make_solo_composition(comp, track_key)
+                    self._neutralize_programs(solo_comp)
+                    from src.rendering.builtin_synthesizer import BuiltinSynthesizer
+                    from src.rendering.wav_writer import write_wav
+
+                    synth   = BuiltinSynthesizer()
+                    samples = synth.render_composition(solo_comp)
+                    peaks   = self._compute_peaks(samples, _WAVE_W)
+
+                    _SOLO_DIR.mkdir(parents=True, exist_ok=True)
+                    wav_path = str(_SOLO_DIR / f'solo_{track_key}.wav')
+                    write_wav(wav_path, samples, 44100)
+
+                    bpm      = float(solo_comp.get('config', {}).get('bpm', 120.0))
+                    duration = solo_comp.get('total_bars', 8) * 4 * (60.0 / bpm)
+
+                    self._content.after(
+                        0, lambda s=strip, w=wav_path, d=duration, p=peaks:
+                        s._on_solo_ready(w, d, p, autoplay=False)
+                    )
+                except Exception as exc:
+                    print(f'[MixerPanel] render-all error ({track_key}): {exc}')
+
+            # Restore button on main thread
+            def _done() -> None:
+                if self._btn_render_all:
+                    self._btn_render_all.configure(
+                        text='▶  RENDER ALL SOLOS', state='normal', fg=S.CYAN)
+                if self._btn_reset_solos:
+                    self._btn_reset_solos.configure(state='normal')
+            self._content.after(0, _done)
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _reset_all_solos(self) -> None:
+        """Clear every strip's cached solo render and stop any active playback."""
+        self._stop_solo()
+        if self._active_solo_strip is not None:
+            self._active_solo_strip.set_solo_stopped()
+            self._active_solo_strip = None
+        for strip in self._strips.values():
+            strip.reset_solo()
+
+    def _start_solo_render(self, track_key: str, done_cb: Callable) -> None:
+        """Start a background solo render for *track_key*, call done_cb when ready."""
+        comp = self._get_composition_fn() if self._get_composition_fn else None
+        if comp is None:
+            done_cb(None, 0.0, None)
+            return
+
+        # Stop any currently playing solo and notify the active strip.
+        if self._active_solo_strip is not None:
+            self._active_solo_strip.set_solo_stopped()
+            self._active_solo_strip = None
+        self._stop_solo()
+        self._active_solo_strip = self._strips.get(track_key)
+
+        def _worker() -> None:
+            try:
+                solo_comp = self._make_solo_composition(comp, track_key)
+                self._neutralize_programs(solo_comp)
+                from src.rendering.builtin_synthesizer import BuiltinSynthesizer
+                from src.rendering.wav_writer import write_wav
+
+                synth   = BuiltinSynthesizer()
+                samples = synth.render_composition(solo_comp)
+                peaks   = self._compute_peaks(samples, _WAVE_W)
+
+                _SOLO_DIR.mkdir(parents=True, exist_ok=True)
+                wav_path = str(_SOLO_DIR / f'solo_{track_key}.wav')
+                write_wav(wav_path, samples, 44100)
+
+                bpm      = float(solo_comp.get('config', {}).get('bpm', 120.0))
+                duration = solo_comp.get('total_bars', 8) * 4 * (60.0 / bpm)
+
+                self._content.after(0, lambda: done_cb(wav_path, duration, peaks))
+            except Exception as exc:
+                print(f'[MixerPanel] solo render error ({track_key}): {exc}')
+                self._content.after(0, lambda: done_cb(None, 0.0, None))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _make_solo_composition(self, comp: dict, track_key: str) -> dict:
+        """Return a filtered composition containing only the tracks for *track_key*."""
+        keep = {ct for ct, gk in _COMP_TO_GROOVE.items() if gk == track_key}
+        return {
+            'config':     comp.get('config', {}),
+            'total_bars': comp.get('total_bars', 8),
+            'tracks':     {k: v for k, v in comp.get('tracks', {}).items() if k in keep},
+            'track_info': {k: dict(v) for k, v in comp.get('track_info', {}).items() if k in keep},
+        }
+
+    @staticmethod
+    def _neutralize_programs(solo_comp: dict) -> None:
+        """Reset every melodic track to program 0 (neutral timbre).
+
+        Drums (channel 9) keep their synthesis path — kick/snare/hihat
+        rhythm is content, not clothing. Everything else gets a plain
+        default so the solo is unambiguously a note-content preview.
+        """
+        for info in solo_comp.get('track_info', {}).values():
+            if info.get('channel', 0) != 9:
+                info['program'] = 0
+
+    def _stop_solo(self) -> None:
+        if self._solo_player:
+            self._solo_player.stop()
+
+    def _play_solo_wav(self, wav_path: str, start_sec: float) -> None:
+        if self._solo_player:
+            self._solo_player.play_wav(wav_path, start_sec)
+
+    def _get_solo_pos(self) -> float:
+        return self._solo_player.get_current_sec() if self._solo_player else 0.0
+
+    @staticmethod
+    def _compute_peaks(samples: list, width: int) -> list:
+        """Downsample *samples* to *width* peak values normalised 0.0–1.0."""
+        arr = np.abs(np.array(samples, dtype=np.float32))
+        n   = len(arr)
+        if n == 0:
+            return [0.0] * width
+        pad = (-n) % width
+        if pad:
+            arr = np.pad(arr, (0, pad))
+        peaks    = arr.reshape(width, -1).max(axis=1)
+        peak_max = float(peaks.max())
+        if peak_max < 1e-6:
+            peak_max = 1.0
+        return (peaks / peak_max).tolist()
 
     def _reset_all(self) -> None:
         """

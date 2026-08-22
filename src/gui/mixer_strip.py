@@ -3,27 +3,23 @@ src/gui/mixer_strip.py
 ───────────────────────
 A collapsible per-track mixer strip widget.
 
+Layout — header (always visible)
+─────────────────────────────────
+  [▶] TRACK   [━━━━━━━━━━━━━━] +0.0 dB  │  [pan━━━━] C   <summary>
+
 Layout when expanded
 ────────────────────
-  ─── PERSISTENT (both modes) ──────────────────────────────────────────
   Transpose : slider  −24 … +24 st   [−12] [0] [+12]
-  Gain      : slider  −6.0 … +6.0 dB
 
-  ─── VIEW SLOT (mutually exclusive) ───────────────────────────────────
-  SIMPLIFIED:
-    Swing %   : slider  50.0 … 66.0 %     Nudge : spinbox  −50 … +50 ms
-    Vel min   : spinbox 1 … 127           Vel max: spinbox 1 … 127
-    Vel curve : combobox (flat / accent_1 / accent_1_3 / crescendo / decrescendo)
-    Pan       : slider  −63 … +63
-  ADVANCED:
-    Notebook tabs: V | T | P | E  (16-step grids per tab)
-    [Export Grid JSON]
+  GROOVE
+  Swing %   : slider  50.0 … 66.0 %     Nudge : spinbox  −50 … +50 ms
+  Vel min   : spinbox 1 … 127           Vel max: spinbox 1 … 127
+  Vel curve : combobox (flat / accent_1 / accent_1_3 / crescendo / decrescendo)
 
-  ─── TIER 2: HUMANISE (always visible) ───────────────────────────────
+  HUMANIZE
   Vel jitter : slider  0 … 30            Time jitter: slider 0 … 20 ms
   Seed       : entry field + [Roll] button
 
-  ─── TOGGLE ──────────────────────────────────────────────────────────
   [ADVANCED ▸]  /  [◂ SIMPLIFIED]
 
 All widgets are pure Tkinter — no platform-specific APIs.
@@ -41,11 +37,18 @@ from __future__ import annotations
 import random
 import tkinter as tk
 from tkinter import messagebox, ttk
-from typing import Optional
+from typing import Callable, Optional
+
+_WAVE_W: int = 120   # solo waveform canvas width in pixels
+_WAVE_H: int = 22    # solo waveform canvas height in pixels
 
 from src.gui.styles import S
 from src.gui.tooltips import ToolTip
 from src.midi.groove_settings import TrackGrooveSettings, VEL_CURVES
+from src.gui.fader_utils import (
+    _pos_to_db, _db_to_pos,
+    _GAIN_STEPS, _GAIN_MIN_DB, _GAIN_MAX_DB, _GAIN_INF_FLOOR,
+)
 
 # AdvancedGrooveView is optional — import failure just disables the toggle.
 try:
@@ -60,6 +63,9 @@ class TrackMixerStrip:
     """
     Collapsible mixer + groove strip for one track.
 
+    The gain fader and pan slider are always visible in the header row so
+    the user never needs to expand a strip just to adjust volume or pan.
+
     Parameters
     ----------
     parent    : Parent Tkinter frame (must exist before construction).
@@ -72,11 +78,28 @@ class TrackMixerStrip:
         parent:    tk.Frame,
         track_key: str,
         color:     str,
+        solo_fn:     Optional[Callable] = None,  # (track_key, done_cb) -> None
+        stop_fn:     Optional[Callable] = None,  # () -> None
+        play_fn:     Optional[Callable] = None,  # (wav_path, start_sec) -> None
+        get_pos_fn:  Optional[Callable] = None,  # () -> float
     ) -> None:
         self._track_key    = track_key
         self._color        = color
         self._collapsed    = True
         self._use_advanced = False          # True → advanced view is shown
+
+        # Solo preview state
+        self._solo_fn          = solo_fn
+        self._stop_fn          = stop_fn
+        self._play_fn          = play_fn
+        self._get_pos_fn       = get_pos_fn
+        self._solo_wav:    Optional[str]  = None
+        self._solo_duration:   float      = 0.0
+        self._is_solo_playing: bool       = False
+        self._solo_peaks:  Optional[list] = None
+        self._playhead_id                 = None
+        self._solo_btn:    Optional[tk.Button] = None
+        self._wave_canvas: Optional[tk.Canvas] = None
 
         self._outer = tk.Frame(parent, bg=S.BG2)
         self._outer.pack(fill='x', pady=1)
@@ -88,10 +111,18 @@ class TrackMixerStrip:
     # ── Header ────────────────────────────────────────────────────────────────
 
     def _build_header(self) -> None:
-        """Compact always-visible row: arrow toggle + track name + live summary."""
+        """
+        Always-visible header row.
+
+        Layout: [▶] TRACK_NAME  [gain━━━━━━] +0.0 dB  │  [pan━━] C  <summary>
+
+        Gain and pan are placed here so they are accessible without expanding
+        the strip — matching standard DAW channel-strip behaviour.
+        """
         hdr = tk.Frame(self._outer, bg=S.BG3)
         hdr.pack(fill='x')
 
+        # Collapse / expand toggle arrow
         self._arrow_var = tk.StringVar(value='▶')
         tk.Button(
             hdr,
@@ -105,14 +136,98 @@ class TrackMixerStrip:
             highlightthickness=0, relief='flat',
         ).pack(side='left')
 
+        # Track name label — narrower than before to make room for fader
         tk.Label(
             hdr,
             text=self._track_key.upper(),
             font=S.FN_S, fg=self._color, bg=S.BG3,
-            width=11, anchor='w',
+            width=7, anchor='w',
         ).pack(side='left')
 
-        # Live summary: shows only changed values (updated on any Tier-1 change).
+        # ── Gain fader (always visible) ───────────────────────────────────────
+        _unity_step = int(_db_to_pos(0.0) * _GAIN_STEPS)   # = 800 at 0 dB
+        self._gain_pos_var = tk.IntVar(value=_unity_step)
+        _gain_sl = tk.Scale(
+            hdr,
+            variable=self._gain_pos_var,
+            from_=0, to=_GAIN_STEPS, resolution=1, orient='horizontal',
+            font=S.FN_X, fg=self._color, bg=S.BG3,
+            troughcolor=S.BG_INPUT, highlightthickness=0, length=130,
+            showvalue=0,
+            command=lambda _: self._update_gain_label(),
+        )
+        _gain_sl.pack(side='left', padx=2)
+        _gain_sl.bind('<Double-Button-1>', lambda _: self._reset_gain())
+        ToolTip(_gain_sl,
+                'Track output volume in dB.\n'
+                'Also written as MIDI CC7 (channel volume) in the FluidSynth path.\n\n'
+                '−∞ = silence · 0 dB = unity (no change) · +6 dB = full boost\n'
+                'Unity (0 dB) is at 80 % of slider travel.\n\n'
+                'Double-click to reset to 0 dB.')
+        self._gain_pos_var.trace_add('write', lambda *_: self._update_gain_label())
+
+        # Numeric dB readout
+        self._gain_lbl = tk.Label(hdr, text='+0.0 dB', font=S.FN_X,
+                                   fg=S.TXT, bg=S.BG3, width=8)
+        self._gain_lbl.pack(side='left')
+
+        # Thin visual divider between gain and pan
+        tk.Label(hdr, text='│', font=S.FN_X, fg=S.TXT_DIM, bg=S.BG3).pack(side='left', padx=2)
+
+        # ── Pan slider (always visible) ───────────────────────────────────────
+        self._pan_var = tk.IntVar(value=0)
+        _pan_sl = tk.Scale(
+            hdr,
+            variable=self._pan_var,
+            from_=-63, to=63, orient='horizontal',
+            font=S.FN_X, fg=self._color, bg=S.BG3,
+            troughcolor=S.BG_INPUT, highlightthickness=0, length=60,
+            showvalue=0,
+        )
+        _pan_sl.pack(side='left', padx=2)
+        _pan_sl.bind('<Double-Button-1>', lambda _: self._pan_var.set(0))
+        ToolTip(_pan_sl, 'Stereo pan position — written as MIDI CC10 at track start.\n'
+                         '0 = centre · −63 = full left · +63 = full right.\n'
+                         'In Advanced mode the P grid gives per-step pan control.\n\n'
+                         'Double-click to reset to centre.')
+        self._pan_var.trace_add('write', lambda *_: self._update_pan_label())
+
+        # Pan position text (C / L## / R##)
+        self._pan_lbl = tk.Label(hdr, text='C', font=S.FN_X,
+                                  fg=S.TXT, bg=S.BG3, width=4)
+        self._pan_lbl.pack(side='left')
+
+        # ── Solo preview button + waveform canvas ─────────────────────────────
+        if self._solo_fn is not None:
+            self._solo_btn_var = tk.StringVar(value='S')
+            self._solo_btn = tk.Button(
+                hdr,
+                textvariable=self._solo_btn_var,
+                command=self._on_solo_click,
+                font=S.FN_X, fg=S.CYAN, bg=S.BG3,
+                activeforeground=S.TXT_BRT, activebackground=S.BG3,
+                bd=0, padx=4, pady=1, cursor='hand2',
+                highlightthickness=0, relief='flat', width=3,
+            )
+            self._solo_btn.pack(side='left', padx=(8, 2))
+            ToolTip(self._solo_btn,
+                    'Solo — render this track alone and preview it.\n'
+                    'S = no render yet  ·  ▶ = ready, click to play\n'
+                    '■ = playing, click to stop\n'
+                    'Click on the waveform to seek to any position.')
+
+            self._wave_canvas = tk.Canvas(
+                hdr, width=_WAVE_W, height=_WAVE_H,
+                bg=S.BG_INPUT, highlightthickness=1,
+                highlightbackground='#333',
+            )
+            self._wave_canvas.pack(side='left', padx=2)
+            self._wave_canvas.bind('<Button-1>', self._on_canvas_click)
+            ToolTip(self._wave_canvas,
+                    'Solo waveform preview.\nClick anywhere to seek to that position.')
+
+        # Live summary — shows only non-visible settings when collapsed.
+        # Gain and pan are excluded here because they are always visible.
         self._summary_var = tk.StringVar(value='')
         tk.Label(
             hdr,
@@ -129,17 +244,17 @@ class TrackMixerStrip:
 
         Structure
         ---------
-        1. Persistent row  — Transpose + Gain (both modes).
-        2. View slot       — _simple_frame (default) or _adv_view.frame.
-        3. Tier-2 section  — Vel jitter, Time jitter, Seed (both modes).
-        4. Toggle button   — [ADVANCED ▸] / [◂ SIMPLIFIED].
+        1. Transpose row.
+        2. GROOVE section — Swing/Nudge, Vel min/max/Curve.
+        3. HUMANIZE section — Vel jitter, Time jitter, Seed.
+        4. Toggle button — [ADVANCED ▸] / [◂ SIMPLIFIED].
+
+        Gain and pan have been moved to _build_header() and are no longer
+        present here.
         """
         self._content = tk.Frame(self._outer, bg=S.BG2, padx=8, pady=4)
 
-        # ── 1. Persistent rows (Transpose + Gain) ────────────────────────────
-        self._sep_label(self._content, '─── TIER 1: DETERMINISTIC ───────────────')
-
-        # Transpose row
+        # ── 1. Transpose row ──────────────────────────────────────────────────
         r_tr = tk.Frame(self._content, bg=S.BG2); r_tr.pack(fill='x', pady=1)
         tk.Label(r_tr, text='Transpose:', font=S.FN_X, fg=S.TXT_DIM, bg=S.BG2,
                  width=11, anchor='w').pack(side='left')
@@ -178,33 +293,12 @@ class TrackMixerStrip:
         _b12p.pack(side='left', padx=2)
         ToolTip(_b12p, 'Jump to +12 st (one octave up).')
 
-        # Gain row (CC7 — track-level, no per-step equivalent in grid mode)
-        r_gain = tk.Frame(self._content, bg=S.BG2); r_gain.pack(fill='x', pady=1)
-        tk.Label(r_gain, text='Gain (CC7):', font=S.FN_X, fg=S.TXT_DIM, bg=S.BG2,
-                 width=11, anchor='w').pack(side='left')
-        self._gain_var = tk.DoubleVar(value=0.0)
-        _gain_sl = tk.Scale(
-            r_gain,
-            variable=self._gain_var,
-            from_=-6.0, to=6.0, resolution=0.5, orient='horizontal',
-            font=S.FN_X, fg=self._color, bg=S.BG2,
-            troughcolor=S.BG_INPUT, highlightthickness=0, length=120,
-            showvalue=0,
-            command=lambda _: self._update_summary(),
-        )
-        _gain_sl.pack(side='left', padx=2)
-        ToolTip(_gain_sl, 'Track output volume in dB — written as MIDI CC7 (channel volume)\n'
-                          'at the very start of the track.\n'
-                          '0 dB = nominal (CC7=100).  Range: −6 to +6 dB.')
-        self._gain_lbl = tk.Label(r_gain, text='0.0 dB', font=S.FN_X,
-                                   fg=S.TXT, bg=S.BG2, width=8)
-        self._gain_lbl.pack(side='left')
-        self._gain_var.trace_add('write', lambda *_: self._gain_lbl.configure(
-            text=f'{self._gain_var.get():+.1f} dB'))
-        tk.Label(r_gain, text='(applies in both Simple and Advanced modes)',
-                 font=S.FN_X, fg=S.TXT_DIM, bg=S.BG2).pack(side='left', padx=8)
-
         # ── 2. View slot — contains _simple_frame or _adv_view.frame ─────────
+        # Thin divider + "GROOVE" section title
+        tk.Frame(self._content, bg=S.BG3, height=1).pack(fill='x', pady=(6, 2))
+        tk.Label(self._content, text='GROOVE', font=S.FN_X, fg=S.TXT_DIM,
+                 bg=S.BG2, anchor='w').pack(fill='x')
+
         self._view_slot = tk.Frame(self._content, bg=S.BG2)
         self._view_slot.pack(fill='x')
 
@@ -224,8 +318,10 @@ class TrackMixerStrip:
         else:
             self._adv_view = None
 
-        # ── 3. Tier-2 section (always visible) ───────────────────────────────
-        self._sep_label(self._content, '─── TIER 2: HUMANISE (seeded) ──────────')
+        # ── 3. HUMANIZE section ───────────────────────────────────────────────
+        tk.Frame(self._content, bg=S.BG3, height=1).pack(fill='x', pady=(6, 2))
+        tk.Label(self._content, text='HUMANIZE', font=S.FN_X, fg=S.TXT_DIM,
+                 bg=S.BG2, anchor='w').pack(fill='x')
 
         r_vel_hum = tk.Frame(self._content, bg=S.BG2); r_vel_hum.pack(fill='x', pady=1)
         tk.Label(r_vel_hum, text='Vel jitter:', font=S.FN_X, fg=S.TXT_DIM, bg=S.BG2,
@@ -240,7 +336,7 @@ class TrackMixerStrip:
             showvalue=0,
         )
         _vh_sl.pack(side='left', padx=2)
-        ToolTip(_vh_sl, 'Tier-2 velocity humanisation: adds a random ±N velocity\n'
+        ToolTip(_vh_sl, 'Velocity humanisation: adds a random ±N velocity\n'
                         'to each note on every render.\n'
                         'Lock the Seed below to make the variation reproducible.\n'
                         '0 = off  ·  10 = subtle  ·  30 = expressive')
@@ -262,7 +358,7 @@ class TrackMixerStrip:
             showvalue=0,
         )
         _th_sl.pack(side='left', padx=2)
-        ToolTip(_th_sl, 'Tier-2 timing humanisation: adds a random ±N ms offset\n'
+        ToolTip(_th_sl, 'Timing humanisation: adds a random ±N ms offset\n'
                         'to each note on every render.\n'
                         'Lock the Seed below to make the variation reproducible.\n'
                         '0 = off  ·  5 ms = subtle  ·  20 ms = very loose')
@@ -330,7 +426,7 @@ class TrackMixerStrip:
                 '  P  per-step pan        · E  per-step expression (CC11)\n\n'
                 'SIMPLIFIED: converts the grids back to the nearest named\n'
                 '  preset (with a warning if the conversion loses precision).\n\n'
-                'Transpose and Gain remain visible in both modes.')
+                'Transpose, Gain and Pan remain visible in both modes.')
 
         if not _ADV_AVAILABLE:
             tk.Label(toggle_row, text='(advanced view unavailable)',
@@ -340,10 +436,11 @@ class TrackMixerStrip:
 
     def _build_simple_view(self, parent: tk.Frame) -> None:
         """
-        Build the simplified Tier-1 controls inside *parent*.
+        Build the simplified groove controls inside *parent*.
 
-        Creates the Swing/Nudge, Vel min/max/Curve, and Pan rows.
-        Transpose and Gain are in the persistent section above the view slot.
+        Creates Swing/Nudge, Vel min/max/Curve rows.
+        Gain and Pan have been moved to the header; Transpose is in the
+        persistent row above the view slot.
         """
         # Swing + Nudge
         r_sw = tk.Frame(parent, bg=S.BG2); r_sw.pack(fill='x', pady=1)
@@ -436,28 +533,6 @@ class TrackMixerStrip:
                            'In Advanced mode the V grid replaces this control.')
         self._curve_var.trace_add('write', lambda *_: self._update_summary())
 
-        # Pan
-        r_pan = tk.Frame(parent, bg=S.BG2); r_pan.pack(fill='x', pady=(1, 4))
-        tk.Label(r_pan, text='Pan:', font=S.FN_X, fg=S.TXT_DIM, bg=S.BG2,
-                 width=5, anchor='w').pack(side='left')
-        self._pan_var = tk.IntVar(value=0)
-        _pan_sl = tk.Scale(
-            r_pan,
-            variable=self._pan_var,
-            from_=-63, to=63, orient='horizontal',
-            font=S.FN_X, fg=self._color, bg=S.BG2,
-            troughcolor=S.BG_INPUT, highlightthickness=0, length=120,
-            showvalue=0,
-        )
-        _pan_sl.pack(side='left', padx=2)
-        ToolTip(_pan_sl, 'Stereo pan position — written as MIDI CC10 at track start.\n'
-                         '0 = centre · −63 = full left · +63 = full right.\n'
-                         'In Advanced mode the P grid gives per-step pan control.')
-        self._pan_lbl = tk.Label(r_pan, text='C', font=S.FN_X,
-                                  fg=S.TXT, bg=S.BG2, width=5)
-        self._pan_lbl.pack(side='left')
-        self._pan_var.trace_add('write', lambda *_: self._update_pan_label())
-
     # ── Public API ────────────────────────────────────────────────────────────
 
     def load(self, s: TrackGrooveSettings) -> None:
@@ -467,9 +542,13 @@ class TrackMixerStrip:
         If *s* carries advanced grid data (``s.use_advanced=True``) the view
         switches to advanced mode and loads the grids directly.
         """
-        # Persistent fields (always loaded regardless of mode)
+        # Gain and pan are now in the header — load them first.
+        _clamped_db = max(_GAIN_MIN_DB, min(_GAIN_MAX_DB, s.gain_db))
+        self._gain_pos_var.set(int(_db_to_pos(_clamped_db) * _GAIN_STEPS))
+        self._pan_var.set(max(-63, min(63, s.pan)))
+
+        # Transpose (always loaded)
         self._transpose_var.set(s.transpose_st)
-        self._gain_var.set(max(-6.0, min(6.0, s.gain_db)))
 
         # Tier-2 fields (always loaded)
         self._vel_hum_var.set(max(0, min(30, s.vel_humanize)))
@@ -482,7 +561,6 @@ class TrackMixerStrip:
         self._vel_min_var.set(max(1, min(126, s.vel_min)))
         self._vel_max_var.set(max(2, min(127, s.vel_max)))
         self._curve_var.set(s.vel_curve if s.vel_curve in VEL_CURVES else 'flat')
-        self._pan_var.set(max(-63, min(63, s.pan)))
 
         if s.use_advanced and _ADV_AVAILABLE and self._adv_view is not None:
             # Switch to advanced mode and load the grid data.
@@ -516,9 +594,12 @@ class TrackMixerStrip:
         if self._seed_var.get().strip().isdigit():
             seed = int(self._seed_var.get().strip())
 
+        # Header fields (gain and pan)
+        gain = _pos_to_db(self._gain_pos_var.get() / _GAIN_STEPS)
+        pan  = int(self._pan_var.get())
+
         # Persistent fields
         transpose = int(self._transpose_var.get())
-        gain      = float(self._gain_var.get())
 
         # Tier-2 fields
         vel_hum  = int(self._vel_hum_var.get())
@@ -548,7 +629,7 @@ class TrackMixerStrip:
             swing_pct          = float(self._swing_var.get()),
             timing_nudge_ms    = float(self._nudge_var.get()),
             gain_db            = gain,
-            pan                = int(self._pan_var.get()),
+            pan                = pan,
             vel_humanize       = vel_hum,
             timing_humanize_ms = time_hum,
             seed               = seed,
@@ -594,13 +675,13 @@ class TrackMixerStrip:
 
         else:
             # ── Advanced → Simple ─────────────────────────────────────────────
-            # Build the base settings (persistent + Tier 2 only) for the conversion.
+            # Build the base settings (persistent + Tier 2 only) for conversion.
             seed: Optional[int] = None
             if self._seed_var.get().strip().isdigit():
                 seed = int(self._seed_var.get().strip())
             base = TrackGrooveSettings(
                 transpose_st       = int(self._transpose_var.get()),
-                gain_db            = float(self._gain_var.get()),
+                gain_db            = _pos_to_db(self._gain_pos_var.get() / _GAIN_STEPS),
                 vel_min            = max(1, min(126, int(self._vel_min_var.get()))),
                 vel_max            = max(2, min(127, int(self._vel_max_var.get()))),
                 swing_pct          = float(self._swing_var.get()),
@@ -641,19 +722,32 @@ class TrackMixerStrip:
         """Generate a random seed and lock it."""
         self._seed_var.set(str(random.randint(1, 999_999)))
 
+    def _update_gain_label(self) -> None:
+        """Refresh the numeric dB readout next to the gain slider."""
+        db = _pos_to_db(self._gain_pos_var.get() / _GAIN_STEPS)
+        if db <= _GAIN_INF_FLOOR:
+            self._gain_lbl.configure(text='-∞ dB')
+        else:
+            self._gain_lbl.configure(text=f'{db:+.1f} dB')
+        self._update_summary()
+
+    def _reset_gain(self) -> None:
+        """Reset the gain fader to 0 dB (unity) on double-click."""
+        self._gain_pos_var.set(int(_db_to_pos(0.0) * _GAIN_STEPS))
+
     def _update_summary(self) -> None:
-        """Refresh the one-line summary shown in the collapsed header."""
-        tr  = self._transpose_var.get()
-        g   = self._gain_var.get()
+        """
+        Refresh the one-line summary shown in the collapsed header.
+
+        Gain and pan are excluded from the summary because they are always
+        visible in the header row — no need to duplicate them here.
+        """
+        tr = self._transpose_var.get()
         parts = []
         if self._use_advanced:
             parts.append('[ADV]')
         if tr != 0:
             parts.append(f'{tr:+d}st')
-        if abs(g) > 0.1:
-            parts.append(f'{g:+.1f}dB')
-        # Only read simple-mode vars if the widgets exist (they always do —
-        # the vars persist even when the frame is hidden).
         try:
             vlo = self._vel_min_var.get()
             vhi = self._vel_max_var.get()
@@ -677,14 +771,135 @@ class TrackMixerStrip:
         else:
             self._pan_lbl.configure(text='C')
 
-    @staticmethod
-    def _sep_label(parent: tk.Frame, text: str) -> None:
-        """Draw a dimmed separator label styled like a section divider."""
-        tk.Label(
-            parent,
-            text=text,
-            font=S.FN_X,
-            fg=S.TXT_DIM,
-            bg=S.BG2,
-            anchor='w',
-        ).pack(fill='x', pady=(4, 1))
+    # ── Solo preview ──────────────────────────────────────────────────────────
+
+    def _on_solo_click(self) -> None:
+        """Toggle solo playback for this track."""
+        if self._is_solo_playing:
+            if self._stop_fn:
+                self._stop_fn()
+            self._set_solo_state('idle')
+        elif self._solo_wav:
+            if self._play_fn:
+                self._play_fn(self._solo_wav, 0.0)
+            self._set_solo_state('playing')
+            self._start_playhead()
+        else:
+            self._set_solo_state('rendering')
+            if self._solo_fn:
+                self._solo_fn(self._track_key, self._on_solo_ready)
+
+    def _on_solo_ready(
+        self,
+        wav_path: Optional[str],
+        duration_sec: float,
+        peaks: Optional[list],
+        autoplay: bool = True,
+    ) -> None:
+        """Called on the main thread by MixerPanel when the background render finishes."""
+        if wav_path:
+            self._solo_wav      = wav_path
+            self._solo_duration = duration_sec
+            self._solo_peaks    = peaks
+            self._draw_waveform()
+            if autoplay:
+                if self._play_fn:
+                    self._play_fn(wav_path, 0.0)
+                self._set_solo_state('playing')
+                self._start_playhead()
+            else:
+                self._set_solo_state('idle')  # shows ▶, ready but not playing
+        else:
+            self._set_solo_state('idle')
+
+    def set_solo_stopped(self) -> None:
+        """Called by MixerPanel when another strip takes over playback."""
+        self._set_solo_state('idle')
+
+    def reset_solo(self) -> None:
+        """Clear cached solo render and return to the un-rendered S state."""
+        if self._stop_fn and self._is_solo_playing:
+            self._stop_fn()
+        self._solo_wav      = None
+        self._solo_duration = 0.0
+        self._solo_peaks    = None
+        self._set_solo_state('idle')
+
+    def _set_solo_state(self, state: str) -> None:
+        """Update S button appearance and internal playing flag."""
+        if self._solo_btn is None:
+            return
+        if state == 'rendering':
+            self._is_solo_playing = False
+            self._solo_btn_var.set('···')
+            self._solo_btn.configure(state='disabled', cursor='arrow', fg=S.TXT_DIM)
+        elif state == 'playing':
+            self._is_solo_playing = True
+            self._solo_btn_var.set('■')
+            self._solo_btn.configure(state='normal', cursor='hand2', fg=S.YELLOW)
+        else:  # idle
+            self._is_solo_playing = False
+            self._solo_btn_var.set('▶' if self._solo_wav else 'S')
+            self._solo_btn.configure(state='normal', cursor='hand2', fg=S.CYAN)
+        if state != 'playing':
+            if self._playhead_id is not None:
+                try:
+                    self._outer.after_cancel(self._playhead_id)
+                except Exception:
+                    pass
+                self._playhead_id = None
+            self._draw_waveform()
+
+    def _draw_waveform(self) -> None:
+        """Paint the peak waveform onto the canvas from pre-computed peaks."""
+        if self._wave_canvas is None:
+            return
+        self._wave_canvas.delete('all')
+        if not self._solo_peaks:
+            return
+        mid_y = _WAVE_H // 2
+        self._wave_canvas.create_line(0, mid_y, _WAVE_W, mid_y, fill='#2a2a2a', width=1)
+        for x, p in enumerate(self._solo_peaks):
+            h = max(1, int(p * mid_y * 0.92))
+            self._wave_canvas.create_line(
+                x, mid_y - h, x, mid_y + h,
+                fill=self._color, width=1,
+            )
+
+    def _start_playhead(self) -> None:
+        """Cancel any existing poll and start a fresh one."""
+        if self._playhead_id is not None:
+            try:
+                self._outer.after_cancel(self._playhead_id)
+            except Exception:
+                pass
+            self._playhead_id = None
+        self._poll_playhead()
+
+    def _poll_playhead(self) -> None:
+        """Redraw waveform + playhead cursor every 100 ms while playing."""
+        if not self._is_solo_playing or self._wave_canvas is None:
+            return
+        if self._get_pos_fn and self._solo_duration > 0:
+            pos = self._get_pos_fn()
+            if pos >= self._solo_duration:
+                self._set_solo_state('idle')
+                return
+            ratio = min(1.0, pos / self._solo_duration)
+            x = int(ratio * _WAVE_W)
+            self._draw_waveform()
+            self._wave_canvas.create_line(x, 0, x, _WAVE_H, fill='white', width=1)
+        self._playhead_id = self._outer.after(100, self._poll_playhead)
+
+    def _on_canvas_click(self, event: tk.Event) -> None:
+        """Seek solo playback to the clicked position in the waveform."""
+        if self._solo_wav is None or self._solo_duration <= 0:
+            return
+        w = self._wave_canvas.winfo_width() or _WAVE_W
+        ratio    = max(0.0, min(1.0, event.x / w))
+        seek_sec = ratio * self._solo_duration
+        if self._play_fn:
+            self._play_fn(self._solo_wav, seek_sec)
+        if not self._is_solo_playing:
+            self._set_solo_state('playing')
+        self._start_playhead()

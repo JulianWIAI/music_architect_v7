@@ -56,7 +56,7 @@ class TrackGrooveSettings:
     vel_curve:        str   = 'flat' # see VEL_CURVES
     swing_pct:        float = 50.0   # 50.0=straight, 66.0=full triplet
     timing_nudge_ms:  float = 0.0    # fixed offset per note: -50 to +50 ms
-    gain_db:          float = 0.0    # mix gain written as CC7: -6 to +6 dB
+    gain_db:          float = 0.0    # mix gain: -60 dB (−∞/silence) to +6 dB; 0 = unity
     pan:              int   = 0      # pan written as CC10: -64 (L) to +63 (R)
 
     # ── Tier 2 — Seeded humanisation ─────────────────────────────────────────
@@ -119,9 +119,14 @@ class SongGrooveSettings:
 
     When ``apply_enabled`` is False the GrooveProcessor skips processing
     entirely and returns the original MIDI path unchanged.
+
+    ``genre`` is optional — when set, GrooveProcessor uses MicroTimingEngine
+    to derive genre-aware V/T grids for any track that has not been manually
+    configured (i.e. ``use_advanced=False`` and ``v_grid is None``).
     """
     tracks:        Dict[str, TrackGrooveSettings] = field(default_factory=dict)
     apply_enabled: bool = True
+    genre:         Optional[str] = None   # e.g. 'trap', 'house' — enables micro-timing
 
     def get(self, track_key: str) -> TrackGrooveSettings:
         """Return settings for *track_key*, falling back to identity defaults."""
