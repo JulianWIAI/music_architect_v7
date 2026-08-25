@@ -110,7 +110,10 @@ class WAVRenderer:
         return ''
 
     def render_composition_to_wav(
-        self, composition: dict, wav_path: str, progress_callback=None
+        self,
+        composition: dict,
+        wav_path: str,
+        progress_callback=None,
     ) -> str:
         """
         Render a composition dict directly to WAV using the built-in synthesiser.
@@ -121,10 +124,16 @@ class WAVRenderer:
         from the MIDI file and do not go through this DSP pass (FluidSynth
         applies its own reverb/chorus internally).
 
-        *composition* must be a dict in the format produced by CompositionEngine.
+        Parameters
+        ----------
+        composition       : Composition dict from CompositionEngine.
+        wav_path          : Output file path.
+        progress_callback : Optional callable(processed, total) for UI progress.
         """
         print('Synthesising audio...')
-        samples = self.builtin.render_composition(composition, progress_callback)
+        samples = self.builtin.render_composition(
+            composition, progress_callback
+        )
 
         # Apply genre-specific saturation and LFO automation.
         samples = _apply_dsp_session(samples, composition, self.sample_rate)

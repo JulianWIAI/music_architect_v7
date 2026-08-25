@@ -116,6 +116,12 @@ class InstrumentBuilder(tk.Frame):
         self._fix_rows:    List[dict]                 = []
 
         self._expanded = True   # collapse state
+        # Combobox widgets for PERC / TEXTURE / FX (outside BDRA catalogue)
+        self._extra_track_vars: Dict[str, tk.StringVar]      = {}
+        self._extra_track_cbs:  Dict[str, ttk.Combobox]     = {}
+        self._extra_mute_vars:  Dict[str, tk.BooleanVar]     = {}
+        self._extra_track_name_lbls: Dict[str, tk.Label]    = {}
+        self._extra_track_lbls: Dict[str, tk.Label]         = {}  # BDRA code labels
 
         self._build_ui()
         # Initialise combobox contents with Branch A defaults
@@ -245,6 +251,77 @@ class InstrumentBuilder(tk.Frame):
             self._track_vars[track_key] = var
             self._track_cbs[track_key]  = cb
             self._track_lbls[track_key] = code_lbl
+
+        # ── Extra track rows: PERC / TEXTURE / FX ────────────────────────
+        # These tracks exist in the composition but outside the BDRA melodic
+        # catalogue.  TEXTURE and FX participate in BDRA range display and
+        # density scoring; PERCUSSION uses GM channel 9 rhythm rules only.
+        _EXTRA_TRACKS = [
+            ('percussion', 'PERC',    'percussion'),
+            ('texture',    'TEXTURE', 'texture'),
+            ('fx',         'FX',      'fx'),
+        ]
+
+
+
+        for track_key, display, color_key in _EXTRA_TRACKS:
+            color   = S.TRACK_CLR.get(color_key, S.CYAN)
+            insts   = _EXTRA_INSTRUMENTS.get(track_key, [])
+            options = [_fmt_extra(i) for i in insts]
+
+            var      = tk.StringVar()
+            mute_var = tk.BooleanVar(value=False)
+            self._extra_mute_vars[track_key] = mute_var
+
+            row = tk.Frame(self._content, bg=S.BG2)
+            row.pack(fill='x', pady=1)
+
+            # Mute toggle — same style as the six BDRA melodic track rows
+            mute_btn = tk.Checkbutton(
+                row, text='', variable=mute_var,
+                font=S.FN_X, fg=S.TXT_DIM, bg=S.BG2,
+                selectcolor=S.BG3, activebackground=S.BG2,
+                width=1, indicatoron=True,
+                command=lambda key=track_key, mv=mute_var, c=color: (
+                    self._on_extra_mute_toggle(key, mv, c)
+                ),
+            )
+            mute_btn.pack(side='left', padx=(2, 0))
+            ToolTip(mute_btn, f"Mute {display} in advisor preview.\n"
+                              f"Muted tracks are excluded from the next render.")
+
+            name_lbl = tk.Label(
+                row, text=display, font=S.FN_X,
+                fg=color, bg=S.BG2, width=6, anchor='w',
+            )
+            name_lbl.pack(side='left', padx=(1, 0))
+            self._extra_track_name_lbls[track_key] = name_lbl
+
+            cb = ttk.Combobox(
+                row, textvariable=var,
+                values=options, state='readonly', width=42, font=S.FN_X,
+            )
+            if options:
+                cb.set(options[0])
+            cb.pack(side='left', padx=4)
+
+            # BDRA code label — shows range compliance for texture and fx.
+            # Percussion has no BDRA code, so this label stays empty for it.
+            code_lbl = tk.Label(
+                row, text='', font=S.FN_X,
+                fg=S.GREEN, bg=S.BG2, width=13, anchor='w',
+            )
+            code_lbl.pack(side='left', padx=(2, 0))
+            self._extra_track_lbls[track_key] = code_lbl
+
+            # Fire label + score refresh on any selection change
+            var.trace_add('write', lambda *_a, t=track_key: (
+                self._refresh_labels_extra(t),
+                self._refresh_score(),
+            ))
+
+            self._extra_track_vars[track_key] = var
+            self._extra_track_cbs[track_key]  = cb
 
         # ── Sound-character description strip ─────────────────────────────
         # A single label that updates to show a pedagogical description of
@@ -476,6 +553,25 @@ class InstrumentBuilder(tk.Frame):
             ok     = _br.in_range(inst['code'], rules) if rules else True
             lbl.config(text=inst['code'], fg=S.GREEN if ok else S.YELLOW)
 
+        # Also update BDRA code labels for extra tracks (texture, fx)
+        for extra_key in self._extra_track_lbls:
+            self._refresh_labels_extra(extra_key)
+
+    def _refresh_labels_extra(self, track_key: str) -> None:
+        """Update the BDRA code label for an extra track (TEXTURE or FX)."""
+        S   = self._S
+        lbl = self._extra_track_lbls.get(track_key)
+        if lbl is None:
+            return
+        inst = self._inst_extra(track_key)
+        if inst is None or not inst.get('code'):
+            lbl.config(text='', fg=S.TXT_DIM)
+            return
+        branch = self._branch()
+        rules  = _br.BRANCH_RULES.get(branch, {}).get(track_key, {})
+        ok     = _br.in_range(inst['code'], rules) if rules else True
+        lbl.config(text=inst['code'], fg=S.GREEN if ok else S.YELLOW)
+
     def _refresh_score(self) -> None:
         """
         Run the five-principle validator; update score label, P1-P5 breakdown,
@@ -494,7 +590,16 @@ class InstrumentBuilder(tk.Frame):
         if not sel:
             return
 
-        result = _br.validate_selection(branch, sel)
+        # Texture and fx contribute to the density budget (P4) but are kept
+        # out of the P3 attack-separation check to avoid false onset conflicts
+        # when intentionally layering texture over pads at the same A/R.
+        density_extra = 0
+        for extra_key in ('texture', 'fx'):
+            extra_inst = self._inst_extra(extra_key)
+            if extra_inst and extra_inst.get('code'):
+                density_extra += _br.parse_bdra(extra_inst['code']).get('D', 0)
+
+        result = _br.validate_selection(branch, sel, density_extra=density_extra)
 
         color = (S.GREEN  if result.score >= 90 else
                  S.YELLOW if result.score >= 70 else
@@ -547,6 +652,12 @@ class InstrumentBuilder(tk.Frame):
         if lbl:
             lbl.config(fg=self._S.TXT_DIM if mute_var.get() else color)
 
+    def _on_extra_mute_toggle(self, track: str, mute_var: tk.BooleanVar, color: str) -> None:
+        """Dim the extra track name label when muted; restore when unmuted."""
+        lbl = self._extra_track_name_lbls.get(track)
+        if lbl:
+            lbl.config(fg=self._S.TXT_DIM if mute_var.get() else color)
+
     def _apply_fix(self, fix: dict) -> None:
         """Apply a single fix suggestion — set the combobox to the suggested instrument."""
         track = fix['track']
@@ -561,7 +672,9 @@ class InstrumentBuilder(tk.Frame):
 
     def get_muted_tracks(self) -> set:
         """Return the set of track keys currently muted (excluded from advisor preview)."""
-        return {t for t, mv in self._mute_vars.items() if mv.get()}
+        muted = {t for t, mv in self._mute_vars.items() if mv.get()}
+        muted.update(t for t, mv in self._extra_mute_vars.items() if mv.get())
+        return muted
 
     def _refresh_desc(self, track: str) -> None:
         """
@@ -601,7 +714,8 @@ class InstrumentBuilder(tk.Frame):
         Palette instrument keys differ from builder keys in two places:
             'lead'    → 'melody'  (palette uses UI name; builder uses guide name)
             'pad'     → 'pads'    (same reason)
-            'texture' → 'pads'    (texture is a second pad layer; builder merges)
+            'texture' → extra combobox  (routed to _extra_track_cbs['texture'])
+            'fx'      → extra combobox  (routed to _extra_track_cbs['fx'])
 
         Sets the kick combobox to palette.branch, re-filters all tracks,
         then sets each combobox to the palette's instrument (by name+code or
@@ -620,7 +734,9 @@ class InstrumentBuilder(tk.Frame):
             self._kick_var.set(kick_str)
         self._on_kick_change()  # re-filter before setting instruments
 
-        _pal_to_builder = {'lead': 'melody', 'pad': 'pads', 'texture': 'pads'}
+        # 'lead' and 'pad' use different keys in the palette vs the builder.
+        # 'texture' and 'fx' go to their own extra-track comboboxes, handled below.
+        _pal_to_builder = {'lead': 'melody', 'pad': 'pads'}
 
         for pal_key, inst_data in palette.get('instruments', {}).items():
             builder_key = _pal_to_builder.get(pal_key, pal_key)
@@ -642,6 +758,25 @@ class InstrumentBuilder(tk.Frame):
                     if cand:
                         cb.set(opt)
                         break
+
+        # Sync texture and fx to their own extra-track comboboxes.
+        # Match by GM number since palette instrument names can differ from
+        # the names used in _EXTRA_INSTRUMENTS (e.g. "Sweep Pad" vs "Pad 8  Sweep").
+        for extra_key in ('texture', 'fx'):
+            inst_data = palette.get('instruments', {}).get(extra_key)
+            if inst_data is None:
+                continue
+            cb = self._extra_track_cbs.get(extra_key)
+            if cb is None:
+                continue
+            gm = inst_data.get('gm')
+            matching = next(
+                (_fmt_extra(i) for i in _EXTRA_INSTRUMENTS.get(extra_key, [])
+                 if i['gm'] == gm),
+                None,
+            )
+            if matching and matching in cb['values']:
+                cb.set(matching)
 
         # ── Optimize around palette picks ─────────────────────────────────
         # Run coordinate descent with the palette instruments as the seed so
@@ -672,20 +807,42 @@ class InstrumentBuilder(tk.Frame):
 
     def current_selection(self) -> dict:
         """
-        Return the current instrument selection.
+        Return the current instrument selection for all tracks.
 
         Returns
         -------
-        dict with key 'branch' ('A'/'B'/'C') plus one entry per track:
-            {'gm': int, 'name': str, 'code': 'B? D? A? R?'}
-        Tracks with no valid selection are omitted.
+        dict with key 'branch' ('A'/'B'/'C') plus one entry per track.
+        BDRA tracks: {'gm': int, 'name': str, 'code': 'B? D? A? R?'}
+        Extra tracks (PERC/TEXTURE/FX): {'gm': int, 'name': str, 'code': ''}
         """
         sel: dict = {'branch': self._branch()}
+
+        # BDRA melodic tracks
         for track in self._track_cbs:
             inst = self._inst(track)
             if inst:
                 sel[track] = inst
+
+        # Extra tracks — PERC / TEXTURE / FX
+        for track_key in self._extra_track_cbs:
+            inst = self._inst_extra(track_key)
+            if inst:
+                sel[track_key] = {
+                    'gm':   inst['gm'],
+                    'name': inst['name'],
+                    'code': inst.get('code', ''),  # empty for percussion
+                }
+
         return sel
+
+    def _inst_extra(self, track_key: str) -> Optional[dict]:
+        """Return the selected instrument dict for an extra (non-BDRA) track."""
+        val = self._extra_track_vars.get(track_key, tk.StringVar()).get()
+        return next(
+            (i for i in _EXTRA_INSTRUMENTS.get(track_key, [])
+             if _fmt_extra(i) == val),
+            None,
+        )
 
     def current_validation(self) -> _br.ValidationResult:
         """Run and return the full ValidationResult for the current selection."""
@@ -725,8 +882,60 @@ class InstrumentBuilder(tk.Frame):
         )
 
 
-# ── Module-level helper ────────────────────────────────────────────────────────
+# ── Module-level helpers ──────────────────────────────────────────────────────
 
 def _fmt(inst: dict) -> str:
-    """Format a catalogue entry as the combobox display string: 'Name  CODE'."""
+    """Format a BDRA catalogue entry as the combobox display string."""
     return f"{inst['name']}  {inst['code']}"
+
+
+def _fmt_extra(inst: dict) -> str:
+    """Format an extra-track instrument as 'GM## — Name'."""
+    return f"GM{inst['gm']:03d}  {inst['name']}"
+
+
+# GM instrument lists for PERC, TEXTURE, and FX.
+# These tracks are outside the BDRA catalogue and do not participate in
+# the psychoacoustic scoring — the lists are chosen for musical utility.
+_EXTRA_INSTRUMENTS: Dict[str, List[dict]] = {
+    'percussion': [
+        {'gm':  0, 'name': 'Standard Kit'},
+        {'gm':  8, 'name': 'Room Kit'},
+        {'gm': 16, 'name': 'Power Kit'},
+        {'gm': 24, 'name': 'Electronic Kit'},
+        {'gm': 25, 'name': 'TR-808 Kit'},
+        {'gm': 32, 'name': 'Jazz Kit'},
+        {'gm': 40, 'name': 'Brush Kit'},
+        {'gm': 48, 'name': 'Orchestra Kit'},
+    ],
+    'texture': [
+        # BDRA codes follow the same taxonomy as the pads catalogue.
+        # Metallic Pad (A=1) is out of range for strict-A3 branches — it will
+        # show yellow, which is correct (non-standard texture choice).
+        {'gm': 48, 'name': 'Strings Ensemble 1', 'code': 'B1 D2 A3 R2'},
+        {'gm': 49, 'name': 'Strings Ensemble 2', 'code': 'B1 D3 A3 R2'},
+        {'gm': 50, 'name': 'Synth Strings 1',    'code': 'B2 D2 A3 R2'},
+        {'gm': 88, 'name': 'Pad 1  New Age',      'code': 'B2 D2 A3 R3'},
+        {'gm': 89, 'name': 'Pad 2  Warm',         'code': 'B1 D1 A3 R2'},
+        {'gm': 90, 'name': 'Pad 3  Polysynth',    'code': 'B2 D2 A3 R2'},
+        {'gm': 91, 'name': 'Pad 4  Choir',        'code': 'B1 D3 A3 R2'},
+        {'gm': 92, 'name': 'Pad 5  Bowed',        'code': 'B1 D2 A3 R2'},
+        {'gm': 93, 'name': 'Pad 6  Metallic',     'code': 'B3 D2 A1 R2'},
+        {'gm': 94, 'name': 'Pad 7  Halo',         'code': 'B1 D2 A3 R2'},
+        {'gm': 95, 'name': 'Pad 8  Sweep',        'code': 'B1 D3 A3 R2'},
+    ],
+    'fx': [
+        # FX BDRA codes derived from their spectral character.
+        # Crystal is sparse + instantaneous (same code as the arp catalogue entry).
+        {'gm':  96, 'name': 'FX 1  Rain',       'code': 'B3 D3 A3 R3'},
+        {'gm':  97, 'name': 'FX 2  Soundtrack', 'code': 'B3 D3 A3 R3'},
+        {'gm':  98, 'name': 'FX 3  Crystal',    'code': 'B3 D1 A0 R3'},
+        {'gm':  99, 'name': 'FX 4  Atmosphere', 'code': 'B1 D3 A3 R2'},
+        {'gm': 100, 'name': 'FX 5  Brightness', 'code': 'B3 D3 A3 R3'},
+        {'gm': 101, 'name': 'FX 6  Goblins',    'code': 'B2 D2 A2 R2'},
+        {'gm': 102, 'name': 'FX 7  Echoes',     'code': 'B3 D3 A3 R3'},
+        {'gm': 103, 'name': 'FX 8  Sci-fi',     'code': 'B3 D3 A3 R3'},
+        {'gm': 122, 'name': 'Breath Noise',      'code': 'B2 D1 A0 R3'},
+        {'gm': 123, 'name': 'Seashore',          'code': 'B1 D2 A3 R2'},
+    ],
+}

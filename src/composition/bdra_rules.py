@@ -52,10 +52,10 @@ Matrix 1 derives valid BDRA ranges from five psychoacoustic principles:
        per branch.  Exceeding the budget raises the noise floor inside the
        300-3000 Hz band by ≈ 3 dB per D-unit over budget (ITU-R BS.1770
        loudness model approximation).
-       Branch budgets (6 tracks, excluding kick):
-         A: ≤ 8   (lean — 808 kick already anchors sub)
-         B: ≤ 10  (moderate — acoustic kick leaves mid open)
-         C: ≤ 12  (lush — slow kick invites dense D3 pads)
+       Branch budgets (8 tracks — 6 melodic + texture + fx, excluding kick):
+         A: ≤ 12  (lean — 808 kick already anchors sub)
+         B: ≤ 14  (moderate — acoustic kick leaves mid open)
+         C: ≤ 16  (lush — slow kick invites dense D3 pads)
 
   P5 — Brightness contrast (lead voice cut-through):
        The melody voice must be perceptually brighter than the bass to sit
@@ -106,32 +106,44 @@ KICK_BRANCHES: List[Dict] = [
 
 BRANCH_RULES: Dict[str, Dict[str, Dict[str, Tuple[int, int]]]] = {
     'A': {
-        'bass':   {'B': (0, 2), 'D': (0, 1), 'A': (0, 1), 'R': (0, 1)},
-        'chords': {'B': (1, 2), 'D': (1, 2), 'A': (1, 2), 'R': (2, 2)},
-        'melody': {'B': (2, 3), 'D': (1, 2), 'A': (0, 1), 'R': (2, 3)},
-        'arp':    {'B': (3, 3), 'D': (1, 1), 'A': (0, 1), 'R': (2, 3)},
-        'pads':   {'B': (1, 2), 'D': (1, 2), 'A': (3, 3), 'R': (2, 3)},
-        'stabs':  {'B': (2, 3), 'D': (1, 2), 'A': (0, 0), 'R': (2, 2)},
+        'bass':    {'B': (0, 2), 'D': (0, 1), 'A': (0, 1), 'R': (0, 1)},
+        'chords':  {'B': (1, 2), 'D': (1, 2), 'A': (1, 2), 'R': (2, 2)},
+        'melody':  {'B': (2, 3), 'D': (1, 2), 'A': (0, 1), 'R': (2, 3)},
+        'arp':     {'B': (3, 3), 'D': (1, 1), 'A': (0, 1), 'R': (2, 3)},
+        'pads':    {'B': (1, 2), 'D': (1, 2), 'A': (3, 3), 'R': (2, 3)},
+        'stabs':   {'B': (2, 3), 'D': (1, 2), 'A': (0, 0), 'R': (2, 2)},
+        # Texture: slow-attack pad layer — must have A3 in the lean branch
+        'texture': {'B': (1, 3), 'D': (1, 3), 'A': (3, 3), 'R': (2, 3)},
+        # FX: creative accent / atmosphere — permissive across all dimensions
+        'fx':      {'B': (0, 3), 'D': (0, 3), 'A': (0, 3), 'R': (2, 3)},
     },
     'B': {
-        'bass':   {'B': (0, 2), 'D': (1, 1), 'A': (0, 2), 'R': (0, 1)},
-        'chords': {'B': (1, 3), 'D': (1, 2), 'A': (1, 3), 'R': (2, 2)},
-        'melody': {'B': (2, 3), 'D': (1, 2), 'A': (0, 2), 'R': (2, 3)},
-        'arp':    {'B': (3, 3), 'D': (1, 1), 'A': (0, 1), 'R': (2, 3)},
-        'pads':   {'B': (1, 2), 'D': (2, 3), 'A': (3, 3), 'R': (2, 3)},
-        'stabs':  {'B': (2, 3), 'D': (2, 2), 'A': (0, 0), 'R': (2, 2)},
+        'bass':    {'B': (0, 2), 'D': (1, 1), 'A': (0, 2), 'R': (0, 1)},
+        'chords':  {'B': (1, 3), 'D': (1, 2), 'A': (1, 3), 'R': (2, 2)},
+        'melody':  {'B': (2, 3), 'D': (1, 2), 'A': (0, 2), 'R': (2, 3)},
+        'arp':     {'B': (3, 3), 'D': (1, 1), 'A': (0, 1), 'R': (2, 3)},
+        'pads':    {'B': (1, 2), 'D': (2, 3), 'A': (3, 3), 'R': (2, 3)},
+        'stabs':   {'B': (2, 3), 'D': (2, 2), 'A': (0, 0), 'R': (2, 2)},
+        'texture': {'B': (1, 3), 'D': (1, 3), 'A': (3, 3), 'R': (2, 3)},
+        'fx':      {'B': (0, 3), 'D': (0, 3), 'A': (0, 3), 'R': (2, 3)},
     },
     'C': {
-        'bass':   {'B': (0, 1), 'D': (1, 1), 'A': (0, 0), 'R': (0, 1)},
-        'chords': {'B': (1, 2), 'D': (2, 3), 'A': (3, 3), 'R': (2, 2)},
-        'melody': {'B': (2, 3), 'D': (1, 2), 'A': (1, 2), 'R': (2, 3)},
-        'arp':    {'B': (3, 3), 'D': (1, 1), 'A': (0, 0), 'R': (2, 3)},
-        'pads':   {'B': (1, 2), 'D': (2, 3), 'A': (3, 3), 'R': (2, 3)},
-        'stabs':  {'B': (1, 3), 'D': (1, 2), 'A': (0, 0), 'R': (2, 2)},
+        'bass':    {'B': (0, 1), 'D': (1, 1), 'A': (0, 0), 'R': (0, 1)},
+        'chords':  {'B': (1, 2), 'D': (2, 3), 'A': (3, 3), 'R': (2, 2)},
+        'melody':  {'B': (2, 3), 'D': (1, 2), 'A': (1, 2), 'R': (2, 3)},
+        'arp':     {'B': (3, 3), 'D': (1, 1), 'A': (0, 0), 'R': (2, 3)},
+        'pads':    {'B': (1, 2), 'D': (2, 3), 'A': (3, 3), 'R': (2, 3)},
+        'stabs':   {'B': (1, 3), 'D': (1, 2), 'A': (0, 0), 'R': (2, 2)},
+        # Branch C is the lush branch — allow A2 for texture (bowed strings etc.)
+        'texture': {'B': (1, 3), 'D': (1, 3), 'A': (2, 3), 'R': (2, 3)},
+        'fx':      {'B': (0, 3), 'D': (0, 3), 'A': (0, 3), 'R': (2, 3)},
     },
 }
 
-_DENSITY_BUDGET: Dict[str, int] = {'A': 8, 'B': 10, 'C': 12}
+# Budget accounts for all 8 tracks: 6 melodic + texture + fx (kick excluded).
+# Typical texture D2 + fx D2 = 4 extra, hence budgets raised by 4 vs the
+# original 6-track values (A:8→12, B:10→14, C:12→16).
+_DENSITY_BUDGET: Dict[str, int] = {'A': 12, 'B': 14, 'C': 16}
 
 # Ordered roles for register monotonicity check (P2)
 _REGISTER_ORDER = ['bass', 'chords', 'melody', 'arp']
@@ -196,10 +208,10 @@ PRINCIPLE_INFO: Dict[str, Dict[str, str]] = {
     'P4': {
         'name':  'Density budget',
         'law':   'ITU-R BS.1770 loudness / spectral mud threshold (300-3000 Hz)',
-        'pass':  'Total voice density Σ D is within the branch budget — no mud risk.',
-        'fail':  'Total simultaneous voice count exceeds the branch density budget. '
+        'pass':  'Total voice density Σ D (all 8 tracks) is within the branch budget — no mud risk.',
+        'fail':  'Total simultaneous voice count (6 melodic + texture + fx) exceeds the branch budget. '
                  'Each D-unit over budget raises the noise floor in the 300-3000 Hz band by ≈3 dB, '
-                 'smearing transient definition. Reduce D on pads or chords.',
+                 'smearing transient definition. Reduce D on pads, chords, or texture.',
     },
     'P5': {
         'name':  'Brightness contrast',
@@ -245,16 +257,23 @@ class ValidationResult:
         return 'WARNING'
 
 
-def validate_selection(branch: str, selection: Dict[str, str]) -> ValidationResult:
+def validate_selection(
+    branch: str,
+    selection: Dict[str, str],
+    density_extra: int = 0,
+) -> ValidationResult:
     """
     Validate a complete instrument selection against the five music theory
     principles (P1-P5) and the branch rules.
 
     Parameters
     ----------
-    branch    : 'A', 'B', or 'C'
-    selection : {track_key: bdra_code_string}
-                e.g. {'bass': 'B1 D1 A0 R1', 'chords': 'B1 D2 A3 R2', ...}
+    branch        : 'A', 'B', or 'C'
+    selection     : {track_key: bdra_code_string}
+                    e.g. {'bass': 'B1 D1 A0 R1', 'chords': 'B1 D2 A3 R2', ...}
+    density_extra : Additional D to add to the P4 density sum without
+                    introducing the track into P3 (attack-separation) checks.
+                    Used for texture/fx layers that intentionally overlap pads.
 
     Returns
     -------
@@ -303,8 +322,10 @@ def validate_selection(branch: str, selection: Dict[str, str]) -> ValidationResu
                              f"R={vi['R']} A={vi['A']} — transient crowding at onset", 'P3')
 
     # ── P4 — Density budget ────────────────────────────────────────────────
-    budget = _DENSITY_BUDGET.get(branch, 10)
-    total_d = sum(v.get('D', 0) for v in parsed.values())
+    budget  = _DENSITY_BUDGET.get(branch, 14)
+    # density_extra carries the D sum from texture/fx — they contribute to
+    # the mud budget but are excluded from P3 to avoid false onset conflicts.
+    total_d = sum(v.get('D', 0) for v in parsed.values()) + density_extra
     if total_d > budget:
         over = total_d - budget
         r.deduct(min(15, over * 5), f"P4 Density: Σ D={total_d} exceeds Branch {branch} budget "

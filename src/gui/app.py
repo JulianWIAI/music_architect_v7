@@ -2164,11 +2164,6 @@ class SeedComposerApp:
                             vocal_wav_path = _vr_wav_out
 
                 # ── Builtin-synth WAV fallback (macOS / no FluidSynth) ─────
-                # When FluidSynth is unavailable or failed, render via the
-                # built-in synthesiser so the waveform, export, and advisor
-                # export button all work correctly on every platform.
-                # Progress is forwarded to the UI so the bar moves during
-                # the (potentially slow) pure-Python synthesis pass.
                 if want_full and _wav_path is None and composition is not None:
                     self.msg_queue.put(('gen_progress', 75,
                                         'Rendering audio (built-in synth — may take ~30 s)…'))
@@ -2445,11 +2440,10 @@ class SeedComposerApp:
                     rendered = _FLUID_RENDERER.render(midi_to_render, wav_out, genre=genre)
 
                 if not rendered and self.current_composition is not None:
-                    # Built-in synth fallback — slower but always available.
                     try:
                         _inject_track_gains(self.current_composition, groove_settings)
                         WAVRenderer().render_composition_to_wav(
-                            self.current_composition, wav_out
+                            self.current_composition, wav_out,
                         )
                         rendered = True
                     except Exception:
@@ -2546,7 +2540,8 @@ class SeedComposerApp:
         self._set_status("RENDERING WAV...", S.ORANGE)
         def _w():
             try:
-                WAVRenderer().render_composition_to_wav(self.current_composition, p)
+                WAVRenderer().render_composition_to_wav(
+                    self.current_composition, p)
                 self.msg_queue.put(('wav_done', p))
             except Exception as e:
                 self.msg_queue.put(('wav_error', str(e)))

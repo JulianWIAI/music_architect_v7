@@ -29,9 +29,10 @@ Architecture split
 from __future__ import annotations
 
 import math
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
+
 
 # ── Try to import the C++ extension ──────────────────────────────────────────
 # synth_core.so / synth_core.pyd must exist in the project root (build with
@@ -39,6 +40,11 @@ import numpy as np
 
 try:
     import synth_core as _cpp           # C++ SynthCore exposed via pybind11
+    # Das Modul kann als leeres Namespace-Package existieren ohne dass
+    # die C++-Klasse SynthCore tatsaechlich kompiliert wurde.
+    # Explizit pruefen, damit der Python-Fallback korrekt ausgeloest wird.
+    if not hasattr(_cpp, "SynthCore"):
+        raise ImportError("synth_core.SynthCore wurde nicht kompiliert")
     _CPP_AVAILABLE = True
 except ImportError:
     _cpp = None
@@ -95,6 +101,11 @@ class BuiltinSynthesizer:
               'tracks':     {name: [(time_beats, dur_beats, pitch, vel), ...]},
               'track_info': {name: {'channel': int, 'program': int}},
             }
+
+        Parameters
+        ----------
+        composition       : Composition dict from CompositionEngine.
+        progress_callback : Optional callable(processed, total) for UI progress.
 
         Returns
         -------
@@ -239,10 +250,9 @@ class BuiltinSynthesizer:
                         pitch, time_sec, dur_sec, velocity, program)
 
                 # Mix into master buffer with numpy slice-add
-                # (handles boundary clamping correctly)
                 n = len(samples)
                 b_start = max(0, start_idx)
-                s_start = max(0, -start_idx)          # offset into samples if start < 0
+                s_start = max(0, -start_idx)
                 b_end   = min(start_idx + n, total_samples)
                 actual  = b_end - b_start
                 if actual > 0:
@@ -255,13 +265,10 @@ class BuiltinSynthesizer:
                     progress_callback(processed, total_events)
 
         # Soft-clip to 0.85 ceiling — only reduce if clipping, never boost.
-        # Boosting would undo per-track gain adjustments made by the user or
-        # the groove section, making volume faders appear to have no effect.
         peak = float(np.max(np.abs(buffer)))
         if peak > 0.85:
             buffer *= 0.85 / peak
 
-        # Return list for API compatibility with wav_writer / wav_renderer
         return buffer.tolist()
 
     # =========================================================================
@@ -275,7 +282,9 @@ class BuiltinSynthesizer:
     ) -> List[float]:
         """
         Pure-Python render path — used when C++ extension is not compiled.
-        Identical behaviour to the original builtin_synthesizer.py.
+
+        Uses the additive harmonic synthesiser for melodic tracks and the
+        built-in drum synthesiser for percussion (channel 9).
         """
         bpm          = composition['config']['bpm']
         beat_dur     = 60.0 / bpm
