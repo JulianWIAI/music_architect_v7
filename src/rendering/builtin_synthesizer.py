@@ -142,9 +142,13 @@ class BuiltinSynthesizer:
         -------
         List[float]: mono PCM samples, normalised to ≈ ±0.85 peak.
         """
-        if _CPP_AVAILABLE:
-            # C++ path does not use instrument_params (bridging is too complex);
-            # the Python path below provides full param support.
+        # Use the C++ fast path only when no custom timbre params are active.
+        # When instrument_params contains at least one entry the Python path is
+        # used so PercussionParams / MelodicParams take effect.  The C++ path
+        # has no equivalent param-driven synthesis, so we fall back rather than
+        # silently ignoring the user's preset selections.
+        use_cpp = _CPP_AVAILABLE and not bool(instrument_params)
+        if use_cpp:
             return self._render_cpp(composition, progress_callback, sample_engine)
         return self._render_python(composition, progress_callback, sample_engine,
                                    instrument_params)
