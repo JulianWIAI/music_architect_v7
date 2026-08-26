@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import math
 import random as _rand
+import time as _time
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -229,6 +230,11 @@ class BuiltinSynthesizer:
 
         samples = []
         for i in range(n_samples):
+            # Yield the GIL every 4096 samples (~93 ms at 44100 Hz) so the
+            # Tkinter main thread stays responsive during long note synthesis.
+            if i & 0xFFF == 0 and i > 0:
+                _time.sleep(0)
+
             t   = i / self.sample_rate
             amp = envelope.get_amplitude(t, duration) * vel_scale
             s   = sum(
@@ -534,6 +540,8 @@ class BuiltinSynthesizer:
                     )
 
                 processed += 1
+                if processed % 50 == 0:
+                    _time.sleep(0)   # yield GIL — keeps Tk main thread responsive
                 if progress_callback and processed % 200 == 0:
                     progress_callback(processed, total_events)
 

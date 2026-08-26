@@ -2496,6 +2496,14 @@ class SeedComposerApp:
         # Capture timbre params on the main thread.
         _groove_instrument_params = self._get_instrument_params()
 
+        # Deep-copy the composition on the main thread before the worker starts.
+        # This ensures the worker operates on a private snapshot — _inject_track_gains
+        # can then mutate it freely without touching the shared current_composition.
+        # It also guarantees that a second Apply Groove always starts from the same
+        # original events regardless of what the previous run modified.
+        import copy as _copy
+        _groove_comp = _copy.deepcopy(self.current_composition) if self.current_composition else None
+
         self.is_generating = True
         self._mixer_panel.set_busy(True)
         self._set_status("APPLYING GROOVE...", S.ORANGE)
@@ -2527,11 +2535,11 @@ class SeedComposerApp:
                         and _FLUID_RENDERER is not None):
                     rendered = _FLUID_RENDERER.render(midi_to_render, wav_out, genre=genre)
 
-                if not rendered and self.current_composition is not None:
+                if not rendered and _groove_comp is not None:
                     try:
-                        _inject_track_gains(self.current_composition, groove_settings)
+                        _inject_track_gains(_groove_comp, groove_settings)
                         WAVRenderer().render_composition_to_wav(
-                            self.current_composition, wav_out,
+                            _groove_comp, wav_out,
                             sample_assignments=_groove_sample_assignments,
                             instrument_params=_groove_instrument_params,
                             groove_settings=groove_settings,

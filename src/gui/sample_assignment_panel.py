@@ -25,6 +25,12 @@ from pathlib import Path
 from tkinter import filedialog
 from typing import Dict, Optional
 
+try:
+    from src.gui.tooltips import ToolTip
+    _TIP = True
+except ImportError:
+    _TIP = False
+
 # File types presented in the OS browser dialog
 _FILE_TYPES = [
     ('Audio files',  '*.wav *.aiff *.aif *.flac *.ogg *.mp3'),
@@ -113,6 +119,12 @@ class SampleAssignmentPanel(tk.Frame):
             command=self._toggle,
         )
         self._toggle_btn.pack(side='left')
+        if _TIP:
+            ToolTip(self._toggle_btn,
+                    'Assign an audio file to each instrument track.\n\n'
+                    'When a sample is assigned the SamplePlayer replaces the\n'
+                    'built-in synthesiser for that track during rendering.\n'
+                    'Supported formats: WAV, AIFF, FLAC, OGG, MP3.')
 
         status_lbl = tk.Label(
             hdr,
@@ -158,6 +170,9 @@ class SampleAssignmentPanel(tk.Frame):
         )
         path_lbl.pack(side='left', fill='x', expand=True)
         self._path_lbls[track_key] = path_lbl
+        if _TIP:
+            ToolTip(path_lbl, f'Sample file assigned to {display}.\n'
+                              f'Click Browse to assign a file, ✕ to remove it.')
 
         # Clear button
         clr = tk.Button(
@@ -173,6 +188,9 @@ class SampleAssignmentPanel(tk.Frame):
             command=lambda k=track_key: self._clear(k),
         )
         clr.pack(side='right', padx=(0, 2))
+        if _TIP:
+            ToolTip(clr, f'Remove the {display} sample assignment.\n'
+                         f'The built-in synthesiser will be used for this track instead.')
 
         # ▶ Play button — disabled until a sample is assigned for this track
         play_btn = tk.Button(
@@ -190,6 +208,9 @@ class SampleAssignmentPanel(tk.Frame):
         )
         play_btn.pack(side='right', padx=(0, 2))
         self._play_btns[track_key] = play_btn
+        if _TIP:
+            ToolTip(play_btn, f'Preview the {display} sample.\n'
+                              f'Enabled only when a file has been assigned.')
 
         # Browse button — consistent with BG_BTN buttons elsewhere in the app
         brw = tk.Button(
@@ -205,6 +226,9 @@ class SampleAssignmentPanel(tk.Frame):
             command=lambda k=track_key, d=display: self._browse(k, d),
         )
         brw.pack(side='right', padx=2)
+        if _TIP:
+            ToolTip(brw, f'Open a file browser to assign a sample to {display}.\n'
+                         f'Supported formats: WAV · AIFF · FLAC · OGG · MP3')
         # Hover effect
         if hasattr(S, 'BG_BTN_HOV'):
             brw.bind('<Enter>', lambda e, b=brw: b.configure(bg=S.BG_BTN_HOV))

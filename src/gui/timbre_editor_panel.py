@@ -37,6 +37,12 @@ from src.rendering.instrument_params import (
     PercussionParams, MelodicParams, list_presets, get_preset,
 )
 
+try:
+    from src.gui.tooltips import ToolTip
+    _TIP = True
+except ImportError:
+    _TIP = False
+
 
 # ── Sentinel value shown at the top of every preset combobox ─────────────────
 _NONE_OPTION = '(none)'
@@ -77,6 +83,49 @@ _SLIDER_SPECS: Dict[str, List[Tuple[str, str, float, float, float, float]]] = {
         ('brightness',    'Brightness (%)', 0.0, 100.0,  1.0,        100.0),
         ('drive',         'Drive (%)',       0.0, 100.0,  1.0,        100.0),
     ],
+}
+
+# ── Tooltip text per role combobox and per slider ─────────────────────────────
+_COMBO_TIPS: Dict[str, str] = {
+    'kick':    'Kick drum synthesis preset — sets the starting point for the sliders.\n'
+               'Select (none) to use the built-in default kick synthesis.',
+    'snare':   'Snare / percussion synthesis preset.\n'
+               'Select (none) to use the built-in default snare synthesis.',
+    'hihat':   'Hi-hat synthesis preset.\n'
+               'Select (none) to use the built-in default hi-hat synthesis.',
+    'melodic': 'Melodic instrument preset — applies to bass, lead, chords, pad, arp, and texture.\n'
+               'Select (none) to use the built-in default melodic synthesis.',
+}
+
+_SLIDER_TIPS: Dict[str, str] = {
+    'kick/pitch_end_hz':   'Target frequency at the end of the pitch sweep.\n'
+                           'Lower = deeper sub boom.  Higher = punchy click.\n'
+                           'Typical: 40–80 Hz for sub kicks, 80–150 Hz for punchy kicks.',
+    'kick/noise_amount':   'Noise layer blended into the kick body.\n'
+                           '0% = pure tone.  10–20% adds texture without muddying the low end.\n'
+                           'Very high values turn the kick into a noise burst.',
+    'kick/decay_ms':       'Time for the kick transient to fade out.\n'
+                           'Short (50–150 ms) = tight, punchy.  Long (400–800 ms) = boomy.',
+    'snare/pitch_end_hz':  'Centre frequency of the snare body tone.\n'
+                           'Lower = thicker, more tom-like.  Higher = crisper snap.',
+    'snare/noise_amount':  'Noise layer that creates the snare wire rattle.\n'
+                           'Higher values give more "snare wire" character.',
+    'snare/decay_ms':      'Snare decay length.\n'
+                           'Short = tight, dry.  Long = roomy, open.',
+    'hihat/decay_ms':      'Open vs closed hat character.\n'
+                           'Short (10–60 ms) = closed, choppy.  Long (200–400 ms) = open, washy.',
+    'hihat/noise_amount':  'Metallic noise content of the hat.\n'
+                           'Higher = more noise, broader frequency spread.',
+    'hihat/drive':         'Soft saturation adds grit and presence to the hat transient.\n'
+                           'Small amounts (10–30%) are often enough.',
+    'melodic/attack_ms':   'Time to reach full volume from silence.\n'
+                           'Short = pluck, percussive attack.  Long = smooth pad fade-in.',
+    'melodic/brightness':  'High-frequency harmonic content.\n'
+                           '0% = warm, rounded sine-wave character.\n'
+                           '100% = bright, cutting, saw-wave character.',
+    'melodic/drive':       'Soft tanh saturation applied to the output.\n'
+                           'Adds warmth and harmonic richness at low values;\n'
+                           'creates distortion / aggression at high values.',
 }
 
 # ── Header accent colours per role ────────────────────────────────────────────
@@ -179,6 +228,14 @@ class TimbreEditorPanel(tk.Frame):
             command=self._toggle,
         )
         self._toggle_btn.pack(side='left')
+        if _TIP:
+            ToolTip(self._toggle_btn,
+                    'Per-instrument synthesis preset and parameter editor.\n\n'
+                    'Select a preset to load its values into the sliders.\n'
+                    'The sliders always override the preset — the preset is just\n'
+                    'a starting point for fine-tuning.\n\n'
+                    'Select (none) to use the built-in default synthesis for that role.\n'
+                    'Only affects the built-in synth path — C++ and FluidSynth are unaffected.')
 
         # Thin accent separator
         tk.Frame(self, bg=S.PINK, height=1).pack(fill='x', pady=(2, 4))
@@ -237,6 +294,8 @@ class TimbreEditorPanel(tk.Frame):
         )
         combo.pack(side='left', padx=(0, 4))
         self._combos[role] = combo
+        if _TIP:
+            ToolTip(combo, _COMBO_TIPS.get(role, ''))
 
         # Bind selection to load preset values into sliders
         combo.bind('<<ComboboxSelected>>', lambda e, r=role: self._load_preset(r))
@@ -315,6 +374,10 @@ class TimbreEditorPanel(tk.Frame):
             ),
         )
         slider.pack(side='left', fill='x', expand=True, padx=(2, 4))
+        if _TIP:
+            tip_text = _SLIDER_TIPS.get(f'{role}/{param_name}')
+            if tip_text:
+                ToolTip(slider, tip_text)
 
     # ── Interaction ──────────────────────────────────────────────────────────
 
