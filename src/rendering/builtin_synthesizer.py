@@ -246,10 +246,10 @@ class BuiltinSynthesizer:
             is_drum  = info.get('channel', 0) == 9
             gain     = float(info.get('gain', 1.0))
 
-            # Determine whether this track has an assigned sample
+            # Sample takes priority over the built-in synthesiser for this track.
+            # Drum tracks are also eligible — SampleEngine plays them at root pitch.
             use_sample = (
-                not is_drum
-                and sample_engine is not None
+                sample_engine is not None
                 and sample_engine.is_loaded(track_name)
             )
 
@@ -260,18 +260,22 @@ class BuiltinSynthesizer:
                 time_sec = time_beats * beat_dur
                 dur_sec  = duration_beats * beat_dur
 
-                if is_drum:
-                    start_idx, samples = self._core.synthesize_drum(
-                        pitch, time_sec, velocity)
-                elif use_sample:
-                    # Sample takes priority over GM instrument
+                if use_sample:
+                    # SampleEngine handles drum root-pitch correction internally.
                     try:
                         start_idx, samples = sample_engine.synthesize(
                             track_name, int(pitch), time_sec, dur_sec, velocity)
                     except Exception:
-                        # Fallback to synthesizer if sample playback fails
-                        start_idx, samples = self._core.synthesize_note(
-                            pitch, time_sec, dur_sec, velocity, program)
+                        # Fallback to native synthesis if sample playback fails
+                        if is_drum:
+                            start_idx, samples = self._core.synthesize_drum(
+                                pitch, time_sec, velocity)
+                        else:
+                            start_idx, samples = self._core.synthesize_note(
+                                pitch, time_sec, dur_sec, velocity, program)
+                elif is_drum:
+                    start_idx, samples = self._core.synthesize_drum(
+                        pitch, time_sec, velocity)
                 else:
                     start_idx, samples = self._core.synthesize_note(
                         pitch, time_sec, dur_sec, velocity, program)
@@ -335,8 +339,7 @@ class BuiltinSynthesizer:
             gain    = float(info.get('gain', 1.0))
 
             use_sample = (
-                not is_drum
-                and sample_engine is not None
+                sample_engine is not None
                 and sample_engine.is_loaded(track_name)
             )
 
@@ -347,16 +350,20 @@ class BuiltinSynthesizer:
                 time_sec = time_beats * beat_dur
                 dur_sec  = duration_beats * beat_dur
 
-                if is_drum:
-                    start_idx, samples = self.synthesize_drum(pitch, time_sec, velocity)
-                elif use_sample:
+                if use_sample:
                     try:
                         start_idx, arr = sample_engine.synthesize(
                             track_name, int(pitch), time_sec, dur_sec, velocity)
                         samples = arr.tolist()
                     except Exception:
-                        start_idx, samples = self.synthesize_note(
-                            pitch, time_sec, dur_sec, velocity, program)
+                        if is_drum:
+                            start_idx, samples = self.synthesize_drum(
+                                pitch, time_sec, velocity)
+                        else:
+                            start_idx, samples = self.synthesize_note(
+                                pitch, time_sec, dur_sec, velocity, program)
+                elif is_drum:
+                    start_idx, samples = self.synthesize_drum(pitch, time_sec, velocity)
                 else:
                     start_idx, samples = self.synthesize_note(
                         pitch, time_sec, dur_sec, velocity, program)

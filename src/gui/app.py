@@ -2158,7 +2158,14 @@ class SeedComposerApp:
                         pass   # fallback: render from original MIDI
 
                 # ── FluidSynth WAV render ──────────────────────────────
-                if FLUIDSYNTH_AVAILABLE and _FLUID_RENDERER is not None:
+                # Skip FluidSynth when samples are assigned: FluidSynth renders
+                # from MIDI/SoundFont and cannot apply custom audio samples.
+                _use_fluid = (
+                    not bool(_sample_assignments)
+                    and FLUIDSYNTH_AVAILABLE
+                    and _FLUID_RENDERER is not None
+                )
+                if _use_fluid:
                     _sf_name = _FLUID_RENDERER._library.display_name(_genre)
                     if want_full and midi_path:
                         self.msg_queue.put(('gen_progress', 75,
@@ -2450,11 +2457,14 @@ class SeedComposerApp:
                     if ok:
                         midi_to_render = grooved_mid
 
-                # Render with FluidSynth (preferred) or built-in synth fallback.
-                wav_out = str(temp_dir / "groove_preview.wav")
+                # Render: skip FluidSynth when samples are assigned so that
+                # SampleEngine can substitute audio on the built-in synth path.
+                wav_out  = str(temp_dir / "groove_preview.wav")
                 rendered = False
 
-                if FLUIDSYNTH_AVAILABLE and _FLUID_RENDERER is not None:
+                if (not bool(_groove_sample_assignments)
+                        and FLUIDSYNTH_AVAILABLE
+                        and _FLUID_RENDERER is not None):
                     rendered = _FLUID_RENDERER.render(midi_to_render, wav_out, genre=genre)
 
                 if not rendered and self.current_composition is not None:

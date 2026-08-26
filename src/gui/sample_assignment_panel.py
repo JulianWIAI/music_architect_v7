@@ -33,7 +33,10 @@ _FILE_TYPES = [
 ]
 
 # Rows displayed in the panel: (builder_key, display_label)
+# Drum tracks play the sample at its recorded pitch (no MIDI-note pitch shift).
 _TRACKS = [
+    ('drums',   'KICK'),
+    ('perc',    'PERC'),
     ('bass',    'BASS'),
     ('chords',  'CHORDS'),
     ('melody',  'LEAD'),

@@ -452,9 +452,18 @@ class AdvisorActionsBar(tk.Frame):
             # Enable MIDI download immediately — before the (slower) WAV render
             self.after(0, self._on_midi_ready, mid_path)
 
-            # ── Phase 2: FluidSynth WAV render ─────────────────────────────
+            # ── Phase 2: WAV render ────────────────────────────────────────
+            # FluidSynth renders from MIDI via SoundFonts and cannot play
+            # custom audio samples.  When the user has assigned samples, skip
+            # FluidSynth entirely and go straight to the built-in synthesiser
+            # which routes each track through SamplePlayer when a sample is loaded.
             wav_path: Optional[str] = None
-            if self._renderer is not None and self._renderer.is_available():
+            _use_fluidsynth = (
+                not bool(sample_assignments)
+                and self._renderer is not None
+                and self._renderer.is_available()
+            )
+            if _use_fluidsynth:
                 # Log the active SF2 so the user can confirm the SoundFont
                 # picker selection is being honoured (shows filename, not path).
                 active = self._renderer.active_sf2(genre)
@@ -466,23 +475,22 @@ class AdvisorActionsBar(tk.Frame):
                     wav_path = _wav_out
                     self.after(0, self._log, "  [2/3] WAV render complete.")
                 else:
-                    # FluidSynth failed — log it; MIDI fallback will be used
                     self.after(
                         0, self._log,
                         "  [2/3] FluidSynth WAV render failed "
                         "(returncode ≠ 0 or output missing). "
-                        "Falling back to MIDI playback.",
+                        "Falling back to built-in synth.",
                     )
+            elif bool(sample_assignments):
+                self.after(0, self._log,
+                           "  [2/3] Samples assigned — using built-in synth for sample playback.")
             else:
                 self.after(0, self._log,
-                           "  [2/3] FluidSynth not available — using MIDI playback.")
+                           "  [2/3] FluidSynth not available — using built-in synth.")
 
-            # ── Phase 2b: built-in synth fallback ──────────────────────────
-            # When FluidSynth is unavailable or failed, render via the
-            # built-in synthesiser so the ⬇ EXPORT AUDIO button is enabled
-            # and playback is deterministic (same seed → same audio every time).
-            # Progress is logged every 500 events so the user sees activity
-            # during the (potentially slow) pure-Python synthesis pass.
+            # ── Phase 2b: built-in synth (primary when samples assigned) ───
+            # Always used when sample_assignments is non-empty.
+            # Also used as fallback when FluidSynth is unavailable or failed.
             if wav_path is None:
                 self.after(0, self._log,
                            "  [2/3] Built-in synth fallback — rendering WAV "

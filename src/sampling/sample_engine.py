@@ -36,6 +36,8 @@ from src.sampling.sample_loader import load_audio_file
 # Builder-key → composition track-name mapping.
 # Must match the track names produced by CompositionEngine.
 _BUILDER_TO_COMP: Dict[str, str] = {
+    'drums':   '01_Kick',
+    'perc':    '02_Percussion',
     'bass':    '03_Bass',
     'melody':  '04_Melody',
     'chords':  '05_Chords',
@@ -45,6 +47,12 @@ _BUILDER_TO_COMP: Dict[str, str] = {
     'texture': '09_Texture',
     'fx':      '10_FX',
 }
+
+# Comp-track names that are drum/percussion.  Samples on these tracks are played
+# at the sample's recorded pitch (root_midi=60, synthesize with midi_note=60) so
+# that drum MIDI note numbers (which encode instrument identity, not pitch) do not
+# cause unintended pitch-shifting of the assigned audio file.
+_DRUM_COMP_TRACKS: frozenset = frozenset({'01_Kick', '02_Percussion'})
 
 
 class _PythonPlayer:
@@ -200,11 +208,18 @@ class SampleEngine:
 
         Return contract mirrors SynthCore.synthesize_note():
             (start_sample_index: int, samples: ndarray[float32])
+
+        Drum tracks (01_Kick, 02_Percussion) play at root pitch (midi_note=60)
+        so that MIDI drum note numbers — which encode instrument identity rather
+        than pitch — do not cause unintended pitch-shifting of the audio file.
         """
         player = self._players.get(comp_track_name)
         if player is None:
             raise KeyError(f"No sample loaded for track '{comp_track_name}'")
-        start_idx, arr = player.synthesize(midi_note, start_time, duration, velocity)
+
+        # Drum MIDI notes encode 'which drum' not 'which pitch' — always play at root.
+        effective_note = 60 if comp_track_name in _DRUM_COMP_TRACKS else midi_note
+        start_idx, arr = player.synthesize(effective_note, start_time, duration, velocity)
         return int(start_idx), np.asarray(arr, dtype=np.float32)
 
     def clear(self) -> None:
