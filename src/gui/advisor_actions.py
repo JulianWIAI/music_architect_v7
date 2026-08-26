@@ -151,6 +151,7 @@ class AdvisorActionsBar(tk.Frame):
         apply_groove_fn:    Optional[Callable] = None,
         get_sample_assignments_fn: Optional[Callable[[], dict]] = None,
         on_wav_ready_fn:    Optional[Callable[[str], None]] = None,
+        get_instrument_params_fn: Optional[Callable[[], dict]] = None,
     ) -> None:
         super().__init__(parent, bg=styles.BG2)
 
@@ -180,6 +181,9 @@ class AdvisorActionsBar(tk.Frame):
         # Called on the main thread with the WAV path after a successful render.
         # App injects this to update the waveform widget and current_wav_path.
         self._on_wav_ready           = on_wav_ready_fn
+        # Returns {role: PercussionParams/MelodicParams} for param-driven synthesis.
+        # Must be called on the main thread; result captured before worker starts.
+        self._get_instrument_params  = get_instrument_params_fn or (lambda: {})
 
         # Seed cached by App.set_seed() after every generation.
         # None → a fresh random seed is used for that preview session.
@@ -388,15 +392,19 @@ class AdvisorActionsBar(tk.Frame):
         # must not access Tkinter widgets (SampleAssignmentPanel is a tk.Frame).
         sample_assignments = self._get_sample_assignments()
 
+        # Capture timbre params on the main thread for the same reason.
+        instrument_params = self._get_instrument_params()
+
         self._log(f"Advisor preview: composing (seed={seed}, genre={config.genre})…")
 
         threading.Thread(
             target=self._render_worker,
-            args=(engine, config, want_vocal, sample_assignments),
+            args=(engine, config, want_vocal, sample_assignments, instrument_params),
             daemon=True,
         ).start()
 
-    def _render_worker(self, engine, config, want_vocal: bool, sample_assignments: dict) -> None:
+    def _render_worker(self, engine, config, want_vocal: bool, sample_assignments: dict,
+                       instrument_params: dict = None) -> None:
         """
         Background thread: compose → export MIDI → FluidSynth WAV render.
 
@@ -513,7 +521,8 @@ class AdvisorActionsBar(tk.Frame):
                     _WAVRenderer().render_composition_to_wav(
                         comp, _builtin_wav,
                         progress_callback=_adv_progress,
-                        sample_assignments=sample_assignments)
+                        sample_assignments=sample_assignments,
+                        instrument_params=instrument_params or {})
                     wav_path = _builtin_wav
                     self.after(0, self._log,
                                "  [2/3] Built-in synth WAV ready.")

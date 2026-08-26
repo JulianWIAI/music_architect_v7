@@ -8,7 +8,10 @@ simple synthesis techniques (pitch sweep for kick, noise for snare/hihat).
 
 import math
 import random as _random
-from typing import List
+from typing import List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.rendering.instrument_params import PercussionParams
 
 
 INSTRUMENT_TIMBRES = {
@@ -96,4 +99,78 @@ def generate_crash_sample(sample_rate: int = 44100, duration: float = 1.0) -> Li
         noise = (_random.random() * 2 - 1) * math.exp(-t * 3)
         tone = math.sin(2 * math.pi * 3000 * t) * math.exp(-t * 5) * 0.2
         samples.append((noise * 0.7 + tone) * 0.35)
+    return samples
+
+
+# ─── PARAM-DRIVEN PERCUSSION SYNTHESIS ───────────────────────────────────────
+# These functions accept a PercussionParams object and produce a rich variety
+# of sounds from the same underlying algorithm.  Import is deferred to avoid
+# a circular dependency — instrument_params imports nothing from this module.
+
+
+def generate_perc_from_params(params: 'PercussionParams', sample_rate: int = 44100) -> List[float]:
+    """
+    Synthesise a percussion hit from a PercussionParams preset.
+
+    Algorithm:
+      1. Pitch-swept sine oscillator (start → end over sweep_ms).
+      2. White noise layer weighted by params.noise_amount.
+      3. Optional secondary resonant body tone (body_freq_hz > 0).
+      4. Exponential decay envelope over params.decay_ms.
+      5. Transient click at t=0 to sharpen the attack.
+      6. Soft tanh saturation scaled by params.drive.
+
+    Music theory note: params.pitch_end_hz should be tuned to the root or
+    perfect-fifth of the song key so the kick sits harmonically in the mix.
+    The 'Car Crash' and 'Factory' presets use noise_amount > 0.5 and are
+    intentionally atonal — high-pass them above 150 Hz to avoid masking bass.
+    """
+    n         = int(params.decay_ms / 1000.0 * sample_rate)
+    sweep_n   = int(params.sweep_ms  / 1000.0 * sample_rate)
+    samples   = []
+    phase     = 0.0
+    phase_b   = 0.0   # secondary body oscillator phase
+
+    for i in range(n):
+        t = i / sample_rate
+
+        # Exponential pitch sweep from start to end frequency
+        frac = 1.0 - math.exp(-5.0 * i / max(1, sweep_n))
+        freq = params.pitch_start_hz + (params.pitch_end_hz - params.pitch_start_hz) * frac
+
+        # Amplitude envelope: rt60-style exponential decay
+        amp = math.exp(-t * 6.908 / (params.decay_ms / 1000.0))
+
+        # Oscillator (incrementally to preserve phase coherence across freq changes)
+        phase += 2.0 * math.pi * freq / sample_rate
+        tone = math.sin(phase)
+
+        # White noise
+        noise = _random.random() * 2.0 - 1.0
+
+        # Mix tone and noise according to noise_amount
+        s = tone * (1.0 - params.noise_amount) + noise * params.noise_amount
+
+        # Optional secondary resonant body (metallic colouration)
+        if params.body_freq_hz > 0:
+            phase_b += 2.0 * math.pi * params.body_freq_hz / sample_rate
+            body_amp = math.exp(-t * 15.0)
+            s += math.sin(phase_b) * body_amp * 0.3
+
+        # Apply amplitude envelope
+        s *= amp
+
+        # Short transient click at t=0 sharpens the attack (mimics physical impact)
+        if t < 0.003:
+            s += (0.003 - t) / 0.003 * 0.25
+
+        # Soft tanh saturation — adds harmonics and warmth
+        if params.drive > 0.0:
+            drive_factor = 1.0 + params.drive * 3.0
+            denom = math.tanh(drive_factor)
+            if denom > 1e-6:
+                s = math.tanh(s * drive_factor) / denom
+
+        samples.append(s * 0.8)
+
     return samples

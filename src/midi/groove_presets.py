@@ -226,3 +226,246 @@ class GroovePresetLibrary:
         # Pass genre so GrooveProcessor can activate MicroTimingEngine grids
         # for any track the user has not manually configured in advanced mode.
         return SongGrooveSettings(tracks=tracks, apply_enabled=True, genre=genre)
+
+
+# ── Named presets — multiple feels per genre ───────────────────────────────────
+# Each genre has 3-5 named presets that differ in:
+#   swing_pct    -- triplet feel (50=straight, 67=full triplet)
+#   vel contrast -- ratio between accented and ghost notes
+#   timing nudge -- bass/lead ahead of or behind the grid (ms)
+#   humanize     -- timing jitter amount
+#
+# Music theory constraints:
+#   * swing_pct must align with the subdivision grid (1/16 or 1/8 swing)
+#   * bass timing nudge is negative (behind beat) for pocket; positive (ahead) for urgency
+#   * velocity min/max defines dynamic range -- wider = more expressive
+
+# Structure: {genre: {preset_name: {track: overrides}}}
+# Each track override dict may contain any subset of TrackGrooveSettings fields.
+# Fields not listed fall through to the base _PRESETS[genre] defaults.
+
+_NAMED_PRESETS: Dict[str, Dict[str, Dict[str, dict]]] = {
+
+    # ──────────────────────────── TRAP ────────────────────────────────────────
+    'trap': {
+        # Faithful reproduction of the base preset — serves as the reference.
+        'Standard': {
+            'drums': dict(swing_pct=50.0, vel_min=80, vel_max=110),
+            'bass':  dict(timing_nudge_ms=-8.0, vel_min=90, vel_max=120),
+        },
+        # Slower, heavier feel: darker velocity window, bass pushed deeper into
+        # the pocket, chords dialled back for a more menacing atmosphere.
+        'Dark Memphis': {
+            'drums':  dict(swing_pct=51.0, vel_min=75, vel_max=105),
+            'bass':   dict(timing_nudge_ms=-12.0),
+            'chords': dict(vel_min=30, vel_max=65),
+        },
+        # Lighter and more melodic: reduced velocities across the board and a
+        # shallower bass nudge so the groove breathes rather than pounds.
+        'Melodic Trap': {
+            'drums': dict(swing_pct=50.0, vel_min=70, vel_max=95),
+            'bass':  dict(timing_nudge_ms=-5.0),
+            'lead':  dict(vel_min=70, vel_max=95),
+        },
+        # Extreme sub pocket — maximum bass behind-beat for that subsonic drag.
+        'Phonk Trap': {
+            'drums': dict(swing_pct=50.0),
+            'bass':  dict(timing_nudge_ms=-15.0, vel_min=95, vel_max=125),
+        },
+    },
+
+    # ──────────────────────────── TECHNO ──────────────────────────────────────
+    'techno': {
+        # Perfectly quantised grid, moderate velocity — hypnotic and repetitive.
+        'Minimal': {
+            'drums': dict(swing_pct=50.0, vel_min=85, vel_max=108),
+            'bass':  dict(swing_pct=50.0, vel_min=82, vel_max=108),
+        },
+        # Maximum aggression: loud transients, tight grid, stabs present.
+        'Hard Industrial': {
+            'drums': dict(swing_pct=50.0, vel_min=95, vel_max=120),
+            'bass':  dict(swing_pct=50.0, vel_min=90, vel_max=118),
+            'stabs': dict(vel_min=80, vel_max=105),
+        },
+        # Slight swing from Detroit techno tradition; organic and warm.
+        'Detroit': {
+            'drums': dict(swing_pct=52.0, vel_min=80, vel_max=108),
+            'bass':  dict(swing_pct=52.0, vel_min=80, vel_max=108),
+        },
+        # Wide-dynamic build: low peak velocity, pad buried for atmosphere.
+        'Hypnotic': {
+            'drums': dict(swing_pct=50.0, vel_min=80, vel_max=100),
+            'bass':  dict(swing_pct=50.0, vel_min=78, vel_max=100),
+            'pad':   dict(vel_min=35, vel_max=70),
+        },
+    },
+
+    # ──────────────────────────── HOUSE ───────────────────────────────────────
+    'house': {
+        # Laidback feel: heavier swing, bass behind the beat, wide dynamics.
+        'Deep Chill': {
+            'drums': dict(swing_pct=54.0, vel_min=78, vel_max=105),
+            'bass':  dict(swing_pct=54.0, timing_nudge_ms=-8.0, vel_min=78, vel_max=105),
+        },
+        # Tighter and more DJ-friendly: minimal swing, punchy stabs.
+        'Tech House': {
+            'drums': dict(swing_pct=51.0, vel_min=88, vel_max=115),
+            'stabs': dict(vel_min=75, vel_max=100),
+        },
+        # Full classic house feel: moderate swing, lush chords, arpeggios.
+        'Classic House': {
+            'drums':  dict(swing_pct=53.0, vel_min=85, vel_max=112),
+            'chords': dict(vel_min=50, vel_max=85),
+            'arp':    dict(vel_min=60, vel_max=88),
+        },
+    },
+
+    # ──────────────────────────── HIP-HOP ─────────────────────────────────────
+    'hiphop': {
+        # Heavy triplet swing, bass deep in the pocket — classic boom bap.
+        'Boom Bap': {
+            'drums': dict(swing_pct=55.0, vel_min=75, vel_max=108),
+            'bass':  dict(swing_pct=55.0, timing_nudge_ms=-12.0),
+        },
+        # Loose vintage feel: moderate swing, lower velocities, timing jitter.
+        'Lo-Fi Chill': {
+            'drums': dict(swing_pct=53.0, vel_min=65, vel_max=95,
+                          timing_humanize_ms=10.0),
+        },
+        # Contemporary production: straight grid, tight bass nudge, punchy.
+        'Modern Rap': {
+            'drums': dict(swing_pct=50.0, vel_min=80, vel_max=112),
+            'bass':  dict(timing_nudge_ms=-6.0),
+        },
+    },
+
+    # ──────────────────────────── PHONK ───────────────────────────────────────
+    'phonk': {
+        # Faithful to the base preset — the classic dark drift.
+        'Classic Drift': {
+            'drums': dict(swing_pct=51.0, vel_min=82, vel_max=112),
+        },
+        # Brazilian rave phonk: louder, heavier sub, straight grid.
+        'Brazilian Rave': {
+            'drums': dict(swing_pct=50.0, vel_min=92, vel_max=118),
+            'bass':  dict(vel_min=100, vel_max=125),
+        },
+        # Slowed + chopped aesthetic: mild swing, extreme bass pocket delay.
+        'Slowed Chopped': {
+            'drums': dict(swing_pct=52.0, vel_min=70, vel_max=100),
+            'bass':  dict(timing_nudge_ms=-18.0),
+        },
+    },
+
+    # ──────────────────────────── EDM ─────────────────────────────────────────
+    'edm': {
+        # Festival-ready: full energy, bright lead pushed to the front.
+        'Festival': {
+            'drums': dict(swing_pct=50.0, vel_min=90, vel_max=118),
+            'lead':  dict(vel_min=75, vel_max=100),
+        },
+        # Future bass: slight swing, melodic pads create the wash.
+        'Future Bass': {
+            'drums': dict(swing_pct=52.0, vel_min=82, vel_max=108),
+            'pad':   dict(vel_min=45, vel_max=78),
+        },
+        # Progressive: straight grid, structured arpeggio motion.
+        'Progressive': {
+            'drums': dict(swing_pct=50.0, vel_min=85, vel_max=112),
+            'arp':   dict(vel_min=65, vel_max=92),
+        },
+    },
+
+    # ──────────────────────────── POP ─────────────────────────────────────────
+    'pop': {
+        # Polished radio sound: light swing, bright lead.
+        'Radio Hit': {
+            'drums': dict(swing_pct=51.0, vel_min=78, vel_max=105),
+            'lead':  dict(vel_min=72, vel_max=98),
+        },
+        # Indie feel: more swing, lower velocities, subtle timing jitter.
+        'Indie': {
+            'drums': dict(swing_pct=52.0, vel_min=68, vel_max=95,
+                          timing_humanize_ms=8.0),
+        },
+        # Uptempo dance pop: straight grid, energetic arpeggio.
+        'Dance Pop': {
+            'drums': dict(swing_pct=50.0, vel_min=85, vel_max=112),
+            'arp':   dict(vel_min=60, vel_max=88),
+        },
+    },
+}
+
+
+class NamedGroovePresetLibrary:
+    """
+    Provides multiple named groove presets per genre.
+
+    Each named preset stores only the track-level parameters that differ from
+    the genre's base default (held in _PRESETS).  When building a
+    SongGrooveSettings, the named overrides are merged on top of the base so
+    that every track always receives sensible genre-correct values even if the
+    named preset does not mention it.
+
+    Usage::
+
+        lib = NamedGroovePresetLibrary()
+        names   = lib.genre_names('trap')        # ['Dark Memphis', 'Melodic Trap', ...]
+        settings = lib.get_named('trap', 'Dark Memphis')   # SongGrooveSettings
+        genres  = lib.all_genres()               # list of genres with named presets
+    """
+
+    def genre_names(self, genre: str) -> list:
+        """
+        Return the available named preset names for *genre*, sorted
+        alphabetically.  Returns an empty list if *genre* has no named
+        presets.
+        """
+        return sorted(_NAMED_PRESETS.get(genre, {}).keys())
+
+    def all_genres(self) -> list:
+        """Return the list of genres that have at least one named preset."""
+        return sorted(_NAMED_PRESETS.keys())
+
+    def get_named(self, genre: str, preset_name: str) -> SongGrooveSettings:
+        """
+        Build a SongGrooveSettings for *genre* / *preset_name*.
+
+        Merge strategy
+        --------------
+        1. Start from the base genre defaults in _PRESETS (or _DEFAULT_PRESET
+           if the genre is not in _PRESETS).
+        2. Layer the named preset's per-track overrides on top — named values
+           always win over base values.
+        3. Construct one TrackGrooveSettings per merged track dict.
+
+        Falls back gracefully:
+          - Unknown genre   -> uses _DEFAULT_PRESET base with no overrides.
+          - Unknown preset  -> uses the base genre defaults with no overrides.
+        """
+        # 1. Fetch the base genre table (a dict of {track: {field: value}}).
+        base_table: Dict[str, dict] = _PRESETS.get(
+            genre, _PRESETS[_DEFAULT_PRESET]
+        )
+
+        # 2. Fetch the named preset's override table (may be empty).
+        named_table: Dict[str, dict] = (
+            _NAMED_PRESETS.get(genre, {}).get(preset_name, {})
+        )
+
+        # 3. Build the merged per-track dicts.
+        #    We iterate over the union of keys from both tables so that tracks
+        #    only present in the named override are also included.
+        all_track_keys = set(base_table.keys()) | set(named_table.keys())
+        tracks = {}
+        for track_key in all_track_keys:
+            merged: dict = {}
+            # Base values first
+            if track_key in base_table:
+                merged.update(base_table[track_key])
+            # Named overrides win
+            if track_key in named_table:
+                merged.update(named_table[track_key])
+            tracks[track_key] = TrackGrooveSettings(**merged)
+
+        return SongGrooveSettings(tracks=tracks, apply_enabled=True, genre=genre)

@@ -155,6 +155,20 @@ except ImportError:
     SongGrooveSettings = None       # type: ignore
     GROOVE_AVAILABLE = False
 
+try:
+    from src.gui.groove_preset_selector import GroovePresetSelector
+    GROOVE_PRESET_SELECTOR_AVAILABLE = True
+except ImportError:
+    GroovePresetSelector = None     # type: ignore
+    GROOVE_PRESET_SELECTOR_AVAILABLE = False
+
+try:
+    from src.gui.timbre_editor_panel import TimbreEditorPanel
+    TIMBRE_EDITOR_AVAILABLE = True
+except ImportError:
+    TimbreEditorPanel = None        # type: ignore
+    TIMBRE_EDITOR_AVAILABLE = False
+
 
 from src.gui.fader_utils import (
     _pos_to_db, _db_to_pos, gain_db_to_volume,
@@ -227,6 +241,10 @@ class SeedComposerApp:
         # Groove & Mixer panel — built inside _build_advisor_tab; None until then.
         # Declared here so _on_genre_change is safe to call at any point during init.
         self._mixer_panel = None
+        # Groove feel preset selector — built inside _build_advisor_tab; None until then.
+        self._groove_preset_selector = None
+        # Timbre editor panel — built inside _build_advisor_tab; None until then.
+        self._timbre_editor = None
         # Piano roll widget — built inside _build_output_panel; None until then.
         self._piano_roll = None
 
@@ -1111,6 +1129,38 @@ class SeedComposerApp:
         else:
             self._mixer_panel = None
 
+        # ── Groove feel preset selector ──────────────────────────────────────
+        # Exposes named presets per genre (e.g. Trap: Standard / Dark Memphis /
+        # Melodic Trap / Phonk Trap) as a single combobox row beneath the mixer.
+        if GROOVE_PRESET_SELECTOR_AVAILABLE and GROOVE_AVAILABLE:
+            try:
+                self._groove_preset_selector = GroovePresetSelector(
+                    parent,
+                    styles=S,
+                )
+                self._groove_preset_selector.pack(fill='x', padx=4, pady=(0, 2))
+                # Initialise with the current genre
+                self._groove_preset_selector.set_genre(self.genre_var.get())
+            except Exception as _exc:
+                print(f'[GroovePresetSelector] Construction failed: {_exc}')
+                self._groove_preset_selector = None
+        else:
+            self._groove_preset_selector = None
+
+        # ── Timbre editor panel ──────────────────────────────────────────────
+        # Per-instrument preset + slider panel for kick, snare, hi-hat, melodic.
+        # Parameters are collected via get_instrument_params() and injected into
+        # the built-in synthesiser before every WAV render.
+        if TIMBRE_EDITOR_AVAILABLE:
+            try:
+                self._timbre_editor = TimbreEditorPanel(parent, styles=S)
+                self._timbre_editor.pack(fill='x', padx=4, pady=(0, 2))
+            except Exception as _exc:
+                print(f'[TimbreEditorPanel] Construction failed: {_exc}')
+                self._timbre_editor = None
+        else:
+            self._timbre_editor = None
+
         # ── SoundFont picker ─────────────────────────────────────────────────
         # Always shown so users can configure a SoundFont path even when
         # FluidSynth is not yet installed.  SoundFontPickerWidget handles the
@@ -1151,6 +1201,7 @@ class SeedComposerApp:
                     if self._instrument_builder is not None else None
                 ),
                 on_wav_ready_fn      = self._on_advisor_wav_ready,
+                get_instrument_params_fn = self._get_instrument_params,
             )
             self._advisor_actions.pack(fill='x', padx=4)
         else:
@@ -1843,6 +1894,9 @@ class SeedComposerApp:
         # Keep the groove mixer preset dropdown in sync with the genre selector
         if self._mixer_panel is not None:
             self._mixer_panel.set_genre(genre)
+        # Keep the groove feel preset selector in sync with the genre selector
+        if self._groove_preset_selector is not None:
+            self._groove_preset_selector.set_genre(genre)
         self._log(f"Genre -> {genre.upper()}")
 
     def _random_seed(self):
@@ -2095,6 +2149,9 @@ class SeedComposerApp:
             if self._instrument_builder is not None else {}
         )
 
+        # Capture timbre params on the main thread.
+        _instrument_params = self._get_instrument_params()
+
         def _worker():
             try:
                 temp_dir = Path(APP_DIR) / "temp_output"
@@ -2199,7 +2256,8 @@ class SeedComposerApp:
                         WAVRenderer().render_composition_to_wav(
                             composition, _builtin_wav,
                             progress_callback=_full_progress,
-                            sample_assignments=_sample_assignments)
+                            sample_assignments=_sample_assignments,
+                            instrument_params=_instrument_params)
                         _wav_path = _builtin_wav
                     except Exception as _e:
                         self.msg_queue.put(('gen_progress', 75,
@@ -2212,7 +2270,8 @@ class SeedComposerApp:
                     try:
                         WAVRenderer().render_composition_to_wav(
                             vr_composition, _vr_builtin_wav,
-                            sample_assignments=_sample_assignments)
+                            sample_assignments=_sample_assignments,
+                            instrument_params=_instrument_params)
                         vocal_wav_path = _vr_builtin_wav
                     except Exception as _e:
                         self.msg_queue.put(('gen_progress', 95,
@@ -2372,6 +2431,22 @@ class SeedComposerApp:
         if PLAYER_WIDGETS_AVAILABLE and self._waveform_widget is not None:
             self._waveform_widget.load_wav(wav_path)
 
+    def _get_instrument_params(self) -> dict:
+        """
+        Return the current timbre parameters from the TimbreEditorPanel.
+
+        Returns an empty dict when the panel is not available so all callers
+        can treat the result as a plain dict without None-guards.
+        """
+        if self._timbre_editor is None:
+            return {}
+        try:
+            raw = self._timbre_editor.get_instrument_params()
+            # Filter out None entries so callers can do a plain dict.get()
+            return {k: v for k, v in raw.items() if v is not None}
+        except Exception:
+            return {}
+
     # ── Groove helpers ────────────────────────────────────────────────────────
 
     def _advisor_apply_groove(
@@ -2446,6 +2521,9 @@ class SeedComposerApp:
             if self._instrument_builder is not None else {}
         )
 
+        # Capture timbre params on the main thread.
+        _groove_instrument_params = self._get_instrument_params()
+
         self.is_generating = True
         self._mixer_panel.set_busy(True)
         self._set_status("APPLYING GROOVE...", S.ORANGE)
@@ -2483,6 +2561,7 @@ class SeedComposerApp:
                         WAVRenderer().render_composition_to_wav(
                             self.current_composition, wav_out,
                             sample_assignments=_groove_sample_assignments,
+                            instrument_params=_groove_instrument_params,
                         )
                         rendered = True
                     except Exception:
@@ -2577,10 +2656,12 @@ class SeedComposerApp:
             initialfile=f"SeedComposer_{self.current_composition['config']['genre']}.wav")
         if not p: return
         self._set_status("RENDERING WAV...", S.ORANGE)
+        _export_ip = self._get_instrument_params()
         def _w():
             try:
                 WAVRenderer().render_composition_to_wav(
-                    self.current_composition, p)
+                    self.current_composition, p,
+                    instrument_params=_export_ip)
                 self.msg_queue.put(('wav_done', p))
             except Exception as e:
                 self.msg_queue.put(('wav_error', str(e)))

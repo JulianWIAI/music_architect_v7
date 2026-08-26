@@ -27,6 +27,57 @@ from src.sampling.sample_loader import load_audio_file
 _DSP_BLOCK_SIZE: int = 512
 
 
+def _apply_fx_chain(
+    samples: list,
+    composition: dict,
+    sample_rate: int,
+    instrument_params: dict = None,
+) -> list:
+    """
+    Run the PCM buffer through the full effects chain: TransientShaper →
+    ThreeBandEQ → SchroederReverb → TempoDelay.
+
+    Parameters are derived from the GenreProfile embedded in composition['config'].
+    instrument_params is reserved for future per-instrument routing and is
+    currently unused at the master-bus level.
+
+    Returns the input list unchanged on any error so the render always
+    produces valid audio even if the FX chain import fails.
+    """
+    try:
+        from src.audio.effects.fx_chain import FxChain
+        from src.midi.genre_profiles import GenreProfileLibrary
+
+        cfg   = composition.get('config', {})
+        genre = cfg.get('genre', '')
+        bpm   = float(cfg.get('bpm', 120.0))
+
+        if not genre:
+            return samples
+
+        profile = GenreProfileLibrary().get(genre, bpm)
+
+        chain = FxChain(
+            sample_rate=sample_rate,
+            bpm=bpm,
+            genre=genre,
+            profile=profile,
+        )
+
+        buf = np.array(samples, dtype=np.float32)
+        buf = chain.process(buf)
+
+        # Re-normalise after the FX chain to prevent clipping.
+        peak = float(np.max(np.abs(buf)))
+        if peak > 0.85:
+            buf *= 0.85 / peak
+
+        return buf.tolist()
+
+    except Exception:
+        return samples   # graceful fallback — raw synthesis audio is still valid
+
+
 def _apply_dsp_session(
     samples: list,
     composition: dict,
@@ -117,6 +168,7 @@ class WAVRenderer:
         wav_path: str,
         progress_callback=None,
         sample_assignments: dict = None,
+        instrument_params: dict = None,
     ) -> str:
         """
         Render a composition dict directly to WAV using the built-in synthesiser.
@@ -153,7 +205,9 @@ class WAVRenderer:
 
         print('Synthesising audio...')
         samples = self.builtin.render_composition(
-            composition, progress_callback, sample_engine=sample_engine
+            composition, progress_callback,
+            sample_engine=sample_engine,
+            instrument_params=instrument_params,
         )
 
         # Apply genre-specific saturation and LFO automation.
@@ -161,6 +215,9 @@ class WAVRenderer:
 
         # Apply kick-triggered sidechain gain reduction.
         samples = apply_sidechain(samples, composition, self.sample_rate)
+
+        # Apply the full effects chain: transient shaping, EQ, reverb, delay.
+        samples = _apply_fx_chain(samples, composition, self.sample_rate, instrument_params)
 
         write_wav(wav_path, samples, self.sample_rate)
         duration = len(samples) / self.sample_rate

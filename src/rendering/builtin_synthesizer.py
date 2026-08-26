@@ -29,6 +29,7 @@ Architecture split
 from __future__ import annotations
 
 import math
+import random as _rand
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -57,7 +58,31 @@ from src.rendering.instrument_timbres import (
     INSTRUMENT_TIMBRES, DEFAULT_TIMBRE,
     generate_kick_sample, generate_snare_sample,
     generate_hihat_sample, generate_crash_sample,
+    generate_perc_from_params,
 )
+
+# MIDI note → percussion role key used to look up instrument_params
+_DRUM_NOTE_ROLE: dict = {
+    36: 'kick',
+    37: 'snare', 38: 'snare', 39: 'snare', 40: 'snare',
+    42: 'hihat', 44: 'hihat', 46: 'hihat',
+    49: 'cymbal', 51: 'cymbal', 57: 'cymbal',
+    45: 'kick', 47: 'kick', 50: 'kick',  # toms — treated as kick variants
+}
+
+# Composition track name → instrument_params lookup key
+_TRACK_TO_ROLE: dict = {
+    '01_Kick':       'kick',
+    '02_Percussion': 'snare',
+    '03_Bass':       'melodic',
+    '04_Melody':     'melodic',
+    '05_Chords':     'melodic',
+    '06_Pad':        'melodic',
+    '07_Arp':        'melodic',
+    '08_Stabs':      'melodic',
+    '09_Texture':    'melodic',
+    '10_FX':         'melodic',
+}
 
 
 class BuiltinSynthesizer:
@@ -90,6 +115,7 @@ class BuiltinSynthesizer:
         composition: dict,
         progress_callback=None,
         sample_engine=None,
+        instrument_params: dict = None,
     ) -> List[float]:
         """
         Render a full composition dict to a mono PCM float buffer.
@@ -117,8 +143,11 @@ class BuiltinSynthesizer:
         List[float]: mono PCM samples, normalised to ≈ ±0.85 peak.
         """
         if _CPP_AVAILABLE:
+            # C++ path does not use instrument_params (bridging is too complex);
+            # the Python path below provides full param support.
             return self._render_cpp(composition, progress_callback, sample_engine)
-        return self._render_python(composition, progress_callback, sample_engine)
+        return self._render_python(composition, progress_callback, sample_engine,
+                                   instrument_params)
 
     # ── Low-level API (Python fallback only) ─────────────────────────────────
 
@@ -146,20 +175,53 @@ class BuiltinSynthesizer:
         duration: float,
         velocity: float,
         program: int = 0,
+        melodic_params=None,
     ) -> Tuple[int, List[float]]:
-        """Synthesise one melodic note.  Python fallback path only."""
-        freq       = self.midi_to_freq(midi_note)
-        timbre     = INSTRUMENT_TIMBRES.get(program, DEFAULT_TIMBRE)
-        harmonics  = timbre['harmonics']
-        adsr_params = timbre['adsr']
-        osc_type   = timbre['type']
+        """
+        Synthesise one melodic note.  Python fallback path only.
 
-        envelope      = ADSREnvelope(*adsr_params)
-        total_dur     = duration + adsr_params[3]
-        n_samples     = int(total_dur * self.sample_rate)
-        start_idx     = int(start_time * self.sample_rate)
-        vel_scale     = velocity / 127.0
-        harmonic_sum  = sum(harmonics)
+        When *melodic_params* is a MelodicParams instance the synthesiser uses
+        its harmonic_richness, brightness, ADSR, noise_amount, and drive fields
+        instead of the built-in INSTRUMENT_TIMBRES table.
+        """
+        freq      = self.midi_to_freq(midi_note)
+        start_idx = int(start_time * self.sample_rate)
+        vel_scale = velocity / 127.0
+
+        if melodic_params is not None:
+            # Build harmonic series from richness (count) and brightness (weighting)
+            n_harmonics = max(1, int(1 + melodic_params.harmonic_richness * 7))
+            harmonics = []
+            for h in range(n_harmonics):
+                # brightness=0 → descending 1/(h+1); brightness=1 → flat 1.0
+                desc  = 1.0 / (h + 1)
+                flat  = 1.0 / (1.0 + h * 0.2)
+                harmonics.append(
+                    desc * (1.0 - melodic_params.brightness) + flat * melodic_params.brightness
+                )
+
+            adsr_params = (
+                melodic_params.attack_ms  / 1000.0,
+                melodic_params.decay_ms   / 1000.0,
+                melodic_params.sustain_level,
+                melodic_params.release_ms / 1000.0,
+            )
+            # Brighter timbres use saw; darker timbres use sine
+            osc_type     = 'saw' if melodic_params.brightness > 0.65 else 'sine'
+            noise_amount = melodic_params.noise_amount
+            drive        = melodic_params.drive
+        else:
+            timbre       = INSTRUMENT_TIMBRES.get(program, DEFAULT_TIMBRE)
+            harmonics    = timbre['harmonics']
+            adsr_params  = timbre['adsr']
+            osc_type     = timbre['type']
+            noise_amount = 0.0
+            drive        = 0.0
+
+        envelope     = ADSREnvelope(*adsr_params)
+        total_dur    = duration + adsr_params[3]
+        n_samples    = int(total_dur * self.sample_rate)
+        harmonic_sum = sum(harmonics) or 1.0
 
         samples = []
         for i in range(n_samples):
@@ -170,7 +232,21 @@ class BuiltinSynthesizer:
                 for h, h_amp in enumerate(harmonics)
                 if freq * (h + 1) <= self.sample_rate / 2
             )
-            samples.append(s / harmonic_sum * amp * 0.4)
+            s = s / harmonic_sum * amp * 0.4
+
+            # Optional noise breath layer
+            if noise_amount > 0.0:
+                noise = (_rand.random() * 2.0 - 1.0) * amp * 0.4
+                s = s * (1.0 - noise_amount) + noise * noise_amount
+
+            # Optional soft tanh saturation
+            if drive > 0.0:
+                drive_factor = 1.0 + drive * 3.0
+                denom = math.tanh(drive_factor)
+                if denom > 1e-6:
+                    s = math.tanh(s * drive_factor) / denom
+
+            samples.append(s)
 
         return start_idx, samples
 
@@ -204,6 +280,37 @@ class BuiltinSynthesizer:
 
         raw = self.drum_cache[midi_note]
         return start_idx, [s * vel_scale for s in raw]
+
+    def _synth_drum(
+        self,
+        midi_note: int,
+        start_time: float,
+        velocity: float,
+        instrument_params: dict,
+    ) -> Tuple[int, List[float]]:
+        """
+        Param-aware drum synthesis — Python fallback path only.
+
+        Looks up the MIDI note's role ('kick', 'snare', 'hihat') and fetches
+        the corresponding PercussionParams from *instrument_params*.  When
+        params are present the rich param-driven synthesiser is used; otherwise
+        falls back to the legacy cached-sample drum synthesiser.
+
+        Cymbal notes (49, 51, 57) have no param entry and always use the legacy
+        path because the Timbre panel does not expose a cymbal role.
+        """
+        role   = _DRUM_NOTE_ROLE.get(midi_note)
+        params = instrument_params.get(role) if role else None
+
+        vel_scale = velocity / 127.0
+        start_idx = int(start_time * self.sample_rate)
+
+        if params is not None:
+            raw = generate_perc_from_params(params, self.sample_rate)
+            return start_idx, [s * vel_scale for s in raw]
+
+        # Legacy path: cached waveform tables for all unparameterised notes
+        return self.synthesize_drum(midi_note, start_time, velocity)
 
     # =========================================================================
     # Private — C++ render path
@@ -311,6 +418,7 @@ class BuiltinSynthesizer:
         composition: dict,
         progress_callback=None,
         sample_engine=None,
+        instrument_params: dict = None,
     ) -> List[float]:
         """
         Pure-Python render path — used when C++ extension is not compiled.
@@ -320,6 +428,10 @@ class BuiltinSynthesizer:
 
         When sample_engine is provided, melodic tracks that have a sample
         loaded use the Python SamplePlayer fallback for that track.
+
+        When instrument_params is provided, percussion and melodic tracks use
+        PercussionParams / MelodicParams to override the default synthesis
+        character (timbre, noise amount, pitch sweep, drive, etc.).
         """
         bpm          = composition['config']['bpm']
         beat_dur     = 60.0 / bpm
@@ -331,12 +443,17 @@ class BuiltinSynthesizer:
         track_info = composition.get('track_info', {})
         total_events = sum(len(e) for e in tracks.values())
         processed    = 0
+        ip           = instrument_params or {}
 
         for track_name, events in tracks.items():
             info    = track_info.get(track_name, {})
             program = info.get('program', 0)
             is_drum = info.get('channel', 0) == 9
             gain    = float(info.get('gain', 1.0))
+
+            # Resolve per-track instrument params (None = use built-in defaults)
+            track_role   = _TRACK_TO_ROLE.get(track_name)
+            track_iparams = ip.get(track_role) if track_role else None
 
             use_sample = (
                 sample_engine is not None
@@ -357,16 +474,19 @@ class BuiltinSynthesizer:
                         samples = arr.tolist()
                     except Exception:
                         if is_drum:
-                            start_idx, samples = self.synthesize_drum(
-                                pitch, time_sec, velocity)
+                            start_idx, samples = self._synth_drum(
+                                int(pitch), time_sec, velocity, ip)
                         else:
                             start_idx, samples = self.synthesize_note(
-                                pitch, time_sec, dur_sec, velocity, program)
+                                pitch, time_sec, dur_sec, velocity, program,
+                                melodic_params=track_iparams)
                 elif is_drum:
-                    start_idx, samples = self.synthesize_drum(pitch, time_sec, velocity)
+                    start_idx, samples = self._synth_drum(
+                        int(pitch), time_sec, velocity, ip)
                 else:
                     start_idx, samples = self.synthesize_note(
-                        pitch, time_sec, dur_sec, velocity, program)
+                        pitch, time_sec, dur_sec, velocity, program,
+                        melodic_params=track_iparams)
 
                 for i, s in enumerate(samples):
                     idx = start_idx + i
