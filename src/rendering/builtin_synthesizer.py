@@ -42,11 +42,11 @@ import numpy as np
 
 try:
     import synth_core as _cpp           # C++ SynthCore exposed via pybind11
-    # Das Modul kann als leeres Namespace-Package existieren ohne dass
-    # die C++-Klasse SynthCore tatsaechlich kompiliert wurde.
-    # Explizit pruefen, damit der Python-Fallback korrekt ausgeloest wird.
+    # The module may exist as an empty namespace package without the C++
+    # class SynthCore actually being compiled.  Check explicitly so the
+    # Python fallback is triggered correctly instead of failing later.
     if not hasattr(_cpp, "SynthCore"):
-        raise ImportError("synth_core.SynthCore wurde nicht kompiliert")
+        raise ImportError("synth_core.SynthCore is not compiled")
     _CPP_AVAILABLE = True
 except ImportError:
     _cpp = None
