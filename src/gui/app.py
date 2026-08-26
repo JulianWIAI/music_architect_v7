@@ -207,6 +207,11 @@ class SeedComposerApp:
         self.current_composition = None
         self.current_midi_path = None
         self.current_wav_path = None
+        # The WAV produced by the initial generation — never overwritten by
+        # groove re-renders or advisor previews.  "Play Full Beat" always plays
+        # this so the button consistently showcases the AI's output at its best
+        # quality (FluidSynth + soundfont when available).
+        self._original_wav_path = None
         # FX chain variant: 'bright', 'neutral', or 'dark'.
         # Updated from the composition seed after generation.
         self._current_variant_id = 'neutral'
@@ -2337,9 +2342,19 @@ class SeedComposerApp:
         if not self.current_midi_path or not os.path.exists(self.current_midi_path):
             messagebox.showinfo("No Preview", "Generate a song first!")
             return
-        # Prefer WAV if already rendered (better quality), otherwise play MIDI directly
-        if self.current_wav_path and os.path.exists(self.current_wav_path):
-            success = self.player.play_wav(self.current_wav_path, start_sec=0.0)
+        # Always play the original generated WAV — groove re-renders and advisor
+        # previews update current_wav_path but must not affect this button so the
+        # showcase consistently presents the AI's output at its best quality
+        # (FluidSynth + soundfont when available, built-in synth otherwise).
+        # Fall back through: original WAV → current WAV → raw MIDI.
+        play_wav = None
+        if self._original_wav_path and os.path.exists(self._original_wav_path):
+            play_wav = self._original_wav_path
+        elif self.current_wav_path and os.path.exists(self.current_wav_path):
+            play_wav = self.current_wav_path
+
+        if play_wav:
+            success = self.player.play_wav(play_wav, start_sec=0.0)
         else:
             success = self.player.play_midi(self.current_midi_path)
         if success:
@@ -2735,6 +2750,11 @@ class SeedComposerApp:
             self.current_composition    = comp
             self.current_midi_path      = midi
             self.current_wav_path       = wav
+            # Snapshot the freshly generated WAV as the canonical "original".
+            # This is set once per generation and never touched by groove
+            # re-renders or advisor preview renders so Play Full Beat always
+            # returns to this baseline.
+            self._original_wav_path     = wav
             self.vocal_ready_midi_path  = vocal_midi
             self.vocal_ready_wav_path   = vocal_wav
             self.vocal_ready_composition = vr_comp

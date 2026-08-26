@@ -171,8 +171,12 @@ TOOLTIPS: dict[str, str] = {
 
     # ── Output / Playback ──────────────────────────────────────────────────
     'btn_play': (
-        "Preview the last generated composition.\n"
-        "Plays MIDI directly — no WAV rendering needed."
+        "Play the original generated beat.\n\n"
+        "Always plays the WAV produced at generation time — the highest quality\n"
+        "render available (FluidSynth + soundfont when installed, built-in synth\n"
+        "otherwise).  Groove re-renders and advisor previews do not affect this\n"
+        "button so the showcase always presents the AI's unmodified output.\n\n"
+        "Falls back to the raw MIDI if no WAV has been rendered yet."
     ),
     'btn_stop': "Stop current playback.",
     'btn_midi': "Save the composition as a .mid MIDI file.",
