@@ -156,13 +156,6 @@ except ImportError:
     GROOVE_AVAILABLE = False
 
 try:
-    from src.gui.groove_preset_selector import GroovePresetSelector
-    GROOVE_PRESET_SELECTOR_AVAILABLE = True
-except ImportError:
-    GroovePresetSelector = None     # type: ignore
-    GROOVE_PRESET_SELECTOR_AVAILABLE = False
-
-try:
     from src.gui.timbre_editor_panel import TimbreEditorPanel
     TIMBRE_EDITOR_AVAILABLE = True
 except ImportError:
@@ -241,8 +234,6 @@ class SeedComposerApp:
         # Groove & Mixer panel — built inside _build_advisor_tab; None until then.
         # Declared here so _on_genre_change is safe to call at any point during init.
         self._mixer_panel = None
-        # Groove feel preset selector — built inside _build_advisor_tab; None until then.
-        self._groove_preset_selector = None
         # Timbre editor panel — built inside _build_advisor_tab; None until then.
         self._timbre_editor = None
         # Piano roll widget — built inside _build_output_panel; None until then.
@@ -1129,24 +1120,6 @@ class SeedComposerApp:
         else:
             self._mixer_panel = None
 
-        # ── Groove feel preset selector ──────────────────────────────────────
-        # Exposes named presets per genre (e.g. Trap: Standard / Dark Memphis /
-        # Melodic Trap / Phonk Trap) as a single combobox row beneath the mixer.
-        if GROOVE_PRESET_SELECTOR_AVAILABLE and GROOVE_AVAILABLE:
-            try:
-                self._groove_preset_selector = GroovePresetSelector(
-                    parent,
-                    styles=S,
-                )
-                self._groove_preset_selector.pack(fill='x', padx=4, pady=(0, 2))
-                # Initialise with the current genre
-                self._groove_preset_selector.set_genre(self.genre_var.get())
-            except Exception as _exc:
-                print(f'[GroovePresetSelector] Construction failed: {_exc}')
-                self._groove_preset_selector = None
-        else:
-            self._groove_preset_selector = None
-
         # ── Timbre editor panel ──────────────────────────────────────────────
         # Per-instrument preset + slider panel for kick, snare, hi-hat, melodic.
         # Parameters are collected via get_instrument_params() and injected into
@@ -1894,9 +1867,6 @@ class SeedComposerApp:
         # Keep the groove mixer preset dropdown in sync with the genre selector
         if self._mixer_panel is not None:
             self._mixer_panel.set_genre(genre)
-        # Keep the groove feel preset selector in sync with the genre selector
-        if self._groove_preset_selector is not None:
-            self._groove_preset_selector.set_genre(genre)
         self._log(f"Genre -> {genre.upper()}")
 
     def _random_seed(self):

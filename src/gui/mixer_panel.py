@@ -40,7 +40,7 @@ from src.gui.styles import S
 from src.gui.mixer_strip import TrackMixerStrip
 from src.gui.tooltips import ToolTip
 from src.midi.groove_settings import SongGrooveSettings, TrackGrooveSettings, TRACK_KEYS
-from src.midi.groove_presets import GroovePresetLibrary
+from src.midi.groove_presets import GroovePresetLibrary, NamedGroovePresetLibrary
 
 try:
     from src.gui.midi_preview_player import MIDIPreviewPlayer
@@ -96,7 +96,8 @@ class MixerPanel:
         on_apply_fn=None,
         get_composition_fn:  Optional[Callable] = None,
     ) -> None:
-        self._library    = GroovePresetLibrary()
+        self._library        = GroovePresetLibrary()
+        self._named_library  = NamedGroovePresetLibrary()
         self._strips: Dict[str, TrackMixerStrip] = {}
         self._on_apply_fn        = on_apply_fn
         self._get_composition_fn = get_composition_fn
@@ -163,11 +164,13 @@ class MixerPanel:
         c = self._content
 
         # ── Genre preset row (compact) ────────────────────────────────────────
-        preset_row = tk.Frame(c, bg=S.BG2); preset_row.pack(fill='x', pady=(0, 6))
+        preset_row = tk.Frame(c, bg=S.BG2); preset_row.pack(fill='x', pady=(0, 2))
+
         tk.Label(
             preset_row,
-            text='Genre preset:',
+            text='Genre:',
             font=S.FN_X, fg=S.TXT_DIM, bg=S.BG2,
+            width=6, anchor='w',
         ).pack(side='left')
 
         self._genre_var = tk.StringVar(value='pop')
@@ -177,12 +180,49 @@ class MixerPanel:
             values=self._library.genre_list(),
             state='readonly',
             font=S.FN_X,
-            width=12,
+            width=10,
         )
-        genre_cb.pack(side='left', padx=6)
+        genre_cb.pack(side='left', padx=(0, 6))
+        genre_cb.bind('<<ComboboxSelected>>', self._on_genre_cb_change)
+
+        # ── Named preset row ──────────────────────────────────────────────────
+        named_row = tk.Frame(c, bg=S.BG2); named_row.pack(fill='x', pady=(0, 6))
+
+        tk.Label(
+            named_row,
+            text='Feel:',
+            font=S.FN_X, fg=S.TXT_DIM, bg=S.BG2,
+            width=6, anchor='w',
+        ).pack(side='left')
+
+        self._named_var = tk.StringVar(value='Default')
+        self._named_combo = ttk.Combobox(
+            named_row,
+            textvariable=self._named_var,
+            values=['Default'],
+            state='readonly',
+            font=S.FN_X,
+            width=18,
+        )
+        self._named_combo.pack(side='left', padx=(0, 6))
+
+        # Description label updates when a named preset is selected
+        self._feel_desc = tk.Label(
+            named_row,
+            text='',
+            font=S.FN_X,
+            fg=S.TXT_DIM,
+            bg=S.BG2,
+            anchor='w',
+        )
+        self._feel_desc.pack(side='left', fill='x', expand=True)
+        self._named_combo.bind('<<ComboboxSelected>>', self._on_named_change)
+
+        # ── Button row ────────────────────────────────────────────────────────
+        btn_row = tk.Frame(c, bg=S.BG2); btn_row.pack(fill='x', pady=(0, 4))
 
         _load_btn = tk.Button(
-            preset_row,
+            btn_row,
             text='Load Preset',
             font=S.FN_X,
             fg=S.ORANGE, bg=S.BG_BTN,
@@ -191,17 +231,14 @@ class MixerPanel:
             cursor='hand2',
             command=self._load_preset,
         )
-        _load_btn.pack(side='left', padx=2)
+        _load_btn.pack(side='left', padx=(0, 4))
         ToolTip(_load_btn,
-                'Load theory-correct Tier-1 groove defaults for the selected genre\n'
-                'into all 10 track strips.  Tier-2 humanise values (jitter, seed)\n'
-                'are preserved so tuned randomisation settings are not overwritten.')
+                'Load the selected feel preset for this genre into all track strips.\n'
+                'Tier-2 humanise values (jitter, seed) are preserved.')
 
-        # Reset All → Identity button: returns every track to a pass-through
-        # state (no velocity scaling, no swing, no pan offset, etc.) in one
-        # click.  Equivalent to the DAW "Bypass" concept applied to all tracks.
+        # Reset All → Identity button
         _reset_btn = tk.Button(
-            preset_row,
+            btn_row,
             text='Reset All',
             font=S.FN_X,
             fg=S.TXT_DIM, bg=S.BG_BTN,
@@ -214,9 +251,10 @@ class MixerPanel:
         ToolTip(_reset_btn,
                 'Reset every track strip to the identity (no-change) state.\n\n'
                 'Identity means: no velocity scaling, no swing, no timing nudge,\n'
-                'no pan offset, no humanisation — MIDI output is unchanged.\n\n'
-                'Use this to hear the raw MIDI before any groove processing,\n'
-                'or as a clean starting point before tweaking individual tracks.')
+                'no pan offset, no humanisation — MIDI output is unchanged.')
+
+        # Initialise named presets for the default genre
+        self._repopulate_named('pop')
 
         # ── Thin divider before track strips ─────────────────────────────────
         tk.Frame(c, bg=S.BG3, height=1).pack(fill='x', pady=(2, 4))
@@ -308,15 +346,16 @@ class MixerPanel:
 
     def set_genre(self, genre: str) -> None:
         """
-        Pre-select the genre in the preset dropdown.
+        Pre-select the genre and repopulate the named preset combobox.
 
-        Called when the user changes genre in the main genre panel so
-        the mixer's preset selector stays in sync.  Does NOT automatically
-        load the preset — the user must click [Load Preset] to apply it.
+        Called when the user changes genre in the main genre panel so the
+        mixer's selectors stay in sync.  Does NOT automatically load the
+        preset — the user must click [Load Preset] to apply it.
         """
         genres = self._library.genre_list()
         if genre in genres:
             self._genre_var.set(genre)
+        self._repopulate_named(genre)
 
     def get_settings(self, genre: Optional[str] = None) -> SongGrooveSettings:
         """
@@ -372,15 +411,23 @@ class MixerPanel:
 
     def _load_preset(self) -> None:
         """
-        Load theory-correct Tier-1 defaults for the selected genre into
-        all track strips.
+        Load groove defaults into all track strips.
 
-        Tier-2 (humanise) values are intentionally left untouched so that
-        a user who has locked a seed or tuned humanise amounts does not
-        lose those settings when switching genre presets.
+        When a named feel preset is selected (not 'Default'), the
+        NamedGroovePresetLibrary supplies the settings.  Otherwise the
+        base GroovePresetLibrary genre default is used.
+
+        Tier-2 (humanise) values are intentionally left untouched.
         """
-        genre = self._genre_var.get()
-        preset: SongGrooveSettings = self._library.get(genre)
+        genre      = self._genre_var.get()
+        named      = self._named_var.get()
+        preset: SongGrooveSettings
+
+        if named and named != 'Default':
+            result = self._named_library.get_named(genre, named)
+            preset = result if result is not None else self._library.get(genre)
+        else:
+            preset = self._library.get(genre)
 
         for key, strip in self._strips.items():
             track_settings = preset.get(key)
@@ -390,6 +437,54 @@ class MixerPanel:
             track_settings.timing_humanize_ms = current.timing_humanize_ms
             track_settings.seed               = current.seed
             strip.load(track_settings)
+
+    def _repopulate_named(self, genre: str) -> None:
+        """Refill the named preset combobox with presets for *genre*."""
+        if not hasattr(self, '_named_combo'):
+            return
+        names = self._named_library.genre_names(genre.lower())
+        values = ['Default'] + names if names else ['Default']
+        self._named_combo['values'] = values
+        self._named_var.set('Default')
+        if hasattr(self, '_feel_desc'):
+            self._feel_desc.config(text='')
+
+    def _on_genre_cb_change(self, event=None) -> None:
+        """Handle genre combobox change — repopulate named presets."""
+        self._repopulate_named(self._genre_var.get())
+
+    def _on_named_change(self, event=None) -> None:
+        """Show a short description next to the selected named preset."""
+        if not hasattr(self, '_feel_desc'):
+            return
+        name = self._named_var.get()
+        # Reuse the descriptions dict from GroovePresetSelector
+        _DESCS = {
+            'Standard':       'Grid-locked, balanced dynamics',
+            'Dark Memphis':   'Deeper pocket, compressed lows',
+            'Melodic Trap':   'Lighter feel, melodic emphasis',
+            'Phonk Trap':     'Extreme sub pocket, maximum lag',
+            'Minimal':        'Hypnotic locked grid, light velocity',
+            'Hard Industrial':'Maximum aggression, high contrast',
+            'Detroit':        'Slight shuffle, organic feel',
+            'Hypnotic':       'Soft dynamics, slow-building tension',
+            'Deep Chill':     'Laid-back swing, warm pocket',
+            'Tech House':     'Tight, minimal swing',
+            'Classic House':  'Lush swing, full chord presence',
+            'Boom Bap':       'Heavy swing, punchy emphasis',
+            'Lo-Fi Chill':    'Loose vintage feel, low velocity',
+            'Modern Rap':     'Tight trap-influenced, clean grid',
+            'Classic Drift':  'Dark Memphis compression',
+            'Brazilian Rave': 'Hard and fast, extreme energy',
+            'Slowed Chopped': 'Maximum pocket, slow drag',
+            'Festival':       'Massive upfront energy',
+            'Future Bass':    'Melodic, lush dynamics',
+            'Progressive':    'Structured, building arrangement',
+            'Radio Hit':      'Bright and forward',
+            'Indie':          'Organic human feel',
+            'Dance Pop':      'Energetic, driving',
+        }
+        self._feel_desc.config(text=_DESCS.get(name, ''))
 
     # ── Solo preview ──────────────────────────────────────────────────────────
 
