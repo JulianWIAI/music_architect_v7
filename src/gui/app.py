@@ -1145,6 +1145,10 @@ class SeedComposerApp:
                     if self._instrument_builder is not None else None
                 ),
                 apply_groove_fn      = self._advisor_apply_groove,
+                get_sample_assignments_fn = (
+                    self._instrument_builder.get_sample_assignments
+                    if self._instrument_builder is not None else None
+                ),
             )
             self._advisor_actions.pack(fill='x', padx=4)
         else:
