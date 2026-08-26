@@ -2227,7 +2227,8 @@ class SeedComposerApp:
                             composition, _builtin_wav,
                             progress_callback=_full_progress,
                             sample_assignments=_sample_assignments,
-                            instrument_params=_instrument_params)
+                            instrument_params=_instrument_params,
+                            groove_settings=_auto_groove_settings)
                         _wav_path = _builtin_wav
                     except Exception as _e:
                         self.msg_queue.put(('gen_progress', 75,
@@ -2241,7 +2242,8 @@ class SeedComposerApp:
                         WAVRenderer().render_composition_to_wav(
                             vr_composition, _vr_builtin_wav,
                             sample_assignments=_sample_assignments,
-                            instrument_params=_instrument_params)
+                            instrument_params=_instrument_params,
+                            groove_settings=_auto_groove_settings)
                         vocal_wav_path = _vr_builtin_wav
                     except Exception as _e:
                         self.msg_queue.put(('gen_progress', 95,
@@ -2532,6 +2534,7 @@ class SeedComposerApp:
                             self.current_composition, wav_out,
                             sample_assignments=_groove_sample_assignments,
                             instrument_params=_groove_instrument_params,
+                            groove_settings=groove_settings,
                         )
                         rendered = True
                     except Exception:
@@ -2627,11 +2630,19 @@ class SeedComposerApp:
         if not p: return
         self._set_status("RENDERING WAV...", S.ORANGE)
         _export_ip = self._get_instrument_params()
+        _export_groove = None
+        if GROOVE_AVAILABLE and self._mixer_panel is not None:
+            try:
+                _export_groove = self._mixer_panel.get_settings(
+                    genre=self.current_composition.get('config', {}).get('genre', ''))
+            except Exception:
+                pass
         def _w():
             try:
                 WAVRenderer().render_composition_to_wav(
                     self.current_composition, p,
-                    instrument_params=_export_ip)
+                    instrument_params=_export_ip,
+                    groove_settings=_export_groove)
                 self.msg_queue.put(('wav_done', p))
             except Exception as e:
                 self.msg_queue.put(('wav_error', str(e)))

@@ -181,6 +181,7 @@ class WAVRenderer:
         progress_callback=None,
         sample_assignments: dict = None,
         instrument_params: dict = None,
+        groove_settings=None,
     ) -> str:
         """
         Render a composition dict directly to WAV using the built-in synthesiser.
@@ -214,6 +215,16 @@ class WAVRenderer:
                 '07_Arp', '08_Stabs', '09_Texture', '10_FX',
             )):
                 sample_engine = None
+
+        # Re-time events using groove settings before synthesis.
+        # GrooveProcessor handles this for FluidSynth (MIDI file path); this
+        # is the equivalent for the built-in synth path (beat-space events).
+        if groove_settings is not None:
+            try:
+                from src.rendering.composition_groover import CompositionGroover
+                composition = CompositionGroover.apply(composition, groove_settings)
+            except Exception:
+                pass   # graceful fallback — ungrooved audio is still valid
 
         print('Synthesising audio...')
         samples = self.builtin.render_composition(
