@@ -67,9 +67,12 @@ else:
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def write_wav(filepath: str, samples: List[float], sample_rate: int = 44100) -> None:
+def write_wav(filepath: str, samples, sample_rate: int = 44100) -> None:
     """
-    Write a mono float sample list to a WAV file.
+    Write a mono or stereo float buffer to a WAV file.
+
+    Accepts a mono list / 1-D array or a stereo np.ndarray of shape (N, 2).
+    Stereo input is written as a 2-channel WAV automatically.
 
     With soundfile installed  : 24-bit PCM WAV with TPDF dithering.
     Without soundfile         : 16-bit PCM WAV (legacy stdlib path).
@@ -77,14 +80,21 @@ def write_wav(filepath: str, samples: List[float], sample_rate: int = 44100) -> 
     Parameters
     ----------
     filepath    : destination file path (created or overwritten)
-    samples     : mono float samples in the range [−1.0, +1.0]
+    samples     : mono float samples in [−1.0, +1.0], or (N, 2) stereo array
     sample_rate : output sample rate in Hz (default 44 100)
     """
-    if _USE_SOUNDFILE:
-        # Delegate entirely to AudioWriter; it handles numpy conversion internally
-        _writer.write(filepath, samples, sample_rate=sample_rate)
+    arr = np.asarray(samples, dtype=np.float32)
+    if arr.ndim == 2:
+        # Stereo (N, 2): AudioWriter accepts this shape directly
+        if _USE_SOUNDFILE:
+            _writer.write(filepath, arr, sample_rate=sample_rate)
+        else:
+            _legacy_write_wav_stereo(filepath, arr[:, 0].tolist(), arr[:, 1].tolist(), sample_rate)
     else:
-        _legacy_write_wav(filepath, samples, sample_rate)
+        if _USE_SOUNDFILE:
+            _writer.write(filepath, arr, sample_rate=sample_rate)
+        else:
+            _legacy_write_wav(filepath, arr.tolist(), sample_rate)
 
 
 def write_wav_stereo(

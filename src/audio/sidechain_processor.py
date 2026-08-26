@@ -209,23 +209,25 @@ def _sidechain_cpp(
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def apply_sidechain(
-    samples:     list,
+    samples:     np.ndarray,
     composition: dict,
     sample_rate: int,
-) -> list:
+) -> np.ndarray:
     """
     Apply kick-triggered sidechain gain reduction to the audio buffer.
 
+    Accepts mono (N,) or stereo (N, 2) arrays.  Stereo input applies the same
+    gain envelope independently to each channel (same triggers, same depth —
+    the pump effect is mono-compatible by design).
+
     Extracts kick hit times from the composition dict's drum track, builds a
     release-only envelope follower anchored to those positions, and applies
-    depth-scaled gain reduction to the full mix.
-
-    Returns the processed sample list.  Falls back to the unmodified input on
-    any error so the render always produces valid audio.
+    depth-scaled gain reduction.  Returns the input unchanged on any error so
+    the render always produces valid audio.
 
     Parameters
     ----------
-    samples     : List[float] — mono PCM from BuiltinSynthesizer.
+    samples     : np.ndarray — mono (N,) or stereo (N, 2) PCM buffer.
     composition : dict — composition dict from CompositionEngine.compose().
     sample_rate : int — audio sample rate in Hz.
     """
@@ -237,14 +239,17 @@ def apply_sidechain(
         if not triggers:
             return samples   # no kick events — nothing to sidechain
 
-        buf = np.array(samples, dtype=np.float32)
+        arr = np.asarray(samples, dtype=np.float32)
 
-        if _CPP_AVAILABLE:
-            result = _sidechain_cpp(buf, triggers, sample_rate, attack_ms, release_ms, depth)
-        else:
-            result = _sidechain_numpy(buf, triggers, sample_rate, attack_ms, release_ms, depth)
+        def _apply(ch: np.ndarray) -> np.ndarray:
+            if _CPP_AVAILABLE:
+                return _sidechain_cpp(ch, triggers, sample_rate, attack_ms, release_ms, depth)
+            return _sidechain_numpy(ch, triggers, sample_rate, attack_ms, release_ms, depth)
 
-        return result.tolist()
+        if arr.ndim == 2:
+            return np.stack([_apply(arr[:, 0]), _apply(arr[:, 1])], axis=1)
+
+        return _apply(arr)
 
     except Exception:
         return samples   # graceful fallback — unprocessed audio is still valid

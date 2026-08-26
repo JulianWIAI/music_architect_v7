@@ -635,9 +635,17 @@ class MixerPanel:
         return self._solo_player.get_current_sec() if self._solo_player else 0.0
 
     @staticmethod
-    def _compute_peaks(samples: list, width: int) -> list:
-        """Downsample *samples* to *width* peak values normalised 0.0–1.0."""
-        arr = np.abs(np.array(samples, dtype=np.float32))
+    def _compute_peaks(samples, width: int) -> list:
+        """Downsample *samples* to *width* peak values normalised 0.0–1.0.
+
+        Accepts mono lists / 1-D arrays or stereo (N, 2) arrays.  Stereo input
+        takes the per-sample maximum across channels before downsampling so
+        the waveform display shows the loudest of L/R at each position.
+        """
+        arr = np.asarray(samples, dtype=np.float32)
+        if arr.ndim == 2:
+            arr = arr.max(axis=1)
+        arr = np.abs(arr)
         n   = len(arr)
         if n == 0:
             return [0.0] * width

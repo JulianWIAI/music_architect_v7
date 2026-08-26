@@ -116,9 +116,9 @@ class BuiltinSynthesizer:
         progress_callback=None,
         sample_engine=None,
         instrument_params: dict = None,
-    ) -> List[float]:
+    ) -> np.ndarray:
         """
-        Render a full composition dict to a mono PCM float buffer.
+        Render a full composition dict to a stereo PCM float buffer.
 
         The composition dict must have the structure produced by
         CompositionEngine:
@@ -140,7 +140,7 @@ class BuiltinSynthesizer:
 
         Returns
         -------
-        List[float]: mono PCM samples, normalised to ≈ ±0.85 peak.
+        np.ndarray: stereo PCM buffer of shape (N, 2), normalised to ≈ ±0.85 peak.
         """
         # Use the C++ fast path only when no custom timbre params are active.
         # When instrument_params contains at least one entry the Python path is
@@ -325,31 +325,32 @@ class BuiltinSynthesizer:
         composition: dict,
         progress_callback=None,
         sample_engine=None,
-    ) -> List[float]:
+    ) -> np.ndarray:
         """
         Render using the C++ SynthCore for per-sample synthesis.
 
-        Note/drum synthesis: C++ (50–200× faster than Python).
-        Buffer mixing:       numpy slice-add (already C, negligible cost).
-        Dict parsing:        Python (tiny fraction of total time).
-
-        When sample_engine is provided, melodic tracks that have a sample
-        loaded use SamplePlayer instead of SynthCore.synthesize_note().
-        Drum tracks always use the drum synthesiser (samples on drum tracks
-        are not supported — they use dedicated drum sample generation).
+        Returns a stereo np.ndarray of shape (N, 2).  Each track is
+        accumulated into a per-track mono buffer, optionally widened with
+        ChorusWidener (pad / texture / lead), then constant-power panned
+        into the stereo master buffers before being mixed in.
         """
-        bpm          = composition['config']['bpm']
-        beat_dur     = 60.0 / bpm
-        total_secs   = composition['total_bars'] * 4 * beat_dur + 5
+        from src.audio.stereo_panner import TRACK_PAN, CHORUS_TRACKS, COMP_TRACK_TO_GROOVE_KEY
+        from src.audio.chorus_widener import ChorusWidener
+
+        bpm           = composition['config']['bpm']
+        beat_dur      = 60.0 / bpm
+        total_secs    = composition['total_bars'] * 4 * beat_dur + 5
         total_samples = int(total_secs * self.sample_rate)
 
-        # numpy float32 buffer — slice-add is a BLAS-level C operation
-        buffer = np.zeros(total_samples, dtype=np.float32)
+        buffer_L = np.zeros(total_samples, dtype=np.float32)
+        buffer_R = np.zeros(total_samples, dtype=np.float32)
 
-        tracks     = composition.get('tracks', {})
-        track_info = composition.get('track_info', {})
+        tracks       = composition.get('tracks', {})
+        track_info   = composition.get('track_info', {})
         total_events = sum(len(e) for e in tracks.values())
         processed    = 0
+
+        widener = ChorusWidener(sample_rate=self.sample_rate)
 
         for track_name, events in tracks.items():
             info     = track_info.get(track_name, {})
@@ -357,12 +358,17 @@ class BuiltinSynthesizer:
             is_drum  = info.get('channel', 0) == 9
             gain     = float(info.get('gain', 1.0))
 
-            # Sample takes priority over the built-in synthesiser for this track.
-            # Drum tracks are also eligible — SampleEngine plays them at root pitch.
+            groove_key = COMP_TRACK_TO_GROOVE_KEY.get(track_name, '')
+            pan        = TRACK_PAN.get(groove_key, 0.0)
+            use_chorus = groove_key in CHORUS_TRACKS
+
             use_sample = (
                 sample_engine is not None
                 and sample_engine.is_loaded(track_name)
             )
+
+            # Collect all events for this track into a mono buffer
+            track_mono = np.zeros(total_samples, dtype=np.float32)
 
             for event in events:
                 if len(event) < 4:
@@ -372,12 +378,10 @@ class BuiltinSynthesizer:
                 dur_sec  = duration_beats * beat_dur
 
                 if use_sample:
-                    # SampleEngine handles drum root-pitch correction internally.
                     try:
                         start_idx, samples = sample_engine.synthesize(
                             track_name, int(pitch), time_sec, dur_sec, velocity)
                     except Exception:
-                        # Fallback to native synthesis if sample playback fails
                         if is_drum:
                             start_idx, samples = self._core.synthesize_drum(
                                 pitch, time_sec, velocity)
@@ -391,14 +395,13 @@ class BuiltinSynthesizer:
                     start_idx, samples = self._core.synthesize_note(
                         pitch, time_sec, dur_sec, velocity, program)
 
-                # Mix into master buffer with numpy slice-add
-                n = len(samples)
+                n       = len(samples)
                 b_start = max(0, start_idx)
                 s_start = max(0, -start_idx)
                 b_end   = min(start_idx + n, total_samples)
                 actual  = b_end - b_start
                 if actual > 0:
-                    buffer[b_start:b_end] += (
+                    track_mono[b_start:b_end] += (
                         np.asarray(samples[s_start:s_start + actual], dtype=np.float32) * gain
                     )
 
@@ -406,12 +409,27 @@ class BuiltinSynthesizer:
                 if progress_callback and processed % 200 == 0:
                     progress_callback(processed, total_events)
 
-        # Soft-clip to 0.85 ceiling — only reduce if clipping, never boost.
-        peak = float(np.max(np.abs(buffer)))
-        if peak > 0.85:
-            buffer *= 0.85 / peak
+            # Widen designated tracks before panning
+            if use_chorus:
+                track_L, track_R = widener.process(track_mono)
+            else:
+                track_L = track_R = track_mono
 
-        return buffer.tolist()
+            # Constant-power pan into the stereo master buffers
+            angle  = (pan + 1.0) * math.pi / 4.0
+            gain_L = math.cos(angle)
+            gain_R = math.sin(angle)
+            buffer_L += track_L * gain_L
+            buffer_R += track_R * gain_R
+
+        # Normalise both channels together to preserve the stereo image
+        peak = float(max(np.max(np.abs(buffer_L)), np.max(np.abs(buffer_R))))
+        if peak > 0.85:
+            scale     = 0.85 / peak
+            buffer_L *= scale
+            buffer_R *= scale
+
+        return np.stack([buffer_L, buffer_R], axis=1)
 
     # =========================================================================
     # Private — pure-Python render path (fallback)
@@ -423,31 +441,37 @@ class BuiltinSynthesizer:
         progress_callback=None,
         sample_engine=None,
         instrument_params: dict = None,
-    ) -> List[float]:
+    ) -> np.ndarray:
         """
         Pure-Python render path — used when C++ extension is not compiled.
 
-        Uses the additive harmonic synthesiser for melodic tracks and the
-        built-in drum synthesiser for percussion (channel 9).
-
-        When sample_engine is provided, melodic tracks that have a sample
-        loaded use the Python SamplePlayer fallback for that track.
+        Mirrors the stereo structure of _render_cpp: each track is accumulated
+        into a per-track mono buffer, optionally widened with ChorusWidener
+        (pad / texture / lead), then constant-power panned into the stereo
+        master buffers.  Returns a stereo np.ndarray of shape (N, 2).
 
         When instrument_params is provided, percussion and melodic tracks use
         PercussionParams / MelodicParams to override the default synthesis
         character (timbre, noise amount, pitch sweep, drive, etc.).
         """
-        bpm          = composition['config']['bpm']
-        beat_dur     = 60.0 / bpm
-        total_secs   = composition['total_bars'] * 4 * beat_dur + 5
-        total_samples = int(total_secs * self.sample_rate)
-        buffer       = [0.0] * total_samples
+        from src.audio.stereo_panner import TRACK_PAN, CHORUS_TRACKS, COMP_TRACK_TO_GROOVE_KEY
+        from src.audio.chorus_widener import ChorusWidener
 
-        tracks     = composition.get('tracks', {})
-        track_info = composition.get('track_info', {})
+        bpm           = composition['config']['bpm']
+        beat_dur      = 60.0 / bpm
+        total_secs    = composition['total_bars'] * 4 * beat_dur + 5
+        total_samples = int(total_secs * self.sample_rate)
+
+        buffer_L = np.zeros(total_samples, dtype=np.float32)
+        buffer_R = np.zeros(total_samples, dtype=np.float32)
+
+        tracks       = composition.get('tracks', {})
+        track_info   = composition.get('track_info', {})
         total_events = sum(len(e) for e in tracks.values())
         processed    = 0
         ip           = instrument_params or {}
+
+        widener = ChorusWidener(sample_rate=self.sample_rate)
 
         for track_name, events in tracks.items():
             info    = track_info.get(track_name, {})
@@ -455,14 +479,21 @@ class BuiltinSynthesizer:
             is_drum = info.get('channel', 0) == 9
             gain    = float(info.get('gain', 1.0))
 
+            groove_key = COMP_TRACK_TO_GROOVE_KEY.get(track_name, '')
+            pan        = TRACK_PAN.get(groove_key, 0.0)
+            use_chorus = groove_key in CHORUS_TRACKS
+
             # Resolve per-track instrument params (None = use built-in defaults)
-            track_role   = _TRACK_TO_ROLE.get(track_name)
+            track_role    = _TRACK_TO_ROLE.get(track_name)
             track_iparams = ip.get(track_role) if track_role else None
 
             use_sample = (
                 sample_engine is not None
                 and sample_engine.is_loaded(track_name)
             )
+
+            # Collect all note events for this track into a mono buffer
+            track_mono = np.zeros(total_samples, dtype=np.float32)
 
             for event in events:
                 if len(event) < 4:
@@ -475,35 +506,55 @@ class BuiltinSynthesizer:
                     try:
                         start_idx, arr = sample_engine.synthesize(
                             track_name, int(pitch), time_sec, dur_sec, velocity)
-                        samples = arr.tolist()
+                        note_samples = arr.tolist()
                     except Exception:
                         if is_drum:
-                            start_idx, samples = self._synth_drum(
+                            start_idx, note_samples = self._synth_drum(
                                 int(pitch), time_sec, velocity, ip)
                         else:
-                            start_idx, samples = self.synthesize_note(
+                            start_idx, note_samples = self.synthesize_note(
                                 pitch, time_sec, dur_sec, velocity, program,
                                 melodic_params=track_iparams)
                 elif is_drum:
-                    start_idx, samples = self._synth_drum(
+                    start_idx, note_samples = self._synth_drum(
                         int(pitch), time_sec, velocity, ip)
                 else:
-                    start_idx, samples = self.synthesize_note(
+                    start_idx, note_samples = self.synthesize_note(
                         pitch, time_sec, dur_sec, velocity, program,
                         melodic_params=track_iparams)
 
-                for i, s in enumerate(samples):
-                    idx = start_idx + i
-                    if 0 <= idx < total_samples:
-                        buffer[idx] += s * gain
+                n       = len(note_samples)
+                b_start = max(0, start_idx)
+                s_start = max(0, -start_idx)
+                b_end   = min(start_idx + n, total_samples)
+                actual  = b_end - b_start
+                if actual > 0:
+                    track_mono[b_start:b_end] += (
+                        np.asarray(note_samples[s_start:s_start + actual], dtype=np.float32) * gain
+                    )
 
                 processed += 1
                 if progress_callback and processed % 200 == 0:
                     progress_callback(processed, total_events)
 
-        peak = max(abs(s) for s in buffer) if buffer else 0.0
-        if peak > 0.85:
-            scale  = 0.85 / peak
-            buffer = [s * scale for s in buffer]
+            # Widen designated tracks before panning
+            if use_chorus:
+                track_L, track_R = widener.process(track_mono)
+            else:
+                track_L = track_R = track_mono
 
-        return buffer
+            # Constant-power pan into the stereo master buffers
+            angle  = (pan + 1.0) * math.pi / 4.0
+            gain_L = math.cos(angle)
+            gain_R = math.sin(angle)
+            buffer_L += track_L * gain_L
+            buffer_R += track_R * gain_R
+
+        # Normalise both channels together to preserve the stereo image
+        peak = float(max(np.max(np.abs(buffer_L)), np.max(np.abs(buffer_R))))
+        if peak > 0.85:
+            scale     = 0.85 / peak
+            buffer_L *= scale
+            buffer_R *= scale
+
+        return np.stack([buffer_L, buffer_R], axis=1)

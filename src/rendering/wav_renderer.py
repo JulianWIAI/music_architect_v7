@@ -28,21 +28,21 @@ _DSP_BLOCK_SIZE: int = 512
 
 
 def _apply_fx_chain(
-    samples: list,
+    samples: np.ndarray,
     composition: dict,
     sample_rate: int,
     instrument_params: dict = None,
-) -> list:
+) -> np.ndarray:
     """
     Run the PCM buffer through the full effects chain: TransientShaper →
     ThreeBandEQ → SchroederReverb → TempoDelay.
 
-    Parameters are derived from the GenreProfile embedded in composition['config'].
-    instrument_params is reserved for future per-instrument routing and is
-    currently unused at the master-bus level.
+    Accepts mono (N,) or stereo (N, 2) arrays.  Stereo input is processed
+    with separate FxChain instances for L and R so each stateful processor
+    (reverb, delay) maintains independent internal state per channel.
 
-    Returns the input list unchanged on any error so the render always
-    produces valid audio even if the FX chain import fails.
+    Returns the input unchanged on any error so the render always produces
+    valid audio even if the FX chain import fails.
     """
     try:
         from src.audio.effects.fx_chain import FxChain
@@ -57,37 +57,44 @@ def _apply_fx_chain(
 
         profile = GenreProfileLibrary().get(genre, bpm)
 
-        chain = FxChain(
-            sample_rate=sample_rate,
-            bpm=bpm,
-            genre=genre,
-            profile=profile,
-        )
+        arr = np.asarray(samples, dtype=np.float32)
 
-        buf = np.array(samples, dtype=np.float32)
-        buf = chain.process(buf)
+        if arr.ndim == 2:
+            # Stereo: independent chain instances so each channel's reverb tail
+            # and delay feedback are computed separately — preserves stereo image.
+            chain_L = FxChain(sample_rate=sample_rate, bpm=bpm, genre=genre, profile=profile)
+            chain_R = FxChain(sample_rate=sample_rate, bpm=bpm, genre=genre, profile=profile)
+            out = np.stack([chain_L.process(arr[:, 0]),
+                            chain_R.process(arr[:, 1])], axis=1)
+        else:
+            chain = FxChain(sample_rate=sample_rate, bpm=bpm, genre=genre, profile=profile)
+            out   = chain.process(arr)
 
         # Re-normalise after the FX chain to prevent clipping.
-        peak = float(np.max(np.abs(buf)))
+        peak = float(np.max(np.abs(out)))
         if peak > 0.85:
-            buf *= 0.85 / peak
+            out *= 0.85 / peak
 
-        return buf.tolist()
+        return out
 
     except Exception:
         return samples   # graceful fallback — raw synthesis audio is still valid
 
 
 def _apply_dsp_session(
-    samples: list,
+    samples: np.ndarray,
     composition: dict,
     sample_rate: int,
-) -> list:
+) -> np.ndarray:
     """
     Run the PCM buffer through a DspSession built from the composition's genre.
 
-    Returns the processed samples list.  On any error returns the input
-    unchanged so the render always produces valid audio.
+    Accepts mono (N,) or stereo (N, 2) arrays.  Stereo input is processed with
+    separate DspSession instances for L and R so the LFO-driven saturation
+    automation runs independently per channel.
+
+    Returns the input unchanged on any error so the render always produces
+    valid audio.
     """
     try:
         from src.audio.dsp_bridge import DspSession
@@ -107,21 +114,26 @@ def _apply_dsp_session(
         if profile.drive_pct_max < 1.0 and profile.saturation_type == 'none':
             return samples
 
-        session = DspSession(
-            profile     = profile,
-            bpm         = bpm,
-            sample_rate = sample_rate,
-            seed        = None,
-            smoothing_ms = 5.0,
-        )
+        arr = np.asarray(samples, dtype=np.float32)
 
-        buf    = np.array(samples, dtype=np.float32)
-        chunks = []
-        for start in range(0, len(buf), _DSP_BLOCK_SIZE):
-            chunk = buf[start:start + _DSP_BLOCK_SIZE]
-            chunks.append(session.process_block(chunk))
+        def _process_channel(ch: np.ndarray) -> np.ndarray:
+            session = DspSession(
+                profile      = profile,
+                bpm          = bpm,
+                sample_rate  = sample_rate,
+                seed         = None,
+                smoothing_ms = 5.0,
+            )
+            chunks = []
+            for start in range(0, len(ch), _DSP_BLOCK_SIZE):
+                chunks.append(session.process_block(ch[start:start + _DSP_BLOCK_SIZE]))
+            return np.concatenate(chunks) if chunks else ch
 
-        return np.concatenate(chunks).tolist() if chunks else samples
+        if arr.ndim == 2:
+            return np.stack([_process_channel(arr[:, 0]),
+                             _process_channel(arr[:, 1])], axis=1)
+
+        return _process_channel(arr)
 
     except Exception:
         return samples   # graceful fallback — raw synthesis audio is still valid
@@ -219,7 +231,8 @@ class WAVRenderer:
         # Apply the full effects chain: transient shaping, EQ, reverb, delay.
         samples = _apply_fx_chain(samples, composition, self.sample_rate, instrument_params)
 
-        write_wav(wav_path, samples, self.sample_rate)
-        duration = len(samples) / self.sample_rate
+        arr      = np.asarray(samples, dtype=np.float32)
+        write_wav(wav_path, arr, self.sample_rate)
+        duration = arr.shape[0] / self.sample_rate
         print(f'WAV exported: {wav_path} ({duration:.1f}s)')
         return wav_path
