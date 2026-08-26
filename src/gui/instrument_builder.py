@@ -116,7 +116,7 @@ class InstrumentBuilder(tk.Frame):
         # Fix suggestion rows
         self._fix_rows:    List[dict]                 = []
 
-        self._expanded = True   # collapse state
+        self._expanded = False  # starts collapsed — user expands when needed
         self._sample_panel: Optional[SampleAssignmentPanel] = None
         # Combobox widgets for PERC / TEXTURE / FX (outside BDRA catalogue)
         self._extra_track_vars: Dict[str, tk.StringVar]      = {}
@@ -151,7 +151,7 @@ class InstrumentBuilder(tk.Frame):
         hdr.pack(fill='x', pady=(2, 0))
 
         self._toggle_btn = tk.Button(
-            hdr, text='▼ INSTRUMENT BUILDER',
+            hdr, text='▶ INSTRUMENT BUILDER',
             font=S.FN_S, fg=S.PINK, bg=S.BG2,
             bd=0, activebackground=S.BG3, activeforeground=S.PINK,
             cursor='hand2', anchor='w',
@@ -167,7 +167,7 @@ class InstrumentBuilder(tk.Frame):
 
         # ── Collapsible content ───────────────────────────────────────────
         self._content = tk.Frame(self, bg=S.BG2)
-        self._content.pack(fill='x')
+        # hidden initially — matches self._expanded = False in __init__
 
         # ── Kick row ──────────────────────────────────────────────────────
         # The kick type is the Matrix 1 root; three canonical BDRA codes

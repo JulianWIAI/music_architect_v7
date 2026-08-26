@@ -163,7 +163,7 @@ class TimbreEditorPanel(tk.Frame):
         self._S = S
 
         # State
-        self._expanded: bool = True
+        self._expanded: bool = False  # starts collapsed — user expands when needed
 
         # {role: StringVar} — tracks the selected preset name per role
         self._preset_vars: Dict[str, tk.StringVar] = {}
@@ -216,7 +216,7 @@ class TimbreEditorPanel(tk.Frame):
 
         self._toggle_btn = tk.Button(
             hdr,
-            text='▼ TIMBRE',
+            text='▶ TIMBRE',
             font=S.FN_S,
             fg=S.PINK,
             bg=S.BG2,
@@ -242,7 +242,7 @@ class TimbreEditorPanel(tk.Frame):
 
         # ── Content frame (collapsible) ────────────────────────────────────
         self._content = tk.Frame(self, bg=S.BG2)
-        self._content.pack(fill='x')
+        # hidden initially — matches self._expanded = False in __init__
 
         for role, label in _ROLES:
             self._build_role_section(role, label)

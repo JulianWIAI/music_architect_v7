@@ -102,7 +102,7 @@ class FxVariantPanel:
             parent,
             "FX CHAIN VARIANT  (bright / neutral / dark)",
             styles.ORANGE,
-            collapsed=False,   # open by default — this is a key advisor feature
+            collapsed=True,    # starts collapsed — user expands when needed
         )
         frame = self._cs.content_frame
         self._build(frame)
