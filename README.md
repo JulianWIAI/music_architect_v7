@@ -64,7 +64,12 @@ The **Solo Preview** system inside Groove & Mixer lets the user listen to each o
 | **Waveform renderer** | Bar chart waveform blends 65 % peak + 35 % RMS with perceptual gamma 0.55 — quiet passages remain visible against mastered audio; 800-bar minimum resolution avoids the flat-waveform problem on first load |
 | **PCM decoder** | `pcm_decoder.py` provides a NumPy-vectorised path with correct 24-bit sign extension and 32-bit IEEE-float support, plus a pure-stdlib fallback for NumPy-free environments |
 | **Soft-clip normalisation** | Master buffer is only scaled down when the peak exceeds 0.85 — never boosted. This preserves per-track gain adjustments made in the Groove & Mixer so volume faders have audible effect |
-| **GUI** | Tkinter interface with AI prompt decoder, live SF2 indicator, dual beat/vocal-ready generation, FluidSynth WAV preview, Piano Roll tab, Solo preview, Groove & Mixer panel, and full Production Advisor tab |
+| **Stereo output pipeline** | Every track is rendered to a mono buffer, then placed in the stereo field via constant-power (quarter-circle) panning. Pad, texture, and lead additionally pass through `ChorusWidener` — an anti-phase LFO chorus that creates audible width while remaining mono-compatible. The FX chain and sidechain processor each operate on independent L/R state instances to avoid reverb-tail cross-contamination. Final output is 24-bit stereo WAV |
+| **CompositionGroover** | Applies swing, timing nudge, velocity curves, and seeded humanisation to the built-in Python synth path — not just MIDI. Previously groove settings only affected FluidSynth re-renders; `CompositionGroover.apply()` now transforms the composition dict before synthesis so the Python path produces the same rhythmic feel as the MIDI path |
+| **Timbre Editor** | Per-instrument synthesis preset panel in the ADVISOR tab. Four roles — kick, snare, hi-hat, melodic — each have a preset combobox and fine-tuning sliders (kick: pitch_end_hz / noise_amount / decay_ms; snare: tuning_st / snare_ratio / decay_ms; hi-hat: brightness / decay_ms; melodic: attack_ms / brightness / drive). Parameters are injected into the built-in synthesiser before every WAV render; C++ and FluidSynth paths are unaffected |
+| **Sample Assignment panel** | Collapsible panel in the ADVISOR tab for per-track audio file assignment. One row per track; each row has Browse / Preview / Clear buttons. When a sample is assigned the `SamplePlayer` replaces the built-in synthesiser for that track. Supported formats: WAV · AIFF · FLAC · OGG · MP3 |
+| **Original WAV preservation** | The Play Full Beat button is pinned to `_original_wav_path` — set once per generation and never overwritten by groove re-renders or advisor previews. Re-renders and advisor previews update `current_wav_path` independently, so the showcase button always presents the AI's unmodified output |
+| **GUI** | Tkinter interface with AI prompt decoder, live SF2 indicator, dual beat/vocal-ready generation, FluidSynth WAV preview, Piano Roll tab, Solo preview, Groove & Mixer panel, Timbre Editor, Sample Assignment panel, and full Production Advisor tab. All advisor sub-sections start collapsed for a clean initial view |
 
 ---
 
@@ -113,7 +118,9 @@ music_architect_v7/
 │   │   └── utau_bridge.py         # OpenUTAU .ustx vocal project scaffold export
 │   ├── rendering/                 # WAV + FluidSynth export
 │   │   ├── fluidsynth_renderer.py # Non-realtime FluidSynth renderer with cancel()
-│   │   ├── builtin_synthesizer.py # Additive software synth (C++ fast path + Python fallback)
+│   │   ├── builtin_synthesizer.py # Additive software synth (C++ fast path + Python fallback; stereo out)
+│   │   ├── composition_groover.py # CompositionGroover — applies groove to composition dict before synthesis
+│   │   ├── timbre_presets.py      # Per-role synthesis presets (kick / snare / hihat / melodic)
 │   │   └── soundfont_library.py   # SF2 discovery + genre-based routing (3-font split)
 │   ├── ingestion/                 # MIDI seed ingestion and analysis
 │   ├── patterns/                  # Euclidean patterns, extractors, generators
@@ -123,7 +130,9 @@ music_architect_v7/
 │   ├── audio/
 │   │   ├── pcm_decoder.py         # NumPy-vectorised + stdlib-fallback PCM decoder (8/16/24/32-bit)
 │   │   ├── waveform_generator.py  # Peak+RMS blend with perceptual gamma → bar chart amplitudes
-│   │   └── sidechain_processor.py # Kick-triggered sidechain gain reduction
+│   │   ├── sidechain_processor.py # Kick-triggered sidechain gain reduction
+│   │   ├── stereo_panner.py       # Constant-power (quarter-circle) per-track panning + TRACK_PAN table
+│   │   └── chorus_widener.py      # Anti-phase LFO chorus widener for pad / texture / lead (mono-compatible)
 │   ├── midi/
 │   │   ├── groove_settings.py     # TrackGrooveSettings / SongGrooveSettings dataclasses + is_identity()
 │   │   ├── groove_presets.py      # GroovePresetLibrary — theory-correct Tier-1 defaults per genre
@@ -137,8 +146,10 @@ music_architect_v7/
 │       ├── fx_variant_panel.py    # BRIGHT / NEUTRAL / DARK variant switcher
 │       ├── soundfont_picker.py    # Custom SF2 file picker with session persistence
 │       ├── midi_preview_player.py # WAV + MIDI playback with seek support (pygame)
-│       ├── mixer_panel.py         # Groove & Mixer panel — genre preset, solo batch controls, 10 strips
+│       ├── mixer_panel.py         # Groove & Mixer panel — genre preset, feel presets, solo batch, 10 strips
 │       ├── mixer_strip.py         # Per-track strip: always-visible gain/pan + Tier-1/2 controls + solo preview
+│       ├── timbre_editor_panel.py # Timbre Editor — per-instrument preset combobox + parameter sliders
+│       ├── sample_assignment_panel.py # Sample Assignment — per-track audio file override (Browse/Preview/Clear)
 │       ├── piano_roll.py          # Read-only piano roll tab — color-coded note grid + track isolation
 │       ├── fader_utils.py         # Shared DAW fader math (piecewise-linear dB, unity at 80 %)
 │       ├── advanced_groove_view.py# Four-tab V/T/P/E notebook — raw 16-step grid editors
@@ -373,9 +384,67 @@ Solo renders always use a **neutral default timbre** (program 0 for all melodic 
 
 | Button | Effect |
 |---|---|
-| **[Load Preset]** | Fills all 10 strips with theory-correct Tier-1 defaults for the selected genre; Tier-2 humanisation values are preserved |
+| **[Load Preset]** | Fills all 10 strips with theory-correct Tier-1 defaults for the selected genre + feel; Tier-2 humanisation values are preserved |
 | **[Reset All]** | Returns every strip to identity — no velocity scaling, no swing, no nudge, no pan offset; MIDI output is unchanged (DAW "bypass" equivalent) |
-| **[APPLY GROOVE & RE-RENDER]** | Applies current groove settings to the last generated MIDI and re-renders audio without recomposing |
+| **[APPLY GROOVE & RE-RENDER]** | Applies current groove settings to the **original** composition (not the last re-render) and re-renders audio without recomposing. Groove stacking is prevented — each apply always starts from the generation-time snapshot |
+
+### Feel Presets
+
+In addition to the genre base preset, a second **Feel** dropdown offers named production sub-styles per genre. Examples:
+
+| Genre | Feels |
+|---|---|
+| Hip-Hop | Default · Boom Bap · Lo-Fi Chill · Modern Rap |
+| Trap | Default · Dark Memphis · Melodic Trap · Detroit |
+| House | Default · Deep · Chicago · Garage |
+
+`NamedGroovePresetLibrary.get_named(genre, feel)` merges the named overrides on top of the base genre defaults so every track always receives sensible values even if the named preset only specifies a subset of tracks.
+
+---
+
+## Stereo Output
+
+Every WAV render (both FluidSynth and built-in Python synth) produces a **24-bit stereo file** through a four-stage pipeline:
+
+```
+per-track mono buffer
+    ↓
+ChorusWidener  (pad / texture / lead only)
+    ↓
+StereoPanner   (constant-power quarter-circle law)
+    ↓
+stereo FX chain + sidechain (independent L/R state)
+    ↓
+24-bit stereo WAV
+```
+
+### Pan positions
+
+| Track | Pan | Notes |
+|---|---|---|
+| Kick | 0.0 (centre) | Sub frequencies anchor the stereo image |
+| Bass | 0.0 (centre) | Low-end mono for translation |
+| Percussion | −0.10 (slight L) | Snare/hat spread away from kick |
+| Lead | −0.15 (slight L) | Melody sits left-of-centre |
+| Chords | +0.20 (slight R) | Harmonic content balances melody |
+| Pad | 0.0 + chorus | Width from ChorusWidener |
+| Arp | +0.25 (R) | Counter-point to lead |
+| Stabs | −0.20 (L) | Rhythmic interest on left |
+| Texture | 0.0 + chorus | Full-width atmosphere |
+| FX | +0.30 (R) | Sound design detail on right |
+
+### ChorusWidener
+
+`ChorusWidener` (pad / texture / lead only) uses two anti-phase LFO delay lines:
+
+- `lfo_L = depth × (1 + sin(phase)) / 2`
+- `lfo_R = depth − lfo_L`
+
+Because `lfo_L + lfo_R = depth` at all times the signal collapses cleanly to mono when L and R are summed — standard broadcast safety. Default parameters: `depth_ms=8.0`, `rate_hz=0.45`, `mix=0.45`.
+
+### FX chain stereo safety
+
+`FxChain`, `DspSession`, and `SidechainFollower` all hold internal state (reverb tail, delay buffer, LFO phase). Each channel gets **separate instances** created at render time — processing L then R through the same object would corrupt reverb tails and delay feedback.
 
 ---
 
@@ -454,5 +523,6 @@ python main.py watermark --extract path/to/track.mid
 - `numpy` — PCM decoding, waveform generation, solo peak computation
 - `pygame` — optional audio preview and seek
 - `FluidSynth` — optional non-realtime WAV rendering (via `-a null` driver)
-- `soundfile` — WAV I/O (24-bit output; falls back to stdlib `wave` at 16-bit if absent)
+- `soundfile` — WAV I/O (24-bit **stereo** output; falls back to stdlib `wave` at 16-bit mono if absent)
 - `fpdf2` — optional PDF export for the production guide (falls back to `.txt` if absent)
+- `librosa` / `pydub` — optional: used by `SamplePlayer` for audio file decoding (WAV · AIFF · FLAC · OGG · MP3)
