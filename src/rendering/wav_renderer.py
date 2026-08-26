@@ -19,6 +19,8 @@ from src.rendering.builtin_synthesizer import BuiltinSynthesizer
 from src.rendering.fluidsynth_renderer import FluidSynthRenderer
 from src.rendering.wav_writer import write_wav
 from src.audio.sidechain_processor import apply_sidechain
+from src.sampling.sample_engine import SampleEngine
+from src.sampling.sample_loader import load_audio_file
 
 # Block size for DspSession processing — matches the LFO engine's internal
 # granularity and the C++ SaturationProcessor's smoothing window.
@@ -114,6 +116,7 @@ class WAVRenderer:
         composition: dict,
         wav_path: str,
         progress_callback=None,
+        sample_assignments: dict = None,
     ) -> str:
         """
         Render a composition dict directly to WAV using the built-in synthesiser.
@@ -129,10 +132,27 @@ class WAVRenderer:
         composition       : Composition dict from CompositionEngine.
         wav_path          : Output file path.
         progress_callback : Optional callable(processed, total) for UI progress.
+        sample_assignments: Optional {builder_key: file_path} mapping.  When
+                            provided, tracks with an assigned audio file use
+                            SamplePlayer instead of the built-in synthesiser
+                            (samples take priority over GM instrument selection).
         """
+        # Pre-load samples synchronously before entering the render loop.
+        # SampleEngine.load_from_assignments() prints load errors but never raises.
+        sample_engine = None
+        if sample_assignments:
+            sample_engine = SampleEngine(self.sample_rate)
+            sample_engine.load_from_assignments(sample_assignments, load_audio_file)
+            # Discard engine when nothing was actually loaded (avoids per-event lookup overhead)
+            if not any(sample_engine.is_loaded(t) for t in (
+                '03_Bass', '04_Melody', '05_Chords', '06_Pad',
+                '07_Arp', '08_Stabs', '09_Texture', '10_FX',
+            )):
+                sample_engine = None
+
         print('Synthesising audio...')
         samples = self.builtin.render_composition(
-            composition, progress_callback
+            composition, progress_callback, sample_engine=sample_engine
         )
 
         # Apply genre-specific saturation and LFO automation.

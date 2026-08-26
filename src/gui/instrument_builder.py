@@ -50,6 +50,7 @@ from typing import Callable, Dict, List, Optional
 from src.composition import bdra_rules as _br
 from src.composition.gm_descriptions import get_description as _gm_desc
 from src.gui.tooltips import ToolTip, TOOLTIPS
+from src.gui.sample_assignment_panel import SampleAssignmentPanel
 
 
 # ── Track configuration ───────────────────────────────────────────────────────
@@ -116,6 +117,7 @@ class InstrumentBuilder(tk.Frame):
         self._fix_rows:    List[dict]                 = []
 
         self._expanded = True   # collapse state
+        self._sample_panel: Optional[SampleAssignmentPanel] = None
         # Combobox widgets for PERC / TEXTURE / FX (outside BDRA catalogue)
         self._extra_track_vars: Dict[str, tk.StringVar]      = {}
         self._extra_track_cbs:  Dict[str, ttk.Combobox]     = {}
@@ -417,6 +419,10 @@ class InstrumentBuilder(tk.Frame):
             btn.pack(side='right', padx=4)
             self._fix_rows.append({'row': fix_row, 'lbl': lbl, 'btn': btn, 'fix': None})
 
+        # ── Sample assignment panel (per-track audio file selection) ────────
+        self._sample_panel = SampleAssignmentPanel(self._content, styles=S)
+        self._sample_panel.pack(fill='x', padx=4, pady=(4, 2))
+
         # ── Apply button ──────────────────────────────────────────────────
         btn_row = tk.Frame(self._content, bg=S.BG2)
         btn_row.pack(fill='x', pady=(2, 6))
@@ -675,6 +681,18 @@ class InstrumentBuilder(tk.Frame):
         muted = {t for t, mv in self._mute_vars.items() if mv.get()}
         muted.update(t for t, mv in self._extra_mute_vars.items() if mv.get())
         return muted
+
+    def get_sample_assignments(self) -> dict:
+        """Return the current sample assignments from the SAMPLES panel.
+
+        Returns a {builder_key: file_path} dict suitable for passing to
+        WAVRenderer.render_composition_to_wav(sample_assignments=...).
+        Returns an empty dict when no samples have been assigned or the
+        sample panel was not built.
+        """
+        if self._sample_panel is None:
+            return {}
+        return self._sample_panel.get_assignments()
 
     def _refresh_desc(self, track: str) -> None:
         """

@@ -89,6 +89,7 @@ class BuiltinSynthesizer:
         self,
         composition: dict,
         progress_callback=None,
+        sample_engine=None,
     ) -> List[float]:
         """
         Render a full composition dict to a mono PCM float buffer.
@@ -106,14 +107,18 @@ class BuiltinSynthesizer:
         ----------
         composition       : Composition dict from CompositionEngine.
         progress_callback : Optional callable(processed, total) for UI progress.
+        sample_engine     : Optional SampleEngine instance.  When a track has a
+                            loaded sample, the SamplePlayer is used instead of
+                            the built-in synthesiser for that track (samples take
+                            priority over GM instrument selection).
 
         Returns
         -------
         List[float]: mono PCM samples, normalised to ≈ ±0.85 peak.
         """
         if _CPP_AVAILABLE:
-            return self._render_cpp(composition, progress_callback)
-        return self._render_python(composition, progress_callback)
+            return self._render_cpp(composition, progress_callback, sample_engine)
+        return self._render_python(composition, progress_callback, sample_engine)
 
     # ── Low-level API (Python fallback only) ─────────────────────────────────
 
@@ -208,6 +213,7 @@ class BuiltinSynthesizer:
         self,
         composition: dict,
         progress_callback=None,
+        sample_engine=None,
     ) -> List[float]:
         """
         Render using the C++ SynthCore for per-sample synthesis.
@@ -215,6 +221,11 @@ class BuiltinSynthesizer:
         Note/drum synthesis: C++ (50–200× faster than Python).
         Buffer mixing:       numpy slice-add (already C, negligible cost).
         Dict parsing:        Python (tiny fraction of total time).
+
+        When sample_engine is provided, melodic tracks that have a sample
+        loaded use SamplePlayer instead of SynthCore.synthesize_note().
+        Drum tracks always use the drum synthesiser (samples on drum tracks
+        are not supported — they use dedicated drum sample generation).
         """
         bpm          = composition['config']['bpm']
         beat_dur     = 60.0 / bpm
@@ -235,6 +246,13 @@ class BuiltinSynthesizer:
             is_drum  = info.get('channel', 0) == 9
             gain     = float(info.get('gain', 1.0))
 
+            # Determine whether this track has an assigned sample
+            use_sample = (
+                not is_drum
+                and sample_engine is not None
+                and sample_engine.is_loaded(track_name)
+            )
+
             for event in events:
                 if len(event) < 4:
                     continue
@@ -245,6 +263,15 @@ class BuiltinSynthesizer:
                 if is_drum:
                     start_idx, samples = self._core.synthesize_drum(
                         pitch, time_sec, velocity)
+                elif use_sample:
+                    # Sample takes priority over GM instrument
+                    try:
+                        start_idx, samples = sample_engine.synthesize(
+                            track_name, int(pitch), time_sec, dur_sec, velocity)
+                    except Exception:
+                        # Fallback to synthesizer if sample playback fails
+                        start_idx, samples = self._core.synthesize_note(
+                            pitch, time_sec, dur_sec, velocity, program)
                 else:
                     start_idx, samples = self._core.synthesize_note(
                         pitch, time_sec, dur_sec, velocity, program)
@@ -279,12 +306,16 @@ class BuiltinSynthesizer:
         self,
         composition: dict,
         progress_callback=None,
+        sample_engine=None,
     ) -> List[float]:
         """
         Pure-Python render path — used when C++ extension is not compiled.
 
         Uses the additive harmonic synthesiser for melodic tracks and the
         built-in drum synthesiser for percussion (channel 9).
+
+        When sample_engine is provided, melodic tracks that have a sample
+        loaded use the Python SamplePlayer fallback for that track.
         """
         bpm          = composition['config']['bpm']
         beat_dur     = 60.0 / bpm
@@ -303,6 +334,12 @@ class BuiltinSynthesizer:
             is_drum = info.get('channel', 0) == 9
             gain    = float(info.get('gain', 1.0))
 
+            use_sample = (
+                not is_drum
+                and sample_engine is not None
+                and sample_engine.is_loaded(track_name)
+            )
+
             for event in events:
                 if len(event) < 4:
                     continue
@@ -312,6 +349,14 @@ class BuiltinSynthesizer:
 
                 if is_drum:
                     start_idx, samples = self.synthesize_drum(pitch, time_sec, velocity)
+                elif use_sample:
+                    try:
+                        start_idx, arr = sample_engine.synthesize(
+                            track_name, int(pitch), time_sec, dur_sec, velocity)
+                        samples = arr.tolist()
+                    except Exception:
+                        start_idx, samples = self.synthesize_note(
+                            pitch, time_sec, dur_sec, velocity, program)
                 else:
                     start_idx, samples = self.synthesize_note(
                         pitch, time_sec, dur_sec, velocity, program)

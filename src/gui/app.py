@@ -2083,6 +2083,12 @@ class SeedComposerApp:
             except Exception:
                 _auto_groove_settings = None
 
+        # Capture sample assignments on the main thread (GUI widget access).
+        _sample_assignments = (
+            self._instrument_builder.get_sample_assignments()
+            if self._instrument_builder is not None else {}
+        )
+
         def _worker():
             try:
                 temp_dir = Path(APP_DIR) / "temp_output"
@@ -2179,7 +2185,8 @@ class SeedComposerApp:
                     try:
                         WAVRenderer().render_composition_to_wav(
                             composition, _builtin_wav,
-                            progress_callback=_full_progress)
+                            progress_callback=_full_progress,
+                            sample_assignments=_sample_assignments)
                         _wav_path = _builtin_wav
                     except Exception as _e:
                         self.msg_queue.put(('gen_progress', 75,
@@ -2191,7 +2198,8 @@ class SeedComposerApp:
                     _vr_builtin_wav = str(temp_dir / f'preview_{gen_id}_vocal.wav')
                     try:
                         WAVRenderer().render_composition_to_wav(
-                            vr_composition, _vr_builtin_wav)
+                            vr_composition, _vr_builtin_wav,
+                            sample_assignments=_sample_assignments)
                         vocal_wav_path = _vr_builtin_wav
                     except Exception as _e:
                         self.msg_queue.put(('gen_progress', 95,
@@ -2411,6 +2419,12 @@ class SeedComposerApp:
         if self.current_composition:
             bpm = float(self.current_composition.get('config', {}).get('bpm', 120.0))
 
+        # Capture sample assignments on the main thread before the worker starts.
+        _groove_sample_assignments = (
+            self._instrument_builder.get_sample_assignments()
+            if self._instrument_builder is not None else {}
+        )
+
         self.is_generating = True
         self._mixer_panel.set_busy(True)
         self._set_status("APPLYING GROOVE...", S.ORANGE)
@@ -2444,6 +2458,7 @@ class SeedComposerApp:
                         _inject_track_gains(self.current_composition, groove_settings)
                         WAVRenderer().render_composition_to_wav(
                             self.current_composition, wav_out,
+                            sample_assignments=_groove_sample_assignments,
                         )
                         rendered = True
                     except Exception:
