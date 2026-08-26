@@ -150,6 +150,7 @@ class AdvisorActionsBar(tk.Frame):
         get_muted_tracks_fn: Optional[Callable[[], set]] = None,
         apply_groove_fn:    Optional[Callable] = None,
         get_sample_assignments_fn: Optional[Callable[[], dict]] = None,
+        on_wav_ready_fn:    Optional[Callable[[str], None]] = None,
     ) -> None:
         super().__init__(parent, bg=styles.BG2)
 
@@ -176,6 +177,9 @@ class AdvisorActionsBar(tk.Frame):
         # Must be called on the main thread; the result is captured in _on_preview()
         # before the worker thread starts so GUI widgets are never accessed off-thread.
         self._get_sample_assignments = get_sample_assignments_fn or (lambda: {})
+        # Called on the main thread with the WAV path after a successful render.
+        # App injects this to update the waveform widget and current_wav_path.
+        self._on_wav_ready           = on_wav_ready_fn
 
         # Seed cached by App.set_seed() after every generation.
         # None → a fresh random seed is used for that preview session.
@@ -571,9 +575,11 @@ class AdvisorActionsBar(tk.Frame):
 
         self._enable_btn(self._btn_preview)
 
-        # WAV path is set → FluidSynth succeeded
+        # WAV path is set → render succeeded
         if wav_path and os.path.exists(wav_path):
             self._enable_btn(self._btn_export)
+            if self._on_wav_ready is not None:
+                self._on_wav_ready(wav_path)
             self._player.play_wav(wav_path)
             self._status("ADVISOR PREVIEW  ▶  PLAYING (WAV)", self._S.CYAN)
 

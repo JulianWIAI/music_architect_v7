@@ -142,9 +142,10 @@ class WAVRenderer:
         sample_engine = None
         if sample_assignments:
             sample_engine = SampleEngine(self.sample_rate)
-            sample_engine.load_from_assignments(sample_assignments, load_audio_file)
+            sample_engine.load_from_assignments(sample_assignments)
             # Discard engine when nothing was actually loaded (avoids per-event lookup overhead)
             if not any(sample_engine.is_loaded(t) for t in (
+                '01_Kick', '02_Percussion',
                 '03_Bass', '04_Melody', '05_Chords', '06_Pad',
                 '07_Arp', '08_Stabs', '09_Texture', '10_FX',
             )):

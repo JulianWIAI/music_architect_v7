@@ -1090,6 +1090,7 @@ class SeedComposerApp:
                 styles=S,
             )
             self._instrument_builder.pack(fill='x', padx=4, pady=(0, 2))
+            self._instrument_builder.set_play_fn(self.player.play_wav)
         else:
             self._instrument_builder = None
 
@@ -1149,6 +1150,7 @@ class SeedComposerApp:
                     self._instrument_builder.get_sample_assignments
                     if self._instrument_builder is not None else None
                 ),
+                on_wav_ready_fn      = self._on_advisor_wav_ready,
             )
             self._advisor_actions.pack(fill='x', padx=4)
         else:
@@ -2361,6 +2363,14 @@ class SeedComposerApp:
             _FLUID_RENDERER.cancel()
         self.player.stop()
         self._set_status("STOPPED", S.YELLOW)
+
+    # ── Advisor WAV callback ──────────────────────────────────────────────────
+
+    def _on_advisor_wav_ready(self, wav_path: str) -> None:
+        """Update waveform widget and current_wav_path after an advisor preview render."""
+        self.current_wav_path = wav_path
+        if PLAYER_WIDGETS_AVAILABLE and self._waveform_widget is not None:
+            self._waveform_widget.load_wav(wav_path)
 
     # ── Groove helpers ────────────────────────────────────────────────────────
 

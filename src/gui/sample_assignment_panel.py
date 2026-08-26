@@ -73,6 +73,10 @@ class SampleAssignmentPanel(tk.Frame):
         self._assignments: Dict[str, str]     = {}
         # builder_key → path label widget (updated on browse / clear)
         self._path_lbls:   Dict[str, tk.Label] = {}
+        # builder_key → play button widget (enabled/disabled on assign/clear)
+        self._play_btns:   Dict[str, tk.Button] = {}
+        # Injected by app.py via set_play_fn(); called with file path on ▶ click
+        self._play_fn = None
 
         self._build_ui()
 
@@ -81,6 +85,10 @@ class SampleAssignmentPanel(tk.Frame):
     def get_assignments(self) -> Dict[str, str]:
         """Return a copy of the current {builder_key: file_path} mapping."""
         return dict(self._assignments)
+
+    def set_play_fn(self, fn) -> None:
+        """Inject the audio preview callable (e.g. player.play_wav)."""
+        self._play_fn = fn
 
     # ── Construction ────────────────────────────────────────────────────────
 
@@ -166,6 +174,23 @@ class SampleAssignmentPanel(tk.Frame):
         )
         clr.pack(side='right', padx=(0, 2))
 
+        # ▶ Play button — disabled until a sample is assigned for this track
+        play_btn = tk.Button(
+            row,
+            text='▶',
+            font=S.FN_X,
+            fg=S.TXT_DIM,
+            bg=S.BG2,
+            bd=0,
+            activeforeground=S.CYAN if hasattr(S, 'CYAN') else S.TXT_BRT,
+            activebackground=S.BG2,
+            cursor='arrow',
+            state=tk.DISABLED,
+            command=lambda k=track_key: self._play(k),
+        )
+        play_btn.pack(side='right', padx=(0, 2))
+        self._play_btns[track_key] = play_btn
+
         # Browse button — consistent with BG_BTN buttons elsewhere in the app
         brw = tk.Button(
             row,
@@ -204,6 +229,10 @@ class SampleAssignmentPanel(tk.Frame):
         lbl = self._path_lbls.get(track_key)
         if lbl:
             lbl.config(text=short, fg=self._S.GREEN if hasattr(self._S, 'GREEN') else self._S.TXT_DIM)
+        btn = self._play_btns.get(track_key)
+        if btn:
+            btn.config(state=tk.NORMAL, cursor='hand2',
+                       fg=self._S.CYAN if hasattr(self._S, 'CYAN') else self._S.TXT_DIM)
         self._update_status()
 
     def _clear(self, track_key: str) -> None:
@@ -211,7 +240,16 @@ class SampleAssignmentPanel(tk.Frame):
         lbl = self._path_lbls.get(track_key)
         if lbl:
             lbl.config(text='—', fg=self._S.TXT_DIM)
+        btn = self._play_btns.get(track_key)
+        if btn:
+            btn.config(state=tk.DISABLED, cursor='arrow', fg=self._S.TXT_DIM)
         self._update_status()
+
+    def _play(self, track_key: str) -> None:
+        """Play the assigned sample for this track via the injected play function."""
+        path = self._assignments.get(track_key)
+        if path and self._play_fn is not None:
+            self._play_fn(path)
 
     def _update_status(self) -> None:
         n = len(self._assignments)

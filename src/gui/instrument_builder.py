@@ -182,6 +182,18 @@ class InstrumentBuilder(tk.Frame):
         kick_row = tk.Frame(self._content, bg=S.BG2)
         kick_row.pack(fill='x', pady=1)
 
+        kick_mute_var = tk.BooleanVar(value=False)
+        self._mute_vars['drums'] = kick_mute_var
+        kick_mute_btn = tk.Checkbutton(
+            kick_row, text='', variable=kick_mute_var,
+            font=S.FN_X, fg=S.TXT_DIM, bg=S.BG2,
+            selectcolor=S.BG3, activebackground=S.BG2,
+            width=1, indicatoron=True,
+            command=lambda mv=kick_mute_var: self._on_kick_mute_toggle(mv),
+        )
+        kick_mute_btn.pack(side='left', padx=(2, 0))
+        ToolTip(kick_mute_btn, "Mute KICK in advisor preview.\nMuted tracks are excluded from the next render.")
+
         tk.Label(
             kick_row, text='KICK', font=S.FN_X,
             fg=S.TXT_DIM, bg=S.BG2, width=7, anchor='w',
@@ -652,6 +664,10 @@ class InstrumentBuilder(tk.Frame):
                 row_data['fix'] = None
                 row_data['row'].pack_forget()
 
+    def _on_kick_mute_toggle(self, mute_var: tk.BooleanVar) -> None:
+        """KICK mute toggled — no label to dim (KICK label uses fixed TXT_DIM color)."""
+        pass
+
     def _on_mute_toggle(self, track: str, mute_var: tk.BooleanVar, color: str) -> None:
         """Dim the track name label when muted; restore when unmuted."""
         lbl = self._track_name_lbls.get(track)
@@ -693,6 +709,11 @@ class InstrumentBuilder(tk.Frame):
         if self._sample_panel is None:
             return {}
         return self._sample_panel.get_assignments()
+
+    def set_play_fn(self, fn) -> None:
+        """Inject the audio preview callable into the sample panel's ▶ buttons."""
+        if self._sample_panel is not None:
+            self._sample_panel.set_play_fn(fn)
 
     def _refresh_desc(self, track: str) -> None:
         """
