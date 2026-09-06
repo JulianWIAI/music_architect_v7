@@ -287,13 +287,14 @@ final per-track effect chain shown in advisor + PDF
 
 ### Action Strip
 
-After adjusting instruments and variant, the action strip provides four one-click exports:
+After adjusting instruments and variant, the action strip provides five one-click exports:
 
 | Button | Enabled | Produces |
 |---|---|---|
 | **▶ PREVIEW WITH INSTRUMENTS** | Always (once a song is loaded) | Re-composes with pinned seed, renders WAV via FluidSynth using the selected SF2, auto-plays |
-| **⬇ SAVE WAV** | After successful FluidSynth render | WAV of the full beat rendered with the chosen SoundFont and BDRA instruments |
+| **⬇ EXPORT AUDIO…** | After successful render | Opens multi-format dialog — WAV / MP3 / FLAC / OGG |
 | **⬇ STANDARD MIDI** | As soon as MIDI is written (before WAV render) | Full-beat MIDI with all program_change events for the selected instruments embedded |
+| **⬇ GROOVED MIDI** | After Apply Groove & Re-Render | Groove-transformed MIDI with swing, timing nudge, and velocity curves baked into the note events — import into a DAW and it plays exactly as heard in the re-render. Cleared on new generation |
 | **⬇ VOCAL MIDI** | When "Vocal-Ready" checkbox is on | Vocal-ready scaffold with `vocal_mask=True` and the selected instruments |
 | **⬇ EXPORT PDF** | Always | 10-section A4 production guide (see below) |
 
