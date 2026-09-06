@@ -212,9 +212,6 @@ class SeedComposerApp:
         # this so the button consistently showcases the AI's output at its best
         # quality (FluidSynth + soundfont when available).
         self._original_wav_path = None
-        # Path to the last groove-transformed MIDI; None until Apply Groove succeeds.
-        # Cleared on every new generation so stale groove MIDIs are never exported.
-        self._grooved_midi_path: str | None = None
         # FX chain variant: 'bright', 'neutral', or 'dark'.
         # Updated from the composition seed after generation.
         self._current_variant_id = 'neutral'
@@ -995,18 +992,6 @@ class SeedComposerApp:
         btn_json.pack(side='left', padx=2, fill='x', expand=True)
         self._tip(btn_midi, 'btn_midi')
         self._tip(btn_json, 'btn_json')
-
-        # Groove MIDI export row — hidden until Apply Groove & Re-Render succeeds.
-        # Mirrors the _vr_frame pattern: shown/hidden by the groove_done handler.
-        self._groove_export_frame = tk.Frame(parent, bg=S.BG2)
-        self._groove_export_frame.pack(fill='x', padx=6, pady=(0, 2))
-        btn_groove_midi = self._cbtn(
-            self._groove_export_frame, "↓  EXPORT GROOVED MIDI",
-            self._export_grooved_midi, S.PURPLE, wide=True,
-        )
-        btn_groove_midi.pack(side='left', padx=2, fill='x', expand=True)
-        self._tip(btn_groove_midi, 'btn_groove_midi')
-        self._groove_export_frame.pack_forget()   # hidden until groove is applied
 
         lf = self._section(parent, "CONSOLE", S.TXT_DIM)
         self.log_text = tk.Text(lf, font=S.FN_X, bg=S.BG, fg=S.TXT_DIM,
@@ -2638,21 +2623,6 @@ class SeedComposerApp:
             self.engine.export_midi(self.current_composition, p)
             self._log(f"MIDI -> {p}"); self._set_status("MIDI EXPORTED", S.GREEN)
 
-    def _export_grooved_midi(self):
-        if not self._grooved_midi_path or not os.path.exists(self._grooved_midi_path):
-            messagebox.showinfo("", "No grooved MIDI available — apply a groove preset first.")
-            return
-        genre = self.current_composition['config']['genre'] if self.current_composition else 'track'
-        p = filedialog.asksaveasfilename(
-            defaultextension=".mid", filetypes=[("MIDI", "*.mid")],
-            initialfile=f"SeedComposer_{genre}_grooved.mid",
-        )
-        if p:
-            import shutil
-            shutil.copy2(self._grooved_midi_path, p)
-            self._log(f"Grooved MIDI -> {p}")
-            self._set_status("GROOVED MIDI EXPORTED", S.PURPLE)
-
     def _export_vocal_midi(self):
         if not self.vocal_ready_midi_path:
             messagebox.showinfo("", "No vocal-ready version generated yet."); return
@@ -2765,17 +2735,15 @@ class SeedComposerApp:
             wav = msg[1]
             grooved_midi = msg[2] if len(msg) > 2 else None
             self.current_wav_path = wav
-            self._grooved_midi_path = grooved_midi
             self.is_generating = False
             if self._mixer_panel is not None:
                 self._mixer_panel.set_busy(False)
             if PLAYER_WIDGETS_AVAILABLE and self._waveform_widget is not None:
                 self._waveform_widget.load_wav(wav)
-            # Show the grooved MIDI export row only when a transformed file exists.
-            if grooved_midi and os.path.exists(grooved_midi):
-                self._groove_export_frame.pack(fill='x', padx=6, pady=(0, 2))
-            else:
-                self._groove_export_frame.pack_forget()
+            # Forward the grooved MIDI path to the advisor actions bar so the
+            # GROOVED MIDI button in the advisor strip is enabled/disabled.
+            if self._advisor_actions is not None:
+                self._advisor_actions.set_grooved_midi(grooved_midi)
             self._set_status("GROOVE APPLIED — ready to play / export", S.GREEN)
             self._log("Groove: re-render complete.")
         elif t == 'groove_fail':
@@ -2794,9 +2762,9 @@ class SeedComposerApp:
             # re-renders or advisor preview renders so Play Full Beat always
             # returns to this baseline.
             self._original_wav_path     = wav
-            # New generation invalidates any previous groove MIDI export.
-            self._grooved_midi_path = None
-            self._groove_export_frame.pack_forget()
+            # New generation invalidates any previous groove MIDI — clear the button.
+            if self._advisor_actions is not None:
+                self._advisor_actions.set_grooved_midi(None)
             self.vocal_ready_midi_path  = vocal_midi
             self.vocal_ready_wav_path   = vocal_wav
             self.vocal_ready_composition = vr_comp

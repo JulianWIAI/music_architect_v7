@@ -180,7 +180,7 @@ TOOLTIPS: dict[str, str] = {
     ),
     'btn_stop': "Stop current playback.",
     'btn_midi': "Save the composition as a .mid MIDI file.",
-    'btn_groove_midi': (
+    'advisor_groove_midi': (
         "Export the groove-transformed MIDI from the last\n"
         "Apply Groove & Re-Render operation.\n\n"
         "Swing, timing nudge, velocity curves, and humanisation\n"

@@ -193,6 +193,9 @@ class AdvisorActionsBar(tk.Frame):
         self._wav_path:        Optional[str] = None
         self._midi_path:       Optional[str] = None   # full-beat MIDI
         self._vocal_midi_path: Optional[str] = None
+        # Path to the most recent groove-transformed MIDI (set by app via
+        # set_grooved_midi(); None until Apply Groove & Re-Render succeeds).
+        self._grooved_midi_path: Optional[str] = None
 
         self._build_ui()
 
@@ -315,6 +318,11 @@ class AdvisorActionsBar(tk.Frame):
         self._btn_midi.pack(side='left', padx=(0, 3))
         ToolTip(self._btn_midi, TOOLTIPS['advisor_save_midi'])
 
+        # ⬇ GROOVED MIDI — enabled when Apply Groove & Re-Render has been run
+        self._btn_groove_midi = _btn('midi', '⬇  GROOVED MIDI', self._on_save_grooved_midi, disabled=True)
+        self._btn_groove_midi.pack(side='left', padx=(0, 3))
+        ToolTip(self._btn_groove_midi, TOOLTIPS.get('advisor_groove_midi', 'Export the groove-transformed MIDI'))
+
         # ⬇ VOCAL MIDI — enabled when vocal-ready was included in the preview
         self._btn_vocal = _btn('vocal', '⬇  VOCAL MIDI', self._on_save_vocal_midi, disabled=True)
         self._btn_vocal.pack(side='left', padx=(0, 3))
@@ -337,6 +345,20 @@ class AdvisorActionsBar(tk.Frame):
         identical (chord progression, rhythm, structure) — only timbres differ.
         """
         self._seed = seed
+
+    def set_grooved_midi(self, path: Optional[str]) -> None:
+        """
+        Called by app.py after Apply Groove & Re-Render completes.
+
+        path — absolute path to the groove-transformed MIDI, or None to clear.
+        Enables the GROOVED MIDI button when a valid file is provided;
+        disables it when path is None or the file does not exist.
+        """
+        self._grooved_midi_path = path
+        if path and os.path.exists(path):
+            self._enable_btn(self._btn_groove_midi)
+        else:
+            self._disable_btn(self._btn_groove_midi)
 
     # ── Button callbacks ──────────────────────────────────────────────────────
 
@@ -685,3 +707,17 @@ class AdvisorActionsBar(tk.Frame):
             shutil.copy2(self._vocal_midi_path, dest)
             self._log(f"Advisor Vocal MIDI → {dest}")
             self._status("VOCAL MIDI SAVED", self._S.GREEN)
+
+    def _on_save_grooved_midi(self) -> None:
+        """Save the groove-transformed MIDI to a user-chosen path."""
+        if not self._grooved_midi_path or not os.path.exists(self._grooved_midi_path):
+            return
+        dest = filedialog.asksaveasfilename(
+            defaultextension=".mid",
+            filetypes=[("MIDI", "*.mid")],
+            initialfile="grooved.mid",
+        )
+        if dest:
+            shutil.copy2(self._grooved_midi_path, dest)
+            self._log(f"Grooved MIDI → {dest}")
+            self._status("GROOVED MIDI SAVED", self._S.PURPLE)
