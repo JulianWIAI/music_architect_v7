@@ -180,6 +180,15 @@ TOOLTIPS: dict[str, str] = {
     ),
     'btn_stop': "Stop current playback.",
     'btn_midi': "Save the composition as a .mid MIDI file.",
+    'btn_groove_midi': (
+        "Export the groove-transformed MIDI from the last\n"
+        "Apply Groove & Re-Render operation.\n\n"
+        "Swing, timing nudge, velocity curves, and humanisation\n"
+        "are baked into the note events — import into a DAW and\n"
+        "it plays exactly as heard in the groove re-render.\n\n"
+        "Available only after a successful groove re-render.\n"
+        "Cleared when a new beat is generated."
+    ),
     'btn_wav': (
         "Render and save as a .wav audio file.\n"
         "Requires FluidSynth. Rendering may take a few seconds."
